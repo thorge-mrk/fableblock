@@ -1,7 +1,7 @@
 name: Deploy to GitHub Pages
 
-# Builds the Vite project and publishes the static dist/ output to the
-# gh-pages branch on every push to main / master.
+# Builds the Vite project and deploys the static dist/ output to GitHub Pages
+# using the native GitHub Actions deployment (Pages source = "GitHub Actions").
 on:
   push:
     branches:
@@ -9,17 +9,19 @@ on:
       - master
   workflow_dispatch: {}
 
-# Allow the deploy action to push the built site to the gh-pages branch.
+# Permissions required by the official Pages deployment actions.
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
-# Never run two deploys at once; cancel an in-progress one if a newer push lands.
+# Allow only one concurrent Pages deployment; let an in-progress run finish.
 concurrency:
-  group: github-pages-deploy
-  cancel-in-progress: true
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -31,6 +33,9 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
       - name: Install dependencies
         run: npm ci
         env:
@@ -40,9 +45,20 @@ jobs:
       - name: Build (type-check + production bundle)
         run: npm run build
 
-      - name: Deploy to gh-pages branch
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          folder: dist        # the directory the build produces
-          branch: gh-pages    # the branch GitHub Pages serves from
-          clean: true         # remove files from previous deploys
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # The github-pages environment is required by actions/deploy-pages and, by
+    # default, only permits deployments from the repository's default branch.
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

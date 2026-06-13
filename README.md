@@ -122,12 +122,15 @@ project sub-path (`https://<user>.github.io/<repo>/`). A `public/.nojekyll`
 file is copied into `dist/` so GitHub Pages serves the `assets/` folder
 verbatim.
 
-CI/CD is handled by `.github/workflows/deploy.yml`: on every push to `main`
-(or `master`) it checks out the repo, installs Node 22 LTS, runs `npm ci`,
-builds with `npm run build`, and publishes `dist/` to the `gh-pages` branch via
-[`JamesIves/github-pages-deploy-action`](https://github.com/JamesIves/github-pages-deploy-action).
+CI/CD is handled by `.github/workflows/deploy.yml` using the **native GitHub
+Actions Pages deployment**: on every push to `main` (or `master`) it checks out
+the repo, installs Node 22 LTS, runs `npm ci`, builds with `npm run build`,
+uploads `dist/` via `actions/upload-pages-artifact`, and deploys it with
+`actions/deploy-pages`.
 
-**One-time setup:** after the first successful run, enable Pages in the repo
-under **Settings → Pages → Build and deployment → Source: _Deploy from a
-branch_ → Branch: `gh-pages` / `(root)`**. The site is then live at
+**One-time setup:** in the repo under **Settings → Pages → Build and
+deployment → Source**, select **_GitHub Actions_** (not "Deploy from a
+branch"). The workflow must live on the repository's **default branch**
+(`main`/`master`) — the `github-pages` environment only permits deployments
+from the default branch. After it runs, the site is live at
 `https://<user>.github.io/<repo>/`.
