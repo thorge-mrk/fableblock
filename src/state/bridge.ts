@@ -24,6 +24,7 @@ export interface GameBridge {
 
   setPaused(paused: boolean): void;
   applySettings(): void;
+  toggleFullscreen(): void;
 
   /** Touch control inputs (virtual joystick / buttons / look). */
   touchMove(x: number, y: number): void;

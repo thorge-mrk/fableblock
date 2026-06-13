@@ -14,7 +14,8 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   return (
     <div
       className="absolute inset-0 flex items-center justify-center bg-black/55 pointer-events-auto"
-      onMouseDown={(e) => {
+      style={{ touchAction: 'none' }}
+      onPointerDown={(e) => {
         if (e.target === e.currentTarget) bridge().closeScreen();
       }}
     >
@@ -23,7 +24,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
           <h2 className="text-mc-slot-dark font-bold">{title}</h2>
           <button
             className="text-mc-slot-dark font-bold px-2 hover:text-red-700"
-            onMouseDown={(e) => {
+            onPointerDown={(e) => {
               e.preventDefault();
               bridge().closeScreen();
             }}

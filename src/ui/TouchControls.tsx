@@ -9,6 +9,33 @@ import { useGameStore } from '../state/store';
 
 const JOY_RADIUS = 64;
 
+// --- Real vector icons (no emojis) for the touch controls -----------------
+const S = { width: 26, height: 26, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+
+function IconJump(): React.ReactElement {
+  return (<svg {...S}><path d="M12 19V6" /><path d="M6 12l6-6 6 6" /></svg>);
+}
+function IconSneak(): React.ReactElement {
+  return (<svg {...S}><path d="M6 8l6 6 6-6" /><path d="M6 14l6 6 6-6" /></svg>);
+}
+function IconMine(): React.ReactElement {
+  // Pickaxe.
+  return (<svg {...S}><path d="M4 20l9-9" /><path d="M5 8c4-3 10-3 14 0" /><path d="M12 4c-2 1.5-3.5 3-4 4" /><path d="M19 8c-1.5-1-3-1.5-4-1.5" /></svg>);
+}
+function IconPlace(): React.ReactElement {
+  // Cube.
+  return (<svg {...S}><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" /><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5" /></svg>);
+}
+function IconBag(): React.ReactElement {
+  return (<svg {...S}><rect x="4" y="8" width="16" height="12" rx="1.5" /><path d="M8 8V6a4 4 0 0 1 8 0v2" /></svg>);
+}
+function IconGear(): React.ReactElement {
+  return (<svg {...S}><circle cx="12" cy="12" r="3.2" /><path d="M12 4v2M12 18v2M4 12h2M18 12h2M6 6l1.5 1.5M16.5 16.5L18 18M18 6l-1.5 1.5M7.5 16.5L6 18" /></svg>);
+}
+function IconFullscreen(): React.ReactElement {
+  return (<svg {...S}><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>);
+}
+
 export function TouchControls(): React.ReactElement {
   const sneak = React.useRef(false);
   const [sneakOn, setSneakOn] = React.useState(false);
@@ -113,7 +140,7 @@ export function TouchControls(): React.ReactElement {
 
       {/* Action buttons */}
       <div className={BTN_CLS} style={{ right: 24, bottom: 120 }} {...holdButton('jump')}>
-        ⬆
+        <IconJump />
       </div>
       <div
         className={`${BTN_CLS} ${sneakOn ? 'bg-green-500/60' : ''}`}
@@ -125,33 +152,42 @@ export function TouchControls(): React.ReactElement {
           bridge().touchButton('sneak', sneak.current);
         }}
       >
-        🐢
+        <IconSneak />
       </div>
       <div className={BTN_CLS} style={{ right: 24, bottom: 220 }} {...holdButton('attack')}>
-        ⛏
+        <IconMine />
       </div>
       <div className={BTN_CLS} style={{ right: 104, bottom: 170 }} {...holdButton('use')}>
-        🧱
+        <IconPlace />
       </div>
 
       {/* Top corner shortcuts */}
       <button
-        className="absolute top-3 right-3 w-12 h-12 rounded bg-white/25 border-2 border-white/50 text-white text-xl pointer-events-auto"
+        className="absolute top-3 right-3 w-12 h-12 rounded bg-white/25 border-2 border-white/50 flex items-center justify-center pointer-events-auto"
         onTouchStart={(e) => {
           e.stopPropagation();
           bridge().openScreen('inventory');
         }}
       >
-        🎒
+        <IconBag />
       </button>
       <button
-        className="absolute top-3 right-[68px] w-12 h-12 rounded bg-white/25 border-2 border-white/50 text-white text-xl pointer-events-auto"
+        className="absolute top-3 right-[68px] w-12 h-12 rounded bg-white/25 border-2 border-white/50 flex items-center justify-center pointer-events-auto"
+        onTouchStart={(e) => {
+          e.stopPropagation();
+          bridge().toggleFullscreen();
+        }}
+      >
+        <IconFullscreen />
+      </button>
+      <button
+        className="absolute top-3 right-[124px] w-12 h-12 rounded bg-white/25 border-2 border-white/50 flex items-center justify-center pointer-events-auto"
         onTouchStart={(e) => {
           e.stopPropagation();
           bridge().openScreen('pause');
         }}
       >
-        ⚙
+        <IconGear />
       </button>
       {/* keep store subscription so overlay re-renders with screen */}
       <ScreenWatcher />

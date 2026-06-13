@@ -14,12 +14,14 @@ interface SlotProps {
 }
 
 export function Slot({ stack, onClickSlot, size = 44, highlight = false }: SlotProps): React.ReactElement {
-  const handleMouse = (e: React.MouseEvent) => {
+  // Pointer events fire identically for mouse, touch and pen, so a single
+  // handler makes inventory/crafting work on PC and mobile alike.
+  const handlePointer = (e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.button === 0 || e.button === 2) {
-      onClickSlot(e.button as 0 | 2, e.shiftKey);
-    }
+    // Touch/pen report button -1 on contact; treat as left click.
+    const button = e.button === 2 ? 2 : 0;
+    onClickSlot(button, e.shiftKey);
   };
   const def = stack ? itemDef(stack.id) : null;
   const durFrac =
@@ -31,8 +33,8 @@ export function Slot({ stack, onClickSlot, size = 44, highlight = false }: SlotP
       className={`relative border-2 select-none ${
         highlight ? 'bg-white/40 border-white/70' : 'bg-black/25 border-t-mc-slot-dark border-l-mc-slot-dark border-b-white/60 border-r-white/60'
       }`}
-      style={{ width: size, height: size }}
-      onMouseDown={handleMouse}
+      style={{ width: size, height: size, touchAction: 'none' }}
+      onPointerDown={handlePointer}
       onContextMenu={(e) => e.preventDefault()}
     >
       {stack && def && (

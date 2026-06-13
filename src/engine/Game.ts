@@ -92,6 +92,7 @@ export class Game {
       dropHeldItem: (all) => this.dropHeldItem(all),
       setPaused: (p) => this.setPaused(p),
       applySettings: () => this.applySettings(),
+      toggleFullscreen: () => this.toggleFullscreen(),
       touchMove: (x, z) => setJoystick(x, z),
       touchLook: (dx, dy) => addTouchLook(dx, dy),
       touchButton: (btn, down) => setTouchButton(btn, down),
@@ -226,6 +227,7 @@ export class Game {
         const s = gameStore.get();
         s.setSettings({ showDebug: !s.settings.showDebug });
       },
+      onFullscreen: () => this.toggleFullscreen(),
       onEscape: () => {
         const s = gameStore.get();
         if (s.phase !== 'playing') return;
@@ -1035,6 +1037,17 @@ export class Game {
     const scale = QUALITY_SCALE[s.quality] || window.devicePixelRatio || 1;
     this.renderer.setPixelRatio(Math.min(scale === 0 ? window.devicePixelRatio : scale, 2.5));
     this.dayNight.dayLengthSec = s.dayLengthSec;
+  }
+
+  toggleFullscreen(): void {
+    const el = document.documentElement;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen?.().catch(() => {
+        /* user gesture required / unsupported — ignore */
+      });
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+    }
   }
 
   private toast(text: string): void {

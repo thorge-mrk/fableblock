@@ -100,6 +100,7 @@ export interface InputHooks {
   onDrop(all: boolean): void;
   onToggleCamera(): void;
   onToggleDebug(): void;
+  onFullscreen(): void;
   onEscape(): void;
   isUIOpen(): boolean;
 }
@@ -140,6 +141,11 @@ export function attachKeyboard(hooks: InputHooks): void {
       case 'F3':
         e.preventDefault();
         hooks.onToggleDebug();
+        break;
+      case 'F11':
+      case 'KeyF':
+        e.preventDefault();
+        hooks.onFullscreen();
         break;
       case 'Escape': hooks.onEscape(); break;
       default: {

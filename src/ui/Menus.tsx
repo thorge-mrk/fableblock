@@ -43,7 +43,7 @@ export function TitleScreen(): React.ReactElement {
       <div className="mt-8 text-gray-300 text-xs text-center leading-5 max-w-md">
         WASD move · Space jump · Shift sneak · Ctrl sprint · E inventory · Q drop
         <br />
-        Left-click mine / attack · Right-click place / interact · F5 camera · F3 debug
+        Left-click mine / attack · Right-click place / interact · F5 camera · F fullscreen · F3 debug
       </div>
     </div>
   );
@@ -113,6 +113,9 @@ export function PauseScreen(): React.ReactElement {
       </h2>
       <button className={BTN} onClick={() => bridge().closeScreen()}>
         Back to Game
+      </button>
+      <button className={BTN} onClick={() => bridge().toggleFullscreen()}>
+        Toggle Fullscreen
       </button>
       <div className="bg-black/40 rounded p-4 mt-4">
         <SettingSlider

@@ -8,6 +8,41 @@ import { bridge } from '../state/bridge';
 import { itemDef } from '../core/items';
 import { PLAYER_MAX_HP } from '../core/config';
 
+/** Pixel-art heart (Minecraft-style) as inline SVG: full / half / empty. */
+function Heart({ fill }: { fill: 'full' | 'half' | 'empty' }): React.ReactElement {
+  // 9x9 pixel heart shape drawn as SVG rects for a crisp blocky look.
+  const rows = [
+    '011011110',
+    '111111111',
+    '111111111',
+    '111111111',
+    '011111110',
+    '001111100',
+    '000111000',
+    '000010000',
+  ];
+  const px = 2;
+  const red = '#e2222a';
+  const redHi = '#ff5560';
+  const empty = '#5a5a5a';
+  const cells: React.ReactElement[] = [];
+  for (let y = 0; y < rows.length; y++) {
+    for (let x = 0; x < 9; x++) {
+      if (rows[y][x] !== '1') continue;
+      let color: string;
+      if (fill === 'empty') color = empty;
+      else if (fill === 'half') color = x < 4.5 ? (y < 2 && x > 0 ? redHi : red) : empty;
+      else color = y < 2 && (x === 1 || x === 5) ? redHi : red;
+      cells.push(<rect key={`${x}-${y}`} x={x * px} y={y * px} width={px} height={px} fill={color} />);
+    }
+  }
+  return (
+    <svg width="18" height="16" viewBox="0 0 18 16" style={{ filter: 'drop-shadow(1px 1px 0 #00000080)' }}>
+      {cells}
+    </svg>
+  );
+}
+
 export function HUD(): React.ReactElement {
   const inventory = useGameStore((s) => s.inventory);
   const hotbarIndex = useGameStore((s) => s.hotbarIndex);
@@ -40,22 +75,12 @@ export function HUD(): React.ReactElement {
         </div>
       )}
 
-      {/* Hearts */}
+      {/* Hearts — real pixel-art graphic, updates reactively with health */}
       <div className="absolute bottom-[76px] left-1/2 -translate-x-1/2 flex gap-0.5">
         {Array.from({ length: PLAYER_MAX_HP / 2 }, (_, i) => {
           const v = health - i * 2;
-          return (
-            <span
-              key={i}
-              className="text-lg leading-none"
-              style={{
-                color: v >= 2 ? '#e83030' : v >= 1 ? '#e87878' : '#3a3a3a',
-                textShadow: '1px 1px 0 #000',
-              }}
-            >
-              ♥
-            </span>
-          );
+          const fill = v >= 2 ? 'full' : v >= 1 ? 'half' : 'empty';
+          return <Heart key={i} fill={fill} />;
         })}
       </div>
 
@@ -77,7 +102,8 @@ export function HUD(): React.ReactElement {
             className={`relative w-12 h-12 m-0.5 border-2 ${
               i === hotbarIndex ? 'border-white bg-white/20' : 'border-gray-600 bg-black/30'
             }`}
-            onMouseDown={(e) => {
+            style={{ touchAction: 'none' }}
+            onPointerDown={(e) => {
               e.preventDefault();
               bridge().selectHotbar(i);
             }}
