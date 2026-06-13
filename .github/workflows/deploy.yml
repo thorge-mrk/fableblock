@@ -2,11 +2,18 @@ name: Deploy to GitHub Pages
 
 # Builds the Vite project and deploys the static dist/ output to GitHub Pages
 # using the native GitHub Actions deployment (Pages source = "GitHub Actions").
+#
+# The github-pages environment only permits deployments from the repository's
+# DEFAULT branch. This repo's default branch is currently
+# claude/hopeful-faraday-ufz6i6, so it is listed here alongside main/master —
+# if you later make main the default branch, deployments from main will work
+# too with no further changes.
 on:
   push:
     branches:
       - main
       - master
+      - claude/hopeful-faraday-ufz6i6
   workflow_dispatch: {}
 
 # Permissions required by the official Pages deployment actions.
