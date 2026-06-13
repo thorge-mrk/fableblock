@@ -56,6 +56,7 @@ export class Game {
   private lastFrame = 0;
   private fpsEMA = 60;
   private tickAccum = 0;
+  private statsAccum = 0;
   private patchOut: number[] = [];
 
   // Interaction state
@@ -318,8 +319,11 @@ export class Game {
     }
     this.flushPatches();
 
-    // Debug stats
-    if ((now | 0) % 8 === 0) {
+    // Debug stats — frame-rate-independent throttle (~5 Hz) to keep React
+    // store churn off the hot path regardless of FPS.
+    this.statsAccum += dt;
+    if (this.statsAccum >= 0.2) {
+      this.statsAccum = 0;
       const cs = this.chunks.stats();
       gameStore.set({
         timeOfDay: this.dayNight.time,

@@ -1,0 +1,48 @@
+name: Deploy to GitHub Pages
+
+# Builds the Vite project and publishes the static dist/ output to the
+# gh-pages branch on every push to main / master.
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch: {}
+
+# Allow the deploy action to push the built site to the gh-pages branch.
+permissions:
+  contents: write
+
+# Never run two deploys at once; cancel an in-progress one if a newer push lands.
+concurrency:
+  group: github-pages-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          # The build never needs a browser; skip Playwright's (test-only) download.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+      - name: Build (type-check + production bundle)
+        run: npm run build
+
+      - name: Deploy to gh-pages branch
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dist        # the directory the build produces
+          branch: gh-pages    # the branch GitHub Pages serves from
+          clean: true         # remove files from previous deploys

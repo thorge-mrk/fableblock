@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "smoke": "node scripts/smoke.mjs",
+    "ghpages:check": "npm run build && node scripts/ghpages-check.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -109,4 +109,25 @@ determinism, recipe matching, inventory state machine, swept-AABB anti-tunneling
 & step-up, the lighting BFS, greedy-mesher face counts/winding, and
 world-generation determinism. `node scripts/smoke.mjs` drives the built app in
 headless Chromium (SwiftShader) and asserts the engine boots, generates chunks,
-renders, and is interactive.
+renders, and is interactive. `npm run ghpages:check` builds and serves `dist/`
+under a `/minecraft/` sub-path to prove the production bundle deploys to a
+GitHub Pages project site with zero broken asset/worker paths.
+
+## Deployment (GitHub Pages)
+
+The build is configured for static hosting with `base: './'` in
+`vite.config.ts`, so all asset and module-worker URLs are **relative** to the
+bundle and resolve correctly whether the site is served from a domain root or a
+project sub-path (`https://<user>.github.io/<repo>/`). A `public/.nojekyll`
+file is copied into `dist/` so GitHub Pages serves the `assets/` folder
+verbatim.
+
+CI/CD is handled by `.github/workflows/deploy.yml`: on every push to `main`
+(or `master`) it checks out the repo, installs Node 22 LTS, runs `npm ci`,
+builds with `npm run build`, and publishes `dist/` to the `gh-pages` branch via
+[`JamesIves/github-pages-deploy-action`](https://github.com/JamesIves/github-pages-deploy-action).
+
+**One-time setup:** after the first successful run, enable Pages in the repo
+under **Settings → Pages → Build and deployment → Source: _Deploy from a
+branch_ → Branch: `gh-pages` / `(root)`**. The site is then live at
+`https://<user>.github.io/<repo>/`.
