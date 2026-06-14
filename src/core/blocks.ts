@@ -81,9 +81,9 @@ export const TILE = {
   ITEM_WHEAT: 68,
 } as const;
 
-export const ATLAS_TILES = 32; // 32x32 tiles of 32px = 1024px atlas
-export const ATLAS_SIZE = 1024;
-export const TILE_PX = 32;
+export const ATLAS_TILES = 32; // 32x32 grid of 16px tiles = 512px atlas
+export const ATLAS_SIZE = 512;
+export const TILE_PX = 16;
 
 // ---------------------------------------------------------------------------
 // Block IDs

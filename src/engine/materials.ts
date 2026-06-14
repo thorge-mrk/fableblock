@@ -5,7 +5,7 @@
  * cutouts, and an animated translucent water variant.
  */
 import * as THREE from 'three';
-import { ATLAS_TILES } from '../core/blocks';
+import { ATLAS_TILES, TILE_PX } from '../core/blocks';
 
 export interface EnvUniforms {
   uSunLevel: { value: number };
@@ -67,7 +67,7 @@ varying vec2 vLight;
 varying float vDist;
 
 const float TILES = ${ATLAS_TILES.toFixed(1)};
-const float HALF_TEXEL = 0.5 / 32.0; // half texel in tile space (32px tiles)
+const float HALF_TEXEL = 0.5 / ${TILE_PX.toFixed(1)}; // half texel in tile space
 
 void main() {
   float tile = floor(vTile + 0.5);
