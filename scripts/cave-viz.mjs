@@ -40,15 +40,30 @@ for (let y = 0; y <= yTop; y++) {
   console.log(row);
 }
 
-// Cave openness metric: fraction of underground stone-region cells that are air.
-for (let y = 5; y < 60; y++) {
-  for (let z = 0; z < 16; z++) {
-    for (let x = 0; x < 16; x++) {
-      const id = data[blockIndex(x, y, z)] & 0xff;
-      total++;
-      if (id === B.AIR) air++;
-      void airAtLevel;
+void airAtLevel;
+void air;
+void total;
+// Cave openness averaged over many chunks, counting only carved rock
+// (air vs stone/dirt) in the solid underground band so surface height and
+// ores/water don't skew the number.
+let cAir = 0;
+let cRock = 0;
+for (let i = 0; i < 16; i++) {
+  const gx = cx + (i % 4) * 7;
+  const gz = cz + Math.floor(i / 4) * 7;
+  const cd = new Uint16Array(generateChunk(gx, gz).data);
+  for (let y = 10; y < 45; y++) {
+    for (let z = 0; z < 16; z++) {
+      for (let x = 0; x < 16; x++) {
+        const id = cd[blockIndex(x, y, z)] & 0xff;
+        if (id === B.AIR) {
+          cAir++;
+          cRock++;
+        } else if (id === B.STONE || id === B.DIRT) {
+          cRock++;
+        }
+      }
     }
   }
 }
-console.log(`\nUnderground air fraction (y5-60): ${((air / total) * 100).toFixed(1)}%`);
+console.log(`Underground air fraction (y10-45, 16 chunks): ${((cAir / cRock) * 100).toFixed(1)}%`);

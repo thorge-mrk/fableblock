@@ -126,16 +126,26 @@ function columnInfo(x: number, z: number): ColumnInfo {
 // Carving
 // ---------------------------------------------------------------------------
 function isCave(x: number, y: number, z: number, surface: number): boolean {
-  if (y <= 4) return false;
-  // Spaghetti worms: intersection of two 3D noise bands (Module 3 spec).
-  const squeeze = y > surface - 10 ? 0.5 : 1; // narrower near the surface
-  const a = caveA.sample(x, y * 1.6, z);
-  const b = caveB.sample(x, y * 1.6, z);
-  if (Math.abs(a) < 0.065 * squeeze && Math.abs(b) < 0.065 * squeeze) return true;
-  // Cheese caverns deep underground.
-  if (y < surface - 18) {
-    const c = cheese.sample(x, y * 1.2, z);
-    if (c > 0.58) return true;
+  if (y <= 2) return false; // keep bedrock; caves reach down to y=3 (Module 3)
+
+  // --- Spaghetti tunnels --------------------------------------------------
+  // Carve a rounded TUBE around the curve where two noise fields both cross
+  // zero (a^2 + b^2 < r^2), instead of the intersection of two thin bands.
+  // The tube formula yields connected, walkable tunnels rather than slits.
+  const yScale = 1.15; // mild vertical stretch (was 1.6 -> caused thin slits)
+  const a = caveA.sample(x, y * yScale, z);
+  const b = caveB.sample(x, y * yScale, z);
+  const tube = a * a + b * b;
+  // Wider deep down, pinch toward the surface so entrances stay small.
+  const depth = surface - y;
+  const width = depth < 8 ? 0.011 : depth < 16 ? 0.018 : 0.024;
+  if (tube < width) return true;
+
+  // Cheese caverns: occasional larger rooms in the deep slice. A high
+  // threshold keeps them bounded (avoids hollowing out whole regions).
+  if (y < surface - 16 && y > 6) {
+    const c = cheese.sample(x, y * 0.85, z);
+    if (c > 0.52) return true;
   }
   return false;
 }
