@@ -33,11 +33,17 @@ Open the page, type a world seed (or leave it blank for a random one) and click
 | Inventory | `E` |
 | Drop item | `Q` (`Ctrl+Q` whole stack) |
 | Toggle 1st/3rd person | `F5` |
+| Fullscreen | `F` / `F11` |
 | Debug overlay | `F3` |
 | Pause / settings | `Esc` |
 
-On touch devices a virtual joystick, action buttons and free-look drag are
-rendered automatically (toggleable in the pause menu).
+On touch devices a virtual joystick, vector-icon action buttons (jump, sneak,
+mine, place) and free-look drag are rendered automatically, plus on-screen
+inventory / fullscreen / settings buttons. Inventory and crafting use unified
+pointer events so drag-and-drop works identically with mouse and touch.
+
+Empty buckets fill from water/lava sources (right-click) and place them back
+elsewhere, so the cellular-automata fluid simulation is fully player-driven.
 
 ## Thread topology (Module 1)
 
