@@ -555,7 +555,126 @@ const PAINTERS: Record<number, Painter> = {
       }
     }
   },
+  [TILE.STONE_BRICKS]: stoneBrickPainter(false, false),
+  [TILE.CRACKED_STONE_BRICKS]: stoneBrickPainter(true, false),
+  [TILE.CHISELED_STONE_BRICKS]: (p) => {
+    p.cellNoise([118, 118, 118], 0.14, 4);
+    p.border([86, 86, 86], 1);
+    // Engraved frame + central pillar motif.
+    p.rect(3, 3, 10, 10, [104, 104, 104]);
+    for (let y = 3; y < 13; y++) {
+      p.px(7, y, 80, 80, 80);
+      p.px(8, y, 80, 80, 80);
+    }
+    p.px(5, 5, 80, 80, 80);
+    p.px(10, 10, 80, 80, 80);
+  },
+  [TILE.GRANITE]: (p) => {
+    p.noiseFill([156, 104, 86], 0.16);
+    p.speckle([186, 138, 120], 14, 1);
+    p.speckle([120, 76, 64], 8, 1);
+  },
+  [TILE.DIORITE]: (p) => {
+    p.noiseFill([214, 214, 214], 0.12);
+    p.speckle([120, 120, 120], 16, 1);
+    p.speckle([245, 245, 245], 8, 1);
+  },
+  [TILE.ANDESITE]: (p) => {
+    p.noiseFill([136, 138, 138], 0.12);
+    p.speckle([110, 112, 114], 14, 1);
+    p.speckle([162, 164, 166], 8, 1);
+  },
+  [TILE.BIRCH_PLANKS]: (p) => {
+    p.noiseFill([196, 180, 138], 0.1);
+    const seam: RGB = [150, 134, 96];
+    for (const y of [3, 7, 11, 15]) for (let x = 0; x < N; x++) p.px(x, y, seam[0], seam[1], seam[2]);
+    for (const [x, y0] of [[7, 0], [3, 4], [11, 8], [5, 12]] as const) {
+      for (let y = y0; y < y0 + 4; y++) p.px(x, y, seam[0], seam[1], seam[2]);
+    }
+  },
+  [TILE.OBSIDIAN]: (p) => {
+    p.noiseFill([22, 18, 32], 0.5);
+    p.speckle([60, 40, 92], 10, 1);
+    p.speckle([10, 8, 16], 12, 1);
+  },
+  [TILE.COAL_BLOCK]: (p) => {
+    p.cellNoise([34, 34, 36], 0.4, 3);
+    p.speckle([60, 60, 64], 10, 1);
+    p.speckle([12, 12, 14], 8, 1);
+  },
+  [TILE.GOLD_BLOCK]: (p) => {
+    p.noiseFill([250, 215, 90], 0.08);
+    p.border([214, 176, 60], 1);
+    p.speckle([255, 240, 160], 6, 1);
+  },
+  [TILE.DIAMOND_BLOCK]: (p) => {
+    p.noiseFill([110, 230, 232], 0.08);
+    p.border([78, 196, 200], 1);
+    for (const [x, y] of [[4, 4], [11, 5], [6, 10], [12, 11]] as const) {
+      p.px(x, y, 220, 252, 255);
+      p.px(x + 1, y, 180, 240, 244);
+    }
+  },
+  [TILE.ITEM_BUCKET]: (p) => bucketPainter(p, null),
+  [TILE.ITEM_WATER_BUCKET]: (p) => bucketPainter(p, [60, 110, 210]),
+  [TILE.ITEM_LAVA_BUCKET]: (p) => bucketPainter(p, [220, 110, 30]),
 };
+
+/** Brick-bond stone texture; optional cracks; optional mossy tint. */
+function stoneBrickPainter(cracked: boolean, mossy: boolean): Painter {
+  return (p) => {
+    p.cellNoise([122, 122, 122], 0.12, 4);
+    const mortar: RGB = [88, 88, 88];
+    // Horizontal courses every 4px.
+    for (const y of [3, 7, 11, 15]) for (let x = 0; x < N; x++) p.px(x, y, mortar[0], mortar[1], mortar[2]);
+    // Vertical joints, offset (running bond) per course.
+    for (let row = 0; row < 4; row++) {
+      const off = row % 2 === 0 ? 7 : 3;
+      for (let y = row * 4; y < row * 4 + 4; y++) {
+        p.px(off, y, mortar[0], mortar[1], mortar[2]);
+        p.px((off + 8) % N, y, mortar[0], mortar[1], mortar[2]);
+      }
+    }
+    if (cracked) {
+      for (let c = 0; c < 3; c++) {
+        let x = 2 + Math.floor(p.rand() * 12);
+        let y = 2 + Math.floor(p.rand() * 12);
+        for (let i = 0; i < 6; i++) {
+          p.px(x, y, 70, 70, 70);
+          x += Math.floor(p.rand() * 3) - 1;
+          y += Math.floor(p.rand() * 3) - 1;
+        }
+      }
+    }
+    if (mossy) for (let i = 0; i < 18; i++) p.px(Math.floor(p.rand() * N), Math.floor(p.rand() * N), 80, 120, 50);
+  };
+}
+
+/** Steel bucket; when `fluid` is set the cup is filled with that colour. */
+function bucketPainter(p: TilePainter, fluid: RGB | null): void {
+  p.clear();
+  const steel: RGB = [170, 170, 178];
+  const dark: RGB = [110, 110, 120];
+  // Trapezoidal pail.
+  for (let y = 5; y < 14; y++) {
+    const inset = Math.round((y - 5) * 0.35);
+    for (let x = 3 + inset; x < 13 - inset; x++) {
+      const edge = x === 3 + inset || x === 12 - inset;
+      p.px(x, y, edge ? dark[0] : steel[0], edge ? dark[1] : steel[1], edge ? dark[2] : steel[2]);
+    }
+  }
+  // Rim + handle.
+  for (let x = 3; x < 13; x++) p.px(x, 5, dark[0], dark[1], dark[2]);
+  p.line(3, 5, 5, 2, dark);
+  p.line(12, 5, 10, 2, dark);
+  for (let x = 5; x < 11; x++) p.px(x, 2, dark[0], dark[1], dark[2]);
+  if (fluid) {
+    for (let y = 6; y < 9; y++) for (let x = 5; x < 11; x++) {
+      const f = 1 + (p.rand() - 0.5) * 0.2;
+      p.px(x, y, fluid[0] * f, fluid[1] * f, fluid[2] * f);
+    }
+  }
+}
 
 export class TextureAtlas {
   readonly canvas: HTMLCanvasElement;

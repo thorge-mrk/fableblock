@@ -37,13 +37,18 @@ function shapeless(inputs: number[], result: number, count = 1): Recipe {
 export const RECIPES: Recipe[] = [
   // --- 2x2-compatible recipes ---
   shapeless([B.OAK_LOG], B.OAK_PLANKS, 4),
-  shapeless([B.BIRCH_LOG], B.OAK_PLANKS, 4),
+  shapeless([B.BIRCH_LOG], B.BIRCH_PLANKS, 4),
   shaped(['P', 'P'], { P: B.OAK_PLANKS }, ITEM.STICK, 4),
+  shaped(['B', 'B'], { B: B.BIRCH_PLANKS }, ITEM.STICK, 4),
   shaped(['PP', 'PP'], { P: B.OAK_PLANKS }, B.CRAFTING_TABLE, 1),
   shaped(['C', 'S'], { C: ITEM.COAL, S: ITEM.STICK }, B.TORCH, 4),
   shaped(['C', 'S'], { C: ITEM.CHARCOAL, S: ITEM.STICK }, B.TORCH, 4),
   shaped(['SS', 'SS'], { S: B.SAND }, B.SANDSTONE, 1),
+  shaped(['SS', 'SS'], { S: B.STONE }, B.STONE_BRICKS, 4),
   shapeless([B.IRON_BLOCK], ITEM.IRON_INGOT, 9),
+  shapeless([B.COAL_BLOCK], ITEM.COAL, 9),
+  shapeless([B.GOLD_BLOCK], ITEM.GOLD_INGOT, 9),
+  shapeless([B.DIAMOND_BLOCK], ITEM.DIAMOND, 9),
   // --- 3x3 crafting-table recipes ---
   shaped(['PPP', 'P P', 'PPP'], { P: B.OAK_PLANKS }, B.CHEST_N, 1),
   shaped(['CCC', 'C C', 'CCC'], { C: B.COBBLESTONE }, B.FURNACE_N, 1),
@@ -55,6 +60,11 @@ export const RECIPES: Recipe[] = [
   shaped(['I', 'I', 'S'], { I: ITEM.IRON_INGOT, S: ITEM.STICK }, ITEM.IRON_SWORD, 1),
   shaped(['D', 'D', 'S'], { D: ITEM.DIAMOND, S: ITEM.STICK }, ITEM.DIAMOND_SWORD, 1),
   shaped(['III', 'III', 'III'], { I: ITEM.IRON_INGOT }, B.IRON_BLOCK, 1),
+  shaped(['CCC', 'CCC', 'CCC'], { C: ITEM.COAL }, B.COAL_BLOCK, 1),
+  shaped(['GGG', 'GGG', 'GGG'], { G: ITEM.GOLD_INGOT }, B.GOLD_BLOCK, 1),
+  shaped(['DDD', 'DDD', 'DDD'], { D: ITEM.DIAMOND }, B.DIAMOND_BLOCK, 1),
+  shaped(['SS', 'SS'], { S: B.STONE_BRICKS }, B.CHISELED_STONE_BRICKS, 4),
+  shaped(['I I', ' I '], { I: ITEM.IRON_INGOT }, ITEM.BUCKET, 1),
 ];
 
 /**
@@ -121,6 +131,7 @@ export const SMELTING: SmeltRecipe[] = [
   { input: B.GOLD_ORE, output: ITEM.GOLD_INGOT, ticks: 200 },
   { input: B.SAND, output: B.GLASS, ticks: 200 },
   { input: B.COBBLESTONE, output: B.STONE, ticks: 200 },
+  { input: B.STONE_BRICKS, output: B.CRACKED_STONE_BRICKS, ticks: 200 },
   { input: B.OAK_LOG, output: ITEM.CHARCOAL, ticks: 200 },
   { input: B.BIRCH_LOG, output: ITEM.CHARCOAL, ticks: 200 },
   { input: ITEM.RAW_MUTTON, output: ITEM.COOKED_MUTTON, ticks: 200 },

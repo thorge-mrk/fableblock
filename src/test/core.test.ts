@@ -142,6 +142,27 @@ describe('crafting recipe matrix validator (Module 6)', () => {
     expect(matchRecipe([C, C, C, C, C, C, C, C, C], 3)).toBeNull();
   });
 
+  it('matches the new building-block recipes', () => {
+    // 4 stone -> 4 stone bricks (2x2)
+    const S = B.STONE;
+    expect(matchRecipe([S, S, S, S], 2)?.result).toBe(B.STONE_BRICKS);
+    // Birch log -> birch planks (shapeless), giving 4
+    const birch = matchRecipe([B.BIRCH_LOG, 0, 0, 0], 2);
+    expect(birch?.result).toBe(B.BIRCH_PLANKS);
+    expect(birch?.count).toBe(4);
+    // 9 coal -> coal block, reversible
+    const C = ITEM.COAL;
+    expect(matchRecipe([C, C, C, C, C, C, C, C, C], 3)?.result).toBe(B.COAL_BLOCK);
+    expect(matchRecipe([B.COAL_BLOCK, 0, 0, 0], 2)?.result).toBe(ITEM.COAL);
+    // Bucket: I_I / _I_
+    const I = ITEM.IRON_INGOT;
+    expect(matchRecipe([I, 0, I, 0, I, 0, 0, 0, 0], 3)?.result).toBe(ITEM.BUCKET);
+  });
+
+  it('smelts stone bricks into cracked stone bricks', () => {
+    expect(smeltResult(B.STONE_BRICKS)?.output).toBe(B.CRACKED_STONE_BRICKS);
+  });
+
   it('smelting + fuel tables resolve', () => {
     expect(smeltResult(ITEM.RAW_IRON)?.output).toBe(ITEM.IRON_INGOT);
     expect(smeltResult(B.SAND)?.output).toBe(B.GLASS);

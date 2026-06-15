@@ -580,6 +580,10 @@ function rollDungeonLoot(rand: Random): ItemStack[] {
 function genOres(data: Uint16Array, rand: Random): void {
   const veins: Array<[number, number, number, number, number]> = [
     // [blockId, attempts, minY, maxY, size]
+    // Stone variants as large blobs.
+    [B.GRANITE, 2, 4, 70, 18],
+    [B.DIORITE, 2, 4, 70, 18],
+    [B.ANDESITE, 2, 4, 70, 18],
     [B.COAL_ORE, 14, 6, 100, 8],
     [B.IRON_ORE, 9, 4, 56, 6],
     [B.GOLD_ORE, 3, 4, 30, 5],

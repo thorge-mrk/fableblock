@@ -21,6 +21,9 @@ export const ITEM = {
   RAW_MUTTON: 269,
   COOKED_MUTTON: 270,
   ARROW: 271,
+  BUCKET: 272,
+  WATER_BUCKET: 273,
+  LAVA_BUCKET: 274,
 } as const;
 
 export interface ItemDef {
@@ -85,15 +88,20 @@ defItem({
 defItem({ id: ITEM.RAW_MUTTON, name: 'Raw Mutton', maxStack: 64, icon: TILE.ITEM_MUTTON_RAW, food: 4 });
 defItem({ id: ITEM.COOKED_MUTTON, name: 'Cooked Mutton', maxStack: 64, icon: TILE.ITEM_MUTTON_COOKED, food: 12 });
 defItem({ id: ITEM.ARROW, name: 'Arrow', maxStack: 64, icon: TILE.ITEM_ARROW });
+defItem({ id: ITEM.BUCKET, name: 'Bucket', maxStack: 16, icon: TILE.ITEM_BUCKET });
+defItem({ id: ITEM.WATER_BUCKET, name: 'Water Bucket', maxStack: 1, icon: TILE.ITEM_WATER_BUCKET });
+defItem({ id: ITEM.LAVA_BUCKET, name: 'Lava Bucket', maxStack: 1, icon: TILE.ITEM_LAVA_BUCKET });
 
 // --- Block items ------------------------------------------------------------
 const BLOCK_ITEM_NAMES: Record<number, string | undefined> = {};
 const BLOCK_FUEL: Record<number, number> = {
   [B.OAK_PLANKS]: 300,
+  [B.BIRCH_PLANKS]: 300,
   [B.OAK_LOG]: 300,
   [B.BIRCH_LOG]: 300,
   [B.CRAFTING_TABLE]: 300,
   [B.CHEST_N]: 300,
+  [B.COAL_BLOCK]: 16000,
 };
 
 export function itemDef(id: number): ItemDef {

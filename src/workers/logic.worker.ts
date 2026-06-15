@@ -135,12 +135,13 @@ function updateFluidCell(x: number, y: number, z: number): void {
     const nid = world.getBlockId(x + dx, y + dy, z + dz);
     if (other(nid)) {
       if (lava) {
-        setBlockLocal(x, y, z, level >= 8 ? B.STONE : B.COBBLESTONE);
+        // Lava source meeting water hardens to obsidian; flowing -> cobblestone.
+        setBlockLocal(x, y, z, level >= 8 ? B.OBSIDIAN : B.COBBLESTONE);
         return;
       }
       // We are water and the neighbor is lava: harden the lava instead.
       const nl = fluidLevel(nid);
-      setBlockLocal(x + dx, y + dy, z + dz, nl >= 8 ? B.STONE : B.COBBLESTONE);
+      setBlockLocal(x + dx, y + dy, z + dz, nl >= 8 ? B.OBSIDIAN : B.COBBLESTONE);
     }
   }
 

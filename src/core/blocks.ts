@@ -79,6 +79,20 @@ export const TILE = {
   ITEM_MUTTON_COOKED: 66,
   ITEM_ARROW: 67,
   ITEM_WHEAT: 68,
+  STONE_BRICKS: 69,
+  CRACKED_STONE_BRICKS: 70,
+  CHISELED_STONE_BRICKS: 71,
+  GRANITE: 72,
+  DIORITE: 73,
+  ANDESITE: 74,
+  BIRCH_PLANKS: 75,
+  OBSIDIAN: 76,
+  COAL_BLOCK: 77,
+  GOLD_BLOCK: 78,
+  DIAMOND_BLOCK: 79,
+  ITEM_BUCKET: 80,
+  ITEM_WATER_BUCKET: 81,
+  ITEM_LAVA_BUCKET: 82,
 } as const;
 
 export const ATLAS_TILES = 32; // 32x32 grid of 16px tiles = 512px atlas
@@ -141,6 +155,18 @@ export const B = {
   // Flowing lava levels 3..1 -> ids 53..55  (decay limit 3, Module 4 spec)
   LAVA_FLOW_3: 53,
   LAVA_FLOW_1: 55,
+  // Additional building/decorative blocks.
+  STONE_BRICKS: 56,
+  CRACKED_STONE_BRICKS: 57,
+  CHISELED_STONE_BRICKS: 58,
+  GRANITE: 59,
+  DIORITE: 60,
+  ANDESITE: 61,
+  BIRCH_PLANKS: 62,
+  OBSIDIAN: 63,
+  COAL_BLOCK: 64,
+  GOLD_BLOCK: 65,
+  DIAMOND_BLOCK: 66,
 } as const;
 
 export type BlockId = number;
@@ -294,6 +320,17 @@ def(B.SPAWNER, 'Monster Spawner', tile6(TILE.SPAWNER), {
 def(B.WOOL, 'Wool', tile6(TILE.WOOL), { hardness: 0.8 });
 def(B.GLOWSTONE, 'Glowstone', tile6(TILE.GLOWSTONE), { hardness: 0.3, lightEmit: 15 });
 def(B.IRON_BLOCK, 'Iron Block', tile6(TILE.IRON_BLOCK), { hardness: 5, tool: 'pickaxe', minTier: 1 });
+def(B.STONE_BRICKS, 'Stone Bricks', tile6(TILE.STONE_BRICKS), { hardness: 1.5, tool: 'pickaxe', minTier: 1 });
+def(B.CRACKED_STONE_BRICKS, 'Cracked Stone Bricks', tile6(TILE.CRACKED_STONE_BRICKS), { hardness: 1.5, tool: 'pickaxe', minTier: 1 });
+def(B.CHISELED_STONE_BRICKS, 'Chiseled Stone Bricks', tile6(TILE.CHISELED_STONE_BRICKS), { hardness: 1.5, tool: 'pickaxe', minTier: 1 });
+def(B.GRANITE, 'Granite', tile6(TILE.GRANITE), { hardness: 1.5, tool: 'pickaxe', minTier: 1, drop: B.GRANITE });
+def(B.DIORITE, 'Diorite', tile6(TILE.DIORITE), { hardness: 1.5, tool: 'pickaxe', minTier: 1, drop: B.DIORITE });
+def(B.ANDESITE, 'Andesite', tile6(TILE.ANDESITE), { hardness: 1.5, tool: 'pickaxe', minTier: 1, drop: B.ANDESITE });
+def(B.BIRCH_PLANKS, 'Birch Planks', tile6(TILE.BIRCH_PLANKS), { hardness: 2 });
+def(B.OBSIDIAN, 'Obsidian', tile6(TILE.OBSIDIAN), { hardness: 25, tool: 'pickaxe', minTier: 3 });
+def(B.COAL_BLOCK, 'Block of Coal', tile6(TILE.COAL_BLOCK), { hardness: 2.5, tool: 'pickaxe', minTier: 1 });
+def(B.GOLD_BLOCK, 'Block of Gold', tile6(TILE.GOLD_BLOCK), { hardness: 3, tool: 'pickaxe', minTier: 2 });
+def(B.DIAMOND_BLOCK, 'Block of Diamond', tile6(TILE.DIAMOND_BLOCK), { hardness: 5, tool: 'pickaxe', minTier: 2 });
 
 const fluidDefaults = {
   solid: false,

@@ -22,6 +22,7 @@ export function raycastBlocks(
   ox: number, oy: number, oz: number,
   dx: number, dy: number, dz: number,
   maxDist: number,
+  includeFluids = false,
 ): RayHit | null {
   const len = Math.hypot(dx, dy, dz);
   if (len === 0) return null;
@@ -53,7 +54,10 @@ export function raycastBlocks(
   for (let i = 0; i < 256; i++) {
     if (t > maxDist) return null;
     const id = world.getBlockId(x, y, z);
-    if (id !== 0 && !isFluid(id) && blockDef(id).hardness >= 0 && t > 0) {
+    const fluid = isFluid(id);
+    const hittable =
+      id !== 0 && t > 0 && (fluid ? includeFluids : blockDef(id).hardness >= 0);
+    if (hittable) {
       return { x, y, z, nx, ny, nz, dist: t, id };
     }
     if (tMaxX < tMaxY && tMaxX < tMaxZ) {

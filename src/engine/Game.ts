@@ -605,9 +605,71 @@ export class Game {
       return;
     }
 
+    if (held.id === ITEM.BUCKET || held.id === ITEM.WATER_BUCKET || held.id === ITEM.LAVA_BUCKET) {
+      if (this.useBucket(held.id, ox, oy, oz, dx, dy, dz)) return;
+    }
+
     if (hit && isPlaceable(held.id)) {
       this.tryPlace(hit, held.id);
     }
+  }
+
+  /** Fill an empty bucket from a fluid source, or place a fluid source. */
+  private useBucket(id: number, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number): boolean {
+    if (id === ITEM.BUCKET) {
+      // Fill: ray must hit a fluid SOURCE block.
+      const hit = raycastBlocks(this.world, ox, oy, oz, dx, dy, dz, PLAYER_REACH, true);
+      if (!hit) return false;
+      let filled = -1;
+      if (hit.id === B.WATER_SRC) filled = ITEM.WATER_BUCKET;
+      else if (hit.id === B.LAVA_SRC) filled = ITEM.LAVA_BUCKET;
+      if (filled < 0) return false;
+      this.world.setBlock(hit.x, hit.y, hit.z, B.AIR);
+      this.replaceHeld(makeStack(filled, 1));
+      this.heldView.swing();
+      return true;
+    }
+    // Place a source at the first empty/replaceable cell along the ray.
+    const hit = raycastBlocks(this.world, ox, oy, oz, dx, dy, dz, PLAYER_REACH, true);
+    if (!hit) return false;
+    let px = hit.x;
+    let py = hit.y;
+    let pz = hit.z;
+    if (!blockDef(this.world.getBlockId(px, py, pz)).replaceable) {
+      px += hit.nx;
+      py += hit.ny;
+      pz += hit.nz;
+    }
+    if (py < 0 || py >= 256) return false;
+    if (!blockDef(this.world.getBlockId(px, py, pz)).replaceable) return false;
+    const src = id === ITEM.WATER_BUCKET ? B.WATER_SRC : B.LAVA_SRC;
+    // setBlock emits a cell-change patch to the logic worker, which wakes the
+    // fluid simulation at the new source so it starts flowing.
+    this.world.setBlock(px, py, pz, src);
+    this.replaceHeld(makeStack(ITEM.BUCKET, 1));
+    this.heldView.swing();
+    return true;
+  }
+
+  /** Replace the held stack (decrement one, give a replacement item). */
+  private replaceHeld(replacement: ItemStack): void {
+    const s = gameStore.get();
+    const inv = s.inventory.map(cloneStack);
+    const held = inv[s.hotbarIndex];
+    if (!held) return;
+    if (held.count <= 1) {
+      inv[s.hotbarIndex] = replacement;
+    } else {
+      held.count--;
+      const rest = insertStack(inv, replacement);
+      if (rest) {
+        this.sendLogic({
+          t: 'spawnItem', x: this.player.x, y: this.player.y + 0.5, z: this.player.z,
+          stack: rest, vx: 0, vy: 0.5, vz: 0,
+        });
+      }
+    }
+    gameStore.set({ inventory: inv });
   }
 
   private interactWith(hit: RayHit): void {
