@@ -93,6 +93,16 @@ export const TILE = {
   ITEM_BUCKET: 80,
   ITEM_WATER_BUCKET: 81,
   ITEM_LAVA_BUCKET: 82,
+  ITEM_PICK_STONE: 83,
+  ITEM_SWORD_STONE: 84,
+  ITEM_AXE_WOOD: 85,
+  ITEM_AXE_STONE: 86,
+  ITEM_AXE_IRON: 87,
+  ITEM_AXE_DIAMOND: 88,
+  ITEM_SHOVEL_WOOD: 89,
+  ITEM_SHOVEL_STONE: 90,
+  ITEM_SHOVEL_IRON: 91,
+  ITEM_SHOVEL_DIAMOND: 92,
 } as const;
 
 export const ATLAS_TILES = 32; // 32x32 grid of 16px tiles = 512px atlas
@@ -192,7 +202,7 @@ export interface BlockDef {
   /** Seconds to break bare-handed (hardness*1.5); <0 = unbreakable. */
   hardness: number;
   /** Effective tool category. */
-  tool: 'pickaxe' | 'sword' | 'none';
+  tool: 'pickaxe' | 'sword' | 'axe' | 'shovel' | 'hoe' | 'none';
   /** Minimum pickaxe tier required for drops (0 hand, 1 wood, 2 iron, 3 diamond). */
   minTier: number;
   /** Item id dropped (-1 = nothing, undefined = itself). */
@@ -240,29 +250,29 @@ def(B.AIR, 'Air', tile6(0), {
   lightFilter: 0, replaceable: true,
 });
 def(B.STONE, 'Stone', tile6(TILE.STONE), { hardness: 1.5, tool: 'pickaxe', minTier: 1, drop: B.COBBLESTONE });
-def(B.GRASS, 'Grass Block', tileTSB(TILE.GRASS_TOP, TILE.GRASS_SIDE, TILE.DIRT), { hardness: 0.6, drop: B.DIRT, randomTicks: true });
-def(B.DIRT, 'Dirt', tile6(TILE.DIRT), { hardness: 0.5 });
+def(B.GRASS, 'Grass Block', tileTSB(TILE.GRASS_TOP, TILE.GRASS_SIDE, TILE.DIRT), { hardness: 0.6, tool: 'shovel', drop: B.DIRT, randomTicks: true });
+def(B.DIRT, 'Dirt', tile6(TILE.DIRT), { hardness: 0.5, tool: 'shovel' });
 def(B.COBBLESTONE, 'Cobblestone', tile6(TILE.COBBLESTONE), { hardness: 2, tool: 'pickaxe', minTier: 1 });
-def(B.OAK_PLANKS, 'Oak Planks', tile6(TILE.OAK_PLANKS), { hardness: 2 });
+def(B.OAK_PLANKS, 'Oak Planks', tile6(TILE.OAK_PLANKS), { hardness: 2, tool: 'axe' });
 def(B.BEDROCK, 'Bedrock', tile6(TILE.BEDROCK), { hardness: -1 });
-def(B.SAND, 'Sand', tile6(TILE.SAND), { hardness: 0.5 });
-def(B.GRAVEL, 'Gravel', tile6(TILE.GRAVEL), { hardness: 0.6 });
-def(B.OAK_LOG, 'Oak Log', tileTSB(TILE.OAK_LOG_TOP, TILE.OAK_LOG_SIDE, TILE.OAK_LOG_TOP), { hardness: 2 });
+def(B.SAND, 'Sand', tile6(TILE.SAND), { hardness: 0.5, tool: 'shovel' });
+def(B.GRAVEL, 'Gravel', tile6(TILE.GRAVEL), { hardness: 0.6, tool: 'shovel' });
+def(B.OAK_LOG, 'Oak Log', tileTSB(TILE.OAK_LOG_TOP, TILE.OAK_LOG_SIDE, TILE.OAK_LOG_TOP), { hardness: 2, tool: 'axe' });
 def(B.OAK_LEAVES, 'Oak Leaves', tile6(TILE.OAK_LEAVES), {
   opaque: false, renderType: RenderType.CUTOUT, hardness: 0.2, drop: -1, lightFilter: 1, randomTicks: true,
 });
-def(B.BIRCH_LOG, 'Birch Log', tileTSB(TILE.OAK_LOG_TOP, TILE.BIRCH_LOG_SIDE, TILE.OAK_LOG_TOP), { hardness: 2 });
+def(B.BIRCH_LOG, 'Birch Log', tileTSB(TILE.OAK_LOG_TOP, TILE.BIRCH_LOG_SIDE, TILE.OAK_LOG_TOP), { hardness: 2, tool: 'axe' });
 def(B.BIRCH_LEAVES, 'Birch Leaves', tile6(TILE.BIRCH_LEAVES), {
   opaque: false, renderType: RenderType.CUTOUT, hardness: 0.2, drop: -1, lightFilter: 1, randomTicks: true,
 });
 def(B.COAL_ORE, 'Coal Ore', tile6(TILE.COAL_ORE), { hardness: 3, tool: 'pickaxe', minTier: 1, drop: 256 + 1 /* ITEM.COAL */ });
 def(B.IRON_ORE, 'Iron Ore', tile6(TILE.IRON_ORE), { hardness: 3, tool: 'pickaxe', minTier: 1, drop: 256 + 3 /* ITEM.RAW_IRON */ });
-def(B.GOLD_ORE, 'Gold Ore', tile6(TILE.GOLD_ORE), { hardness: 3, tool: 'pickaxe', minTier: 2, drop: B.GOLD_ORE });
-def(B.DIAMOND_ORE, 'Diamond Ore', tile6(TILE.DIAMOND_ORE), { hardness: 3, tool: 'pickaxe', minTier: 2, drop: 256 + 6 /* ITEM.DIAMOND */ });
+def(B.GOLD_ORE, 'Gold Ore', tile6(TILE.GOLD_ORE), { hardness: 3, tool: 'pickaxe', minTier: 3, drop: B.GOLD_ORE });
+def(B.DIAMOND_ORE, 'Diamond Ore', tile6(TILE.DIAMOND_ORE), { hardness: 3, tool: 'pickaxe', minTier: 3, drop: 256 + 6 /* ITEM.DIAMOND */ });
 def(B.SANDSTONE, 'Sandstone', tileTSB(TILE.SANDSTONE_TOP, TILE.SANDSTONE_SIDE, TILE.SANDSTONE_TOP), { hardness: 0.8, tool: 'pickaxe', minTier: 1 });
 def(B.MOSSY_COBBLESTONE, 'Mossy Cobblestone', tile6(TILE.MOSSY_COBBLESTONE), { hardness: 2, tool: 'pickaxe', minTier: 1 });
 def(B.GLASS, 'Glass', tile6(TILE.GLASS), { opaque: false, renderType: RenderType.CUTOUT, hardness: 0.3, drop: -1, lightFilter: 0 });
-def(B.SNOW_GRASS, 'Snowy Grass', tileTSB(TILE.SNOW_TOP, TILE.SNOW_SIDE, TILE.DIRT), { hardness: 0.6, drop: B.DIRT });
+def(B.SNOW_GRASS, 'Snowy Grass', tileTSB(TILE.SNOW_TOP, TILE.SNOW_SIDE, TILE.DIRT), { hardness: 0.6, tool: 'shovel', drop: B.DIRT });
 def(B.CACTUS, 'Cactus', tileTSB(TILE.CACTUS_TOP, TILE.CACTUS_SIDE, TILE.CACTUS_TOP), { hardness: 0.4, opaque: false, renderType: RenderType.CUTOUT });
 def(B.TALL_GRASS, 'Tall Grass', tile6(TILE.TALL_GRASS), {
   solid: false, opaque: false, renderType: RenderType.CROSS, hardness: 0.05, drop: -1, lightFilter: 0, replaceable: true,
@@ -279,7 +289,7 @@ def(B.TORCH, 'Torch', tile6(TILE.TORCH), {
 def(B.CRAFTING_TABLE, 'Crafting Table', [
   TILE.CRAFTING_TABLE_SIDE, TILE.CRAFTING_TABLE_SIDE, TILE.CRAFTING_TABLE_TOP,
   TILE.OAK_PLANKS, TILE.CRAFTING_TABLE_FRONT, TILE.CRAFTING_TABLE_FRONT,
-], { hardness: 2.5 });
+], { hardness: 2.5, tool: 'axe' });
 
 function chestTiles(face: 'n' | 's' | 'e' | 'w'): [number, number, number, number, number, number] {
   const F = TILE.CHEST_FRONT;
@@ -291,10 +301,10 @@ function chestTiles(face: 'n' | 's' | 'e' | 'w'): [number, number, number, numbe
   if (face === 'e') return [F, S, T, T, S, S];
   return [S, F, T, T, S, S];
 }
-def(B.CHEST_N, 'Chest', chestTiles('n'), { hardness: 2.5 });
-def(B.CHEST_S, 'Chest', chestTiles('s'), { hardness: 2.5, drop: B.CHEST_N });
-def(B.CHEST_E, 'Chest', chestTiles('e'), { hardness: 2.5, drop: B.CHEST_N });
-def(B.CHEST_W, 'Chest', chestTiles('w'), { hardness: 2.5, drop: B.CHEST_N });
+def(B.CHEST_N, 'Chest', chestTiles('n'), { hardness: 2.5, tool: 'axe' });
+def(B.CHEST_S, 'Chest', chestTiles('s'), { hardness: 2.5, tool: 'axe', drop: B.CHEST_N });
+def(B.CHEST_E, 'Chest', chestTiles('e'), { hardness: 2.5, tool: 'axe', drop: B.CHEST_N });
+def(B.CHEST_W, 'Chest', chestTiles('w'), { hardness: 2.5, tool: 'axe', drop: B.CHEST_N });
 
 function furnaceTiles(face: 'n' | 's' | 'e' | 'w', lit: boolean): [number, number, number, number, number, number] {
   const F = lit ? TILE.FURNACE_FRONT_LIT : TILE.FURNACE_FRONT;
@@ -326,11 +336,11 @@ def(B.CHISELED_STONE_BRICKS, 'Chiseled Stone Bricks', tile6(TILE.CHISELED_STONE_
 def(B.GRANITE, 'Granite', tile6(TILE.GRANITE), { hardness: 1.5, tool: 'pickaxe', minTier: 1, drop: B.GRANITE });
 def(B.DIORITE, 'Diorite', tile6(TILE.DIORITE), { hardness: 1.5, tool: 'pickaxe', minTier: 1, drop: B.DIORITE });
 def(B.ANDESITE, 'Andesite', tile6(TILE.ANDESITE), { hardness: 1.5, tool: 'pickaxe', minTier: 1, drop: B.ANDESITE });
-def(B.BIRCH_PLANKS, 'Birch Planks', tile6(TILE.BIRCH_PLANKS), { hardness: 2 });
-def(B.OBSIDIAN, 'Obsidian', tile6(TILE.OBSIDIAN), { hardness: 25, tool: 'pickaxe', minTier: 3 });
+def(B.BIRCH_PLANKS, 'Birch Planks', tile6(TILE.BIRCH_PLANKS), { hardness: 2, tool: 'axe' });
+def(B.OBSIDIAN, 'Obsidian', tile6(TILE.OBSIDIAN), { hardness: 25, tool: 'pickaxe', minTier: 4 });
 def(B.COAL_BLOCK, 'Block of Coal', tile6(TILE.COAL_BLOCK), { hardness: 2.5, tool: 'pickaxe', minTier: 1 });
-def(B.GOLD_BLOCK, 'Block of Gold', tile6(TILE.GOLD_BLOCK), { hardness: 3, tool: 'pickaxe', minTier: 2 });
-def(B.DIAMOND_BLOCK, 'Block of Diamond', tile6(TILE.DIAMOND_BLOCK), { hardness: 5, tool: 'pickaxe', minTier: 2 });
+def(B.GOLD_BLOCK, 'Block of Gold', tile6(TILE.GOLD_BLOCK), { hardness: 3, tool: 'pickaxe', minTier: 3 });
+def(B.DIAMOND_BLOCK, 'Block of Diamond', tile6(TILE.DIAMOND_BLOCK), { hardness: 5, tool: 'pickaxe', minTier: 3 });
 
 const fluidDefaults = {
   solid: false,

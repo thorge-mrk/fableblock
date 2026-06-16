@@ -183,23 +183,42 @@ function orePainter(ore: RGB): Painter {
   };
 }
 
-function toolPainter(head: RGB, kind: 'pick' | 'sword'): Painter {
+function toolPainter(head: RGB, kind: 'pick' | 'sword' | 'axe' | 'shovel'): Painter {
   return (p) => {
     p.clear();
     const hd: RGB = [head[0] * 0.8, head[1] * 0.8, head[2] * 0.8];
-    if (kind === 'pick') {
-      // Diagonal handle bottom-left -> upper-right.
+    const stick = () => {
+      // Diagonal wooden handle bottom-left -> upper-right.
       for (let i = 2; i < 12; i++) {
         p.px(i, 13 - i, HANDLE[0], HANDLE[1], HANDLE[2]);
         p.px(i + 1, 13 - i, HANDLE[0] * 0.8, HANDLE[1] * 0.8, HANDLE[2] * 0.8);
       }
-      // Curved pick head across the top.
+    };
+    if (kind === 'pick') {
+      stick();
       p.line(3, 4, 7, 2, head);
       p.line(7, 2, 12, 4, head);
       p.line(3, 5, 7, 3, hd);
       p.line(7, 3, 12, 5, hd);
+    } else if (kind === 'axe') {
+      stick();
+      // Axe head: wedge in the top-right.
+      for (let y = 2; y <= 7; y++) {
+        const w = y <= 4 ? y - 1 : 8 - y;
+        for (let k = 0; k < w + 2; k++) p.px(8 + k, y, head[0], head[1], head[2]);
+        p.px(8, y, hd[0], hd[1], hd[2]);
+      }
+      p.line(10, 2, 13, 5, hd);
+    } else if (kind === 'shovel') {
+      stick();
+      // Spade blade at the bottom-left tip of the handle.
+      p.rect(2, 10, 4, 4, head);
+      p.px(2, 10, hd[0], hd[1], hd[2]);
+      p.px(5, 13, hd[0], hd[1], hd[2]);
+      p.px(3, 14, hd[0], hd[1], hd[2]);
+      p.px(4, 14, hd[0], hd[1], hd[2]);
     } else {
-      // Blade diagonal.
+      // Sword: blade diagonal.
       for (let i = 0; i < 9; i++) {
         const x = 5 + i;
         const y = 10 - i;
@@ -207,15 +226,18 @@ function toolPainter(head: RGB, kind: 'pick' | 'sword'): Painter {
         p.px(x + 1, y, Math.min(255, head[0] * 1.15), Math.min(255, head[1] * 1.15), Math.min(255, head[2] * 1.15));
         p.px(x, y - 1, hd[0], hd[1], hd[2]);
       }
-      // Cross-guard.
       p.px(4, 11, 90, 66, 36);
       p.px(5, 12, 90, 66, 36);
       p.px(3, 12, 90, 66, 36);
-      // Handle.
       for (let i = 0; i < 3; i++) p.px(4 - i, 12 + i, HANDLE[0], HANDLE[1], HANDLE[2]);
     }
   };
 }
+
+const MAT_WOOD: RGB = [140, 110, 70];
+const MAT_STONE: RGB = [128, 128, 128];
+const MAT_IRON: RGB = [216, 216, 216];
+const MAT_DIAMOND: RGB = [93, 236, 245];
 
 function crackPainter(stage: number): Painter {
   return (p) => {
@@ -529,6 +551,16 @@ const PAINTERS: Record<number, Painter> = {
   [TILE.ITEM_SWORD_WOOD]: toolPainter([140, 110, 70], 'sword'),
   [TILE.ITEM_SWORD_IRON]: toolPainter([216, 216, 216], 'sword'),
   [TILE.ITEM_SWORD_DIAMOND]: toolPainter([93, 236, 245], 'sword'),
+  [TILE.ITEM_PICK_STONE]: toolPainter(MAT_STONE, 'pick'),
+  [TILE.ITEM_SWORD_STONE]: toolPainter(MAT_STONE, 'sword'),
+  [TILE.ITEM_AXE_WOOD]: toolPainter(MAT_WOOD, 'axe'),
+  [TILE.ITEM_AXE_STONE]: toolPainter(MAT_STONE, 'axe'),
+  [TILE.ITEM_AXE_IRON]: toolPainter(MAT_IRON, 'axe'),
+  [TILE.ITEM_AXE_DIAMOND]: toolPainter(MAT_DIAMOND, 'axe'),
+  [TILE.ITEM_SHOVEL_WOOD]: toolPainter(MAT_WOOD, 'shovel'),
+  [TILE.ITEM_SHOVEL_STONE]: toolPainter(MAT_STONE, 'shovel'),
+  [TILE.ITEM_SHOVEL_IRON]: toolPainter(MAT_IRON, 'shovel'),
+  [TILE.ITEM_SHOVEL_DIAMOND]: toolPainter(MAT_DIAMOND, 'shovel'),
   [TILE.ITEM_MUTTON_RAW]: (p) => muttonPainter(p, [226, 100, 90], [240, 226, 220]),
   [TILE.ITEM_MUTTON_COOKED]: (p) => muttonPainter(p, [160, 100, 60], [120, 70, 40]),
   [TILE.ITEM_ARROW]: (p) => {

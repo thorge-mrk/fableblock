@@ -65,6 +65,19 @@ export const RECIPES: Recipe[] = [
   shaped(['DDD', 'DDD', 'DDD'], { D: ITEM.DIAMOND }, B.DIAMOND_BLOCK, 1),
   shaped(['SS', 'SS'], { S: B.STONE_BRICKS }, B.CHISELED_STONE_BRICKS, 4),
   shaped(['I I', ' I '], { I: ITEM.IRON_INGOT }, ITEM.BUCKET, 1),
+  // Stone-tier pickaxe + sword.
+  shaped(['CCC', ' S ', ' S '], { C: B.COBBLESTONE, S: ITEM.STICK }, ITEM.STONE_PICKAXE, 1),
+  shaped(['C', 'C', 'S'], { C: B.COBBLESTONE, S: ITEM.STICK }, ITEM.STONE_SWORD, 1),
+  // Axes (XX / XS / _S).
+  shaped(['PP', 'PS', ' S'], { P: B.OAK_PLANKS, S: ITEM.STICK }, ITEM.WOOD_AXE, 1),
+  shaped(['CC', 'CS', ' S'], { C: B.COBBLESTONE, S: ITEM.STICK }, ITEM.STONE_AXE, 1),
+  shaped(['II', 'IS', ' S'], { I: ITEM.IRON_INGOT, S: ITEM.STICK }, ITEM.IRON_AXE, 1),
+  shaped(['DD', 'DS', ' S'], { D: ITEM.DIAMOND, S: ITEM.STICK }, ITEM.DIAMOND_AXE, 1),
+  // Shovels (X / S / S).
+  shaped(['P', 'S', 'S'], { P: B.OAK_PLANKS, S: ITEM.STICK }, ITEM.WOOD_SHOVEL, 1),
+  shaped(['C', 'S', 'S'], { C: B.COBBLESTONE, S: ITEM.STICK }, ITEM.STONE_SHOVEL, 1),
+  shaped(['I', 'S', 'S'], { I: ITEM.IRON_INGOT, S: ITEM.STICK }, ITEM.IRON_SHOVEL, 1),
+  shaped(['D', 'S', 'S'], { D: ITEM.DIAMOND, S: ITEM.STICK }, ITEM.DIAMOND_SHOVEL, 1),
 ];
 
 /**

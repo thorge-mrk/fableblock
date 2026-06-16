@@ -24,6 +24,16 @@ export const ITEM = {
   BUCKET: 272,
   WATER_BUCKET: 273,
   LAVA_BUCKET: 274,
+  STONE_PICKAXE: 275,
+  STONE_SWORD: 276,
+  WOOD_AXE: 277,
+  STONE_AXE: 278,
+  IRON_AXE: 279,
+  DIAMOND_AXE: 280,
+  WOOD_SHOVEL: 281,
+  STONE_SHOVEL: 282,
+  IRON_SHOVEL: 283,
+  DIAMOND_SHOVEL: 284,
 } as const;
 
 export interface ItemDef {
@@ -35,7 +45,7 @@ export interface ItemDef {
   /** Block placed on right-click (undefined for pure items). */
   block?: number;
   tool?: {
-    type: 'pickaxe' | 'sword';
+    type: 'pickaxe' | 'sword' | 'axe' | 'shovel' | 'hoe';
     tier: number; // 1 wood, 2 iron, 3 diamond
     speed: number; // mining speed multiplier
     damage: number; // attack damage (hearts*2)
@@ -67,11 +77,11 @@ defItem({
 });
 defItem({
   id: ITEM.IRON_PICKAXE, name: 'Iron Pickaxe', maxStack: 1, icon: TILE.ITEM_PICK_IRON,
-  tool: { type: 'pickaxe', tier: 2, speed: 6, damage: 3, durability: 250 },
+  tool: { type: 'pickaxe', tier: 3, speed: 6, damage: 3, durability: 250 },
 });
 defItem({
   id: ITEM.DIAMOND_PICKAXE, name: 'Diamond Pickaxe', maxStack: 1, icon: TILE.ITEM_PICK_DIAMOND,
-  tool: { type: 'pickaxe', tier: 3, speed: 8, damage: 4, durability: 1561 },
+  tool: { type: 'pickaxe', tier: 4, speed: 8, damage: 4, durability: 1561 },
 });
 defItem({
   id: ITEM.WOOD_SWORD, name: 'Wooden Sword', maxStack: 1, icon: TILE.ITEM_SWORD_WOOD,
@@ -79,11 +89,11 @@ defItem({
 });
 defItem({
   id: ITEM.IRON_SWORD, name: 'Iron Sword', maxStack: 1, icon: TILE.ITEM_SWORD_IRON,
-  tool: { type: 'sword', tier: 2, speed: 1.5, damage: 7, durability: 250 },
+  tool: { type: 'sword', tier: 3, speed: 1.5, damage: 7, durability: 250 },
 });
 defItem({
   id: ITEM.DIAMOND_SWORD, name: 'Diamond Sword', maxStack: 1, icon: TILE.ITEM_SWORD_DIAMOND,
-  tool: { type: 'sword', tier: 3, speed: 1.5, damage: 8, durability: 1561 },
+  tool: { type: 'sword', tier: 4, speed: 1.5, damage: 8, durability: 1561 },
 });
 defItem({ id: ITEM.RAW_MUTTON, name: 'Raw Mutton', maxStack: 64, icon: TILE.ITEM_MUTTON_RAW, food: 4 });
 defItem({ id: ITEM.COOKED_MUTTON, name: 'Cooked Mutton', maxStack: 64, icon: TILE.ITEM_MUTTON_COOKED, food: 12 });
@@ -91,6 +101,37 @@ defItem({ id: ITEM.ARROW, name: 'Arrow', maxStack: 64, icon: TILE.ITEM_ARROW });
 defItem({ id: ITEM.BUCKET, name: 'Bucket', maxStack: 16, icon: TILE.ITEM_BUCKET });
 defItem({ id: ITEM.WATER_BUCKET, name: 'Water Bucket', maxStack: 1, icon: TILE.ITEM_WATER_BUCKET });
 defItem({ id: ITEM.LAVA_BUCKET, name: 'Lava Bucket', maxStack: 1, icon: TILE.ITEM_LAVA_BUCKET });
+
+// Stone-tier pick/sword + full axe & shovel sets (tiers 1 wood, 2 stone,
+// 3 iron, 4 diamond). speed/damage/durability scale with the tier.
+defItem({
+  id: ITEM.STONE_PICKAXE, name: 'Stone Pickaxe', maxStack: 1, icon: TILE.ITEM_PICK_STONE,
+  tool: { type: 'pickaxe', tier: 2, speed: 4, damage: 3, durability: 132 },
+});
+defItem({
+  id: ITEM.STONE_SWORD, name: 'Stone Sword', maxStack: 1, icon: TILE.ITEM_SWORD_STONE,
+  tool: { type: 'sword', tier: 2, speed: 1.5, damage: 6, durability: 132 },
+});
+const TIER_SPEED = [0, 2, 4, 6, 8];
+const TIER_DUR = [0, 60, 132, 250, 1561];
+const TIER_NAME = ['', 'Wooden', 'Stone', 'Iron', 'Diamond'];
+for (const [type, ids, icons, dmg] of [
+  ['axe', [ITEM.WOOD_AXE, ITEM.STONE_AXE, ITEM.IRON_AXE, ITEM.DIAMOND_AXE],
+    [TILE.ITEM_AXE_WOOD, TILE.ITEM_AXE_STONE, TILE.ITEM_AXE_IRON, TILE.ITEM_AXE_DIAMOND], [6, 7, 8, 9]],
+  ['shovel', [ITEM.WOOD_SHOVEL, ITEM.STONE_SHOVEL, ITEM.IRON_SHOVEL, ITEM.DIAMOND_SHOVEL],
+    [TILE.ITEM_SHOVEL_WOOD, TILE.ITEM_SHOVEL_STONE, TILE.ITEM_SHOVEL_IRON, TILE.ITEM_SHOVEL_DIAMOND], [3, 4, 5, 6]],
+] as const) {
+  for (let t = 1; t <= 4; t++) {
+    defItem({
+      id: ids[t - 1],
+      name: `${TIER_NAME[t]} ${type === 'axe' ? 'Axe' : 'Shovel'}`,
+      maxStack: 1,
+      icon: icons[t - 1],
+      tool: { type, tier: t, speed: TIER_SPEED[t], damage: dmg[t - 1], durability: TIER_DUR[t] },
+      fuelTicks: t === 1 ? 200 : undefined,
+    });
+  }
+}
 
 // --- Block items ------------------------------------------------------------
 const BLOCK_ITEM_NAMES: Record<number, string | undefined> = {};

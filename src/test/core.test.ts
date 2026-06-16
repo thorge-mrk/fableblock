@@ -10,7 +10,7 @@ import {
 import { mulberry32, hashSeed, Random, hash2D } from '../core/prng';
 import { SimplexNoise, FBM2D } from '../core/noise';
 import { matchRecipe, smeltResult, stackFuel } from '../core/recipes';
-import { B, fluidLevel, waterWithLevel, lavaWithLevel, furnaceLitVariant } from '../core/blocks';
+import { B, blockDef, fluidLevel, waterWithLevel, lavaWithLevel, furnaceLitVariant } from '../core/blocks';
 import { ITEM, makeStack, itemDef } from '../core/items';
 import { insertStack, clickSlot, Slots } from '../core/inventory';
 
@@ -161,6 +161,32 @@ describe('crafting recipe matrix validator (Module 6)', () => {
 
   it('smelts stone bricks into cracked stone bricks', () => {
     expect(smeltResult(B.STONE_BRICKS)?.output).toBe(B.CRACKED_STONE_BRICKS);
+  });
+
+  it('matches the new axe and shovel recipes', () => {
+    const P = B.OAK_PLANKS;
+    const C = B.COBBLESTONE;
+    const S = ITEM.STICK;
+    // Wood axe: PP / PS / _S (top-left 2x3)
+    expect(matchRecipe([P, P, 0, P, S, 0, 0, S, 0], 3)?.result).toBe(ITEM.WOOD_AXE);
+    // Stone shovel: C / S / S (single column)
+    expect(matchRecipe([C, 0, 0, S, 0, 0, S, 0, 0], 3)?.result).toBe(ITEM.STONE_SHOVEL);
+    // Stone pickaxe
+    expect(matchRecipe([C, C, C, 0, S, 0, 0, S, 0], 3)?.result).toBe(ITEM.STONE_PICKAXE);
+  });
+
+  it('assigns correct tool categories and tiers', () => {
+    expect(itemDef(ITEM.STONE_AXE).tool?.type).toBe('axe');
+    expect(itemDef(ITEM.IRON_SHOVEL).tool?.type).toBe('shovel');
+    expect(itemDef(ITEM.STONE_PICKAXE).tool?.tier).toBe(2);
+    expect(itemDef(ITEM.IRON_PICKAXE).tool?.tier).toBe(3);
+    expect(itemDef(ITEM.DIAMOND_PICKAXE).tool?.tier).toBe(4);
+    // Diamond ore now needs an iron-tier (3) pickaxe; obsidian needs diamond (4).
+    expect(blockDef(B.DIAMOND_ORE).minTier).toBe(3);
+    expect(blockDef(B.OBSIDIAN).minTier).toBe(4);
+    // Wood blocks use the axe, dirt/sand the shovel.
+    expect(blockDef(B.OAK_LOG).tool).toBe('axe');
+    expect(blockDef(B.SAND).tool).toBe('shovel');
   });
 
   it('smelting + fuel tables resolve', () => {

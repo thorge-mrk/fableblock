@@ -198,9 +198,12 @@ export class Game {
   private giveStarterItems(): void {
     const inv: Slots = new Array(36).fill(null);
     inv[0] = makeStack(ITEM.WOOD_PICKAXE, 1);
-    inv[1] = makeStack(ITEM.WOOD_SWORD, 1);
-    inv[2] = makeStack(B.TORCH, 16);
-    inv[3] = makeStack(B.OAK_PLANKS, 24);
+    inv[1] = makeStack(ITEM.STONE_AXE, 1);
+    inv[2] = makeStack(ITEM.STONE_SHOVEL, 1);
+    inv[3] = makeStack(ITEM.WOOD_SWORD, 1);
+    inv[4] = makeStack(B.TORCH, 16);
+    inv[5] = makeStack(B.OAK_PLANKS, 24);
+    inv[6] = makeStack(ITEM.BUCKET, 1);
     gameStore.set({ inventory: inv });
   }
 
