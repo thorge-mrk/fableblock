@@ -45,6 +45,14 @@ pointer events so drag-and-drop works identically with mouse and touch.
 Empty buckets fill from water/lava sources (right-click) and place them back
 elsewhere, so the cellular-automata fluid simulation is fully player-driven.
 
+Tools come in four tiers (wood → stone → iron → diamond) across pickaxe,
+sword, axe and shovel: axes fell wood fastest, shovels dig dirt/sand/gravel,
+pickaxes mine stone and ores (with tier gating — diamond ore needs an iron
+pickaxe, obsidian a diamond one). Mining throws textured break particles, and
+hostile mobs that catch fire at sunrise are wreathed in an animated flame.
+The block atlas is mipmapped (with per-tile gutters to avoid bleeding) so
+distant terrain stays crisp and shimmer-free.
+
 ## Thread topology (Module 1)
 
 | Thread | File | Responsibility |
