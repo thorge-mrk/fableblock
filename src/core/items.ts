@@ -34,6 +34,7 @@ export const ITEM = {
   STONE_SHOVEL: 282,
   IRON_SHOVEL: 283,
   DIAMOND_SHOVEL: 284,
+  BOAT: 285,
 } as const;
 
 export interface ItemDef {
@@ -99,6 +100,7 @@ defItem({ id: ITEM.RAW_MUTTON, name: 'Raw Mutton', maxStack: 64, icon: TILE.ITEM
 defItem({ id: ITEM.COOKED_MUTTON, name: 'Cooked Mutton', maxStack: 64, icon: TILE.ITEM_MUTTON_COOKED, food: 12 });
 defItem({ id: ITEM.ARROW, name: 'Arrow', maxStack: 64, icon: TILE.ITEM_ARROW });
 defItem({ id: ITEM.BUCKET, name: 'Bucket', maxStack: 16, icon: TILE.ITEM_BUCKET });
+defItem({ id: ITEM.BOAT, name: 'Oak Boat', maxStack: 1, icon: TILE.ITEM_BOAT, fuelTicks: 400 });
 defItem({ id: ITEM.WATER_BUCKET, name: 'Water Bucket', maxStack: 1, icon: TILE.ITEM_WATER_BUCKET });
 defItem({ id: ITEM.LAVA_BUCKET, name: 'Lava Bucket', maxStack: 1, icon: TILE.ITEM_LAVA_BUCKET });
 

@@ -11,6 +11,7 @@ import { DayNightCycle } from './DayNight';
 import { PlayerController } from './Player';
 import { EntityRenderer, remapBoxToTiles } from './EntityRenderer';
 import { CharacterModel, HeldItemView } from './CharacterModel';
+import { BoatModel } from './BoatModel';
 import { Particles } from './Particles';
 import { raycastBlocks, RayHit } from './Raycast';
 import { attachKeyboard, detachKeyboard, input, setJoystick, setTouchButton, addTouchLook } from './Input';
@@ -44,6 +45,7 @@ export class Game {
   private player = new PlayerController();
   private entityRenderer!: EntityRenderer;
   private character!: CharacterModel;
+  private boat!: BoatModel;
   private heldView!: HeldItemView;
   private particles!: Particles;
   private particleColor = new THREE.Color();
@@ -69,6 +71,7 @@ export class Game {
   private attackCooldown = 0;
   private eatCooldown = 0;
   private prevMineHeld = false;
+  private prevSneak = false;
   private lavaTimer = 0;
   private fireTicks = 0;
   private regenTimer = 0;
@@ -163,6 +166,8 @@ export class Game {
     this.character = new CharacterModel(this.atlas);
     this.character.group.visible = false;
     this.scene.add(this.character.group);
+    this.boat = new BoatModel();
+    this.scene.add(this.boat.group);
     this.heldView = new HeldItemView(this.atlas, this.camera);
     this.particles = new Particles(this.scene);
 
@@ -208,6 +213,7 @@ export class Game {
     inv[4] = makeStack(B.TORCH, 16);
     inv[5] = makeStack(B.OAK_PLANKS, 24);
     inv[6] = makeStack(ITEM.BUCKET, 1);
+    inv[7] = makeStack(ITEM.BOAT, 1);
     gameStore.set({ inventory: inv });
   }
 
@@ -407,6 +413,11 @@ export class Game {
     const effInput = uiOpen || !alive
       ? { ...input, moveX: 0, moveZ: 0, jump: false, sneak: false, sprint: false }
       : input;
+    // Sneak dismounts the boat (edge-triggered so it doesn't immediately re-fire).
+    if (this.player.inBoat && alive && !uiOpen && effInput.sneak && !this.prevSneak) {
+      this.dismountBoat();
+    }
+    this.prevSneak = effInput.sneak;
     this.player.update(dt, this.world, effInput);
 
     // Environmental damage
@@ -414,11 +425,18 @@ export class Game {
 
     // Interactions
     if (alive && !uiOpen) {
-      this.updateMining(dt);
-      this.updateUse(dt);
+      if (this.player.inBoat) {
+        // Boating: only steering + sneak-to-dismount; no mining / placement.
+        this.outline.visible = false;
+        this.stopMining();
+      } else {
+        this.updateMining(dt);
+        this.updateUse(dt);
+      }
     } else {
       this.stopMining();
     }
+    this.updateBoatModel(dt);
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.eatCooldown = Math.max(0, this.eatCooldown - dt);
     this.prevMineHeld = input.mineHeld;
@@ -629,6 +647,11 @@ export class Game {
       return;
     }
 
+    if (held.id === ITEM.BOAT) {
+      this.mountBoat();
+      return;
+    }
+
     if (held.id === ITEM.BUCKET || held.id === ITEM.WATER_BUCKET || held.id === ITEM.LAVA_BUCKET) {
       if (this.useBucket(held.id, ox, oy, oz, dx, dy, dz)) return;
     }
@@ -673,6 +696,54 @@ export class Game {
     this.replaceHeld(makeStack(ITEM.BUCKET, 1));
     this.heldView.swing();
     return true;
+  }
+
+  /** Enter boat mode: consume one boat, render the hull around the player. */
+  private mountBoat(): void {
+    if (this.player.inBoat) return;
+    this.player.inBoat = true;
+    this.boat.group.visible = true;
+    this.consumeHeld();
+    this.stopMining();
+    this.toast('Boat — sneak to disembark');
+  }
+
+  /** Leave the boat: hop out and return the boat item to the inventory. */
+  private dismountBoat(): void {
+    if (!this.player.inBoat) return;
+    this.player.inBoat = false;
+    this.boat.group.visible = false;
+    this.player.y += 0.25;
+    this.player.vy = 2.4;
+    const inv = gameStore.get().inventory.map(cloneStack);
+    const rest = insertStack(inv, makeStack(ITEM.BOAT, 1));
+    gameStore.set({ inventory: inv });
+    if (rest) {
+      this.sendLogic({
+        t: 'spawnItem', x: this.player.x, y: this.player.y + 0.5, z: this.player.z,
+        stack: rest, vx: 0, vy: 0.5, vz: 0,
+      });
+    }
+  }
+
+  /** Position + light the boat hull each frame while riding. */
+  private updateBoatModel(dt: number): void {
+    if (!this.player.inBoat) {
+      this.boat.group.visible = false;
+      return;
+    }
+    this.boat.group.visible = true;
+    const speed = Math.hypot(this.player.vx, this.player.vz);
+    const v = this.world.getVoxel(
+      Math.floor(this.player.x),
+      Math.floor(this.player.y + 0.5),
+      Math.floor(this.player.z),
+    );
+    const bright = Math.max(
+      0.12,
+      Math.max((((v >> 8) & 0xf) / 15) * this.dayNight.sunLevel, ((v >> 12) & 0xf) / 15),
+    );
+    this.boat.update(this.player.x, this.player.y - 0.05, this.player.z, this.player.yaw, speed, bright, dt);
   }
 
   /** Replace the held stack (decrement one, give a replacement item). */
@@ -939,6 +1010,8 @@ export class Game {
 
   private respawn(): void {
     const sp = this.spawn ?? [8.5, 90, 8.5];
+    this.player.inBoat = false;
+    this.boat.group.visible = false;
     this.player.teleport(sp[0], sp[1], sp[2]);
     this.fireTicks = 0;
     gameStore.set({ phase: 'playing', health: PLAYER_MAX_HP });

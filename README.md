@@ -53,6 +53,13 @@ hostile mobs that catch fire at sunrise are wreathed in an animated flame.
 The block atlas is mipmapped (with per-tile gutters to avoid bleeding) so
 distant terrain stays crisp and shimmer-free.
 
+Craft an **oak boat** (5 planks in a U) and right-click to climb in: it floats
+to the water line, glides with momentum and paddling oars, and you sneak to
+disembark. **Villages** are lit at night — houses have framed peaked roofs,
+interior torches and glowstone lamp posts line the streets, so villagers (with
+their iconic nose and folded arms) stay visible and hostiles can't spawn
+indoors.
+
 ## Thread topology (Module 1)
 
 | Thread | File | Responsibility |

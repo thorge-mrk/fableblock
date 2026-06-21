@@ -5,7 +5,7 @@
  */
 import { World } from '../core/world';
 import { moveEntity, boxIntersectsSolid } from '../core/aabb';
-import { blockDef, isFluid, isLava, isWater, fluidLevel } from '../core/blocks';
+import { blockDef, isFluid, isLava, isWater, fluidLevel, fluidHeight } from '../core/blocks';
 import {
   PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_SNEAK_HEIGHT, PLAYER_EYE, PLAYER_SNEAK_EYE,
   PLAYER_WALK_SPEED, PLAYER_SPRINT_SPEED, PLAYER_SNEAK_SPEED, PLAYER_JUMP_SPEED,
@@ -29,6 +29,8 @@ export class PlayerController {
   inWater = false;
   inLava = false;
   headInFluid = false;
+  /** Riding a boat (client-side vehicle: buoyant, drifty steering). */
+  inBoat = false;
   /** Highest y reached since leaving ground (fall damage). */
   private fallPeak = 0;
   /** Smoothed eye height for crouch transitions. */
@@ -59,6 +61,10 @@ export class PlayerController {
   }
 
   update(dt: number, world: World, inp: InputState): void {
+    if (this.inBoat) {
+      this.updateBoat(dt, world, inp);
+      return;
+    }
     // --- Sneak state (can always start; can only stand up with headroom) ---
     if (inp.sneak) {
       this.sneaking = true;
@@ -156,6 +162,75 @@ export class PlayerController {
     // --- Eye height smoothing ---
     const targetEye = this.sneaking ? PLAYER_SNEAK_EYE : PLAYER_EYE;
     this.eyeSmooth += (targetEye - this.eyeSmooth) * Math.min(1, 18 * dt);
+  }
+
+  /** Buoyant, drifty boat movement: floats to the water line, glides on top. */
+  private updateBoat(dt: number, world: World, inp: InputState): void {
+    this.sneaking = false;
+    this.sprinting = false;
+    this.sampleFluids(world);
+
+    // Find the water surface directly around the hull for buoyancy.
+    const fx = Math.floor(this.x);
+    const fz = Math.floor(this.z);
+    const fy = Math.floor(this.y + 0.1);
+    let surface = -Infinity;
+    for (let dy = 1; dy >= -2; dy--) {
+      const id = world.getBlockId(fx, fy + dy, fz);
+      if (isWater(id)) {
+        surface = fy + dy + fluidHeight(id);
+        break;
+      }
+    }
+    const onWater = surface > -1e8;
+
+    // Drifty steering: fast on water, sluggish when grounded on land.
+    const sin = Math.sin(this.yaw);
+    const cos = Math.cos(this.yaw);
+    const top = onWater ? 7.0 : 2.0;
+    const wishX = (-sin * inp.moveZ + cos * inp.moveX) * top;
+    const wishZ = (-cos * inp.moveZ - sin * inp.moveX) * top;
+    const accel = onWater ? 2.4 : 5;
+    this.vx += (wishX - this.vx) * Math.min(1, accel * dt);
+    this.vz += (wishZ - this.vz) * Math.min(1, accel * dt);
+
+    if (onWater) {
+      // Spring toward the surface, then damp for a gentle bob.
+      const targetY = surface - 0.12;
+      this.vy += (targetY - this.y) * 9 * dt;
+      this.vy -= this.vy * Math.min(1, 6 * dt);
+      this.applyFluidPush(world, dt);
+    } else {
+      this.vy += GRAVITY * dt;
+      if (this.vy < TERMINAL_VELOCITY) this.vy = TERMINAL_VELOCITY;
+    }
+
+    // Swept move with no step-up: the boat slides, it never climbs blocks.
+    const steps = Math.max(1, Math.ceil((Math.hypot(this.vx, this.vy, this.vz) * dt) / 0.45));
+    let onGround = false;
+    for (let i = 0; i < steps; i++) {
+      const sdt = dt / steps;
+      const res = moveEntity(
+        world,
+        this.x, this.y, this.z,
+        PLAYER_WIDTH, this.height,
+        this.vx * sdt, this.vy * sdt, this.vz * sdt,
+        { stepHeight: 0, sneak: false },
+      );
+      if (res.hitX) this.vx = 0;
+      if (res.hitZ) this.vz = 0;
+      if (res.hitY) {
+        if (this.vy < 0) onGround = true;
+        this.vy = 0;
+      }
+      this.x = res.cx;
+      this.y = res.y;
+      this.z = res.cz;
+      if (res.onGround) onGround = true;
+    }
+    this.onGround = onGround;
+    this.fallPeak = this.y; // boating never deals fall damage
+    this.eyeSmooth += (PLAYER_EYE - this.eyeSmooth) * Math.min(1, 18 * dt);
   }
 
   private sampleFluids(world: World): void {

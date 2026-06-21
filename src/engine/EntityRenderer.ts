@@ -288,6 +288,10 @@ export class EntityRenderer {
     if (e.type === EntityType.ZOMBIE) {
       if (p.armL) p.armL.rotation.x = -Math.PI / 2 + Math.sin(e.limbPhase * 0.7) * 0.1;
       if (p.armR) p.armR.rotation.x = -Math.PI / 2 - Math.sin(e.limbPhase * 0.7) * 0.1;
+    } else if (e.type === EntityType.VILLAGER) {
+      // Hands folded across the belly (Minecraft villager pose).
+      if (p.armL) p.armL.rotation.x = -1.35;
+      if (p.armR) p.armR.rotation.x = -1.35;
     } else if (e.type === EntityType.IRON_GOLEM && (e.anim & AnimFlag.ATTACKING) !== 0) {
       if (p.armL) p.armL.rotation.x = -Math.PI * 0.8;
       if (p.armR) p.armR.rotation.x = -Math.PI * 0.8;
@@ -353,9 +357,15 @@ export class EntityRenderer {
       case EntityType.SKELETON:
         buildHumanoid(e, { skin: 0xbdbdbd, shirt: 0x9a9a9a, pants: 0x8a8a8a, face: 'skeleton', thin: true });
         break;
-      case EntityType.VILLAGER:
+      case EntityType.VILLAGER: {
         buildHumanoid(e, { skin: 0xc8a078, shirt: 0x7a5c44, pants: 0x5c4434, face: 'villager', robe: true });
+        // Iconic protruding nose.
+        const head = e.parts.head as THREE.Group;
+        const nose = partBox(e, 0.14, 0.26, 0.16, 0xb78a64);
+        nose.position.set(0, 0.2, -0.3);
+        head.add(nose);
         break;
+      }
       case EntityType.CREEPER:
         buildCreeper(e);
         break;

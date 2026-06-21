@@ -114,7 +114,7 @@ export class ChunkManager {
         }
       }
     }
-    while (this.genInFlight.size < 6 && this.genQueue.length > 0) {
+    while (this.genInFlight.size < 8 && this.genQueue.length > 0) {
       const key = this.genQueue.shift()!;
       this.genInFlight.add(key);
       this.genWorker.postMessage({ t: 'gen', cx: chunkKeyNumX(key), cz: chunkKeyNumZ(key) });
@@ -127,14 +127,14 @@ export class ChunkManager {
     this.world.dirty.clear();
 
     // --- Dispatch mesh jobs (closest first, neighbor data required) ---
-    if (this.meshInFlight < 3 && this.meshQueue.size > 0) {
+    if (this.meshInFlight < 4 && this.meshQueue.size > 0) {
       const sorted = [...this.meshQueue].sort((a, b) => {
         const da = Math.max(Math.abs(chunkKeyNumX(a) - pcx), Math.abs(chunkKeyNumZ(a) - pcz));
         const db = Math.max(Math.abs(chunkKeyNumX(b) - pcx), Math.abs(chunkKeyNumZ(b) - pcz));
         return da - db;
       });
       for (const key of sorted) {
-        if (this.meshInFlight >= 3) break;
+        if (this.meshInFlight >= 4) break;
         const cx = chunkKeyNumX(key);
         const cz = chunkKeyNumZ(key);
         if (Math.max(Math.abs(cx - pcx), Math.abs(cz - pcz)) > rd) {

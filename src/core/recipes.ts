@@ -65,6 +65,9 @@ export const RECIPES: Recipe[] = [
   shaped(['DDD', 'DDD', 'DDD'], { D: ITEM.DIAMOND }, B.DIAMOND_BLOCK, 1),
   shaped(['SS', 'SS'], { S: B.STONE_BRICKS }, B.CHISELED_STONE_BRICKS, 4),
   shaped(['I I', ' I '], { I: ITEM.IRON_INGOT }, ITEM.BUCKET, 1),
+  // Boat: U-shape of 5 planks (oak or birch both yield an oak boat).
+  shaped(['P P', 'PPP'], { P: B.OAK_PLANKS }, ITEM.BOAT, 1),
+  shaped(['B B', 'BBB'], { B: B.BIRCH_PLANKS }, ITEM.BOAT, 1),
   // Stone-tier pickaxe + sword.
   shaped(['CCC', ' S ', ' S '], { C: B.COBBLESTONE, S: ITEM.STICK }, ITEM.STONE_PICKAXE, 1),
   shaped(['C', 'C', 'S'], { C: B.COBBLESTONE, S: ITEM.STICK }, ITEM.STONE_SWORD, 1),

@@ -272,6 +272,7 @@ interface VillagePlan {
   desert: boolean;
   buildings: Building[];
   paths: Array<{ x: number; z: number }>;
+  lamps: Array<{ x: number; z: number }>;
 }
 
 function regionOf(c: number): number {
@@ -283,34 +284,39 @@ function regionOf(c: number): number {
  *  # wall   C cobble   L log    G glass   D doorway(air)   . interior air
  *  T crafting table    F furnace    H chest    P planks/roof   (space) skip
  */
+//  o = torch (interior lighting), R = roof plank, L = log frame.
 const HOUSE_SMALL: string[][] = [
-  ['CCCCC', 'CCCCC', 'CCCCC', 'CCCCC', 'CCCCC'],
-  ['L###L', '#...#', '#...#', '#.T.#', 'L#D#L'],
-  ['L#G#L', 'G...G', 'G...G', '#...#', 'L#.#L'],
-  ['L###L', '#...#', '#...#', '#...#', 'L###L'],
-  ['PPPPP', 'PPPPP', 'PPPPP', 'PPPPP', 'PPPPP'],
+  ['CCCCC', 'CCCCC', 'CCCCC', 'CCCCC', 'CCCCC'], // floor
+  ['L###L', '#o..#', '#...#', '#.T.#', 'L#D#L'], // walls + torch + table + door
+  ['L#G#L', 'G...G', 'G...G', '#...#', 'L#.#L'], // windows
+  ['L###L', '#...#', '#...#', '#...#', 'L###L'], // upper wall
+  ['LLLLL', 'LRRRL', 'LRRRL', 'LRRRL', 'LLLLL'], // framed eaves
+  ['     ', ' RRR ', ' RRR ', ' RRR ', '     '], // peaked cap
 ];
 
 const HOUSE_LARGE: string[][] = [
   ['CCCCCCC', 'CCCCCCC', 'CCCCCCC', 'CCCCCCC', 'CCCCCCC', 'CCCCCCC'],
-  ['L#####L', '#.....#', '#..H..#', '#.....#', '#..F..#', 'L##D##L'],
+  ['L#####L', '#o...o#', '#..H..#', '#.....#', '#..F..#', 'L##D##L'],
   ['L#G#G#L', 'G.....G', '#.....#', 'G.....G', '#.....#', 'L##.##L'],
   ['L#####L', '#.....#', '#.....#', '#.....#', '#.....#', 'L#####L'],
-  ['PPPPPPP', 'PPPPPPP', 'PPPPPPP', 'PPPPPPP', 'PPPPPPP', 'PPPPPPP'],
+  ['LLLLLLL', 'LRRRRRL', 'LRRRRRL', 'LRRRRRL', 'LRRRRRL', 'LLLLLLL'],
+  ['       ', ' RRRRR ', ' RRRRR ', ' RRRRR ', ' RRRRR ', '       '],
 ];
 
 const DESERT_HUT: string[][] = [
   ['#####', '#####', '#####', '#####', '#####'],
-  ['##.##', '#...#', '#.T.#', '#...#', '##D##'],
+  ['##.##', '#o..#', '#.T.#', '#...#', '##D##'],
   ['##G##', 'G...G', '#...#', 'G...G', '##.##'],
   ['#####', '#####', '#####', '#####', '#####'],
 ];
 
+// Classic well: stone ring + water, log corner posts, a roof and a torch.
 const WELL: string[][] = [
   ['CCCC', 'CWWC', 'CWWC', 'CCCC'],
-  ['C..C', '....', '....', 'C..C'],
-  ['C..C', '....', '....', 'C..C'],
-  ['CCCC', 'CCCC', 'CCCC', 'CCCC'],
+  ['L..L', '....', '....', 'L..L'],
+  ['L..L', '....', '....', 'L..L'],
+  ['LRRL', 'RRRR', 'RRRR', 'LRRL'],
+  ['    ', ' o  ', '    ', '    '],
 ];
 
 function villageForRegion(rx: number, rz: number): VillagePlan | null {
@@ -340,6 +346,7 @@ function villageForRegion(rx: number, rz: number): VillagePlan | null {
         const desert = center.biome === Biome.DESERT;
         const buildings: Building[] = [];
         const paths: Array<{ x: number; z: number }> = [];
+        const lamps: Array<{ x: number; z: number }> = [];
         const count = rand.range(4, 7);
         const wellY = center.height;
         buildings.push({ x: wx - 2, y: wellY, z: wz - 2, blueprint: WELL, rot: 0, desert });
@@ -371,8 +378,10 @@ function villageForRegion(rx: number, rz: number): VillagePlan | null {
             pz += Math.sign(wz - pz);
             paths.push({ x: px, z: pz });
           }
+          // A lamp post partway along the path lights the street at night.
+          lamps.push({ x: Math.round(bxC + (wx - bxC) * 0.4), z: Math.round(bzC + (wz - bzC) * 0.4) });
         }
-        plan = { x: wx, z: wz, radius: 36, desert, buildings, paths };
+        plan = { x: wx, z: wz, radius: 36, desert, buildings, paths, lamps };
       }
     }
   }
@@ -403,10 +412,12 @@ function blueprintChar(
     case 'C': return desert ? B.SANDSTONE : B.COBBLESTONE;
     case 'L': return desert ? B.SANDSTONE : B.OAK_LOG;
     case 'G': return B.GLASS;
-    case 'P': return desert ? B.SANDSTONE : B.OAK_PLANKS;
+    case 'P':
+    case 'R': return desert ? B.SANDSTONE : B.OAK_PLANKS;
     case 'T': return B.CRAFTING_TABLE;
     case 'F': return B.FURNACE_S;
     case 'H': return B.CHEST_S;
+    case 'o': return B.TORCH;
     case 'W': return B.WATER_SRC;
     case 'D':
     case '.': return B.AIR;
@@ -437,6 +448,22 @@ function stampVillage(
       // Clear plants above paths.
       const above = blockIndex(p.x - minX, h + 1, p.z - minZ);
       if (blockDef(voxelId(data[above])).replaceable) data[above] = packVoxel(B.AIR, 0, 0);
+    }
+  }
+
+  // Lamp posts: a short log column topped with glowstone (lit at generation).
+  for (const lamp of plan.lamps) {
+    if (lamp.x < minX || lamp.x > minX + 15 || lamp.z < minZ || lamp.z > minZ + 15) continue;
+    const gh = columnInfo(lamp.x, lamp.z).height;
+    if (gh <= SEA_LEVEL) continue;
+    const baseId = voxelId(data[blockIndex(lamp.x - minX, gh, lamp.z - minZ)]);
+    if (baseId === B.AIR || baseId === B.WATER_SRC) continue;
+    const post = plan.desert ? B.SANDSTONE : B.OAK_LOG;
+    for (let i = 1; i <= 3 && gh + i < CHUNK_HEIGHT; i++) {
+      data[blockIndex(lamp.x - minX, gh + i, lamp.z - minZ)] = packVoxel(post, 0, 0);
+    }
+    if (gh + 4 < CHUNK_HEIGHT) {
+      data[blockIndex(lamp.x - minX, gh + 4, lamp.z - minZ)] = packVoxel(B.GLOWSTONE, 0, 0);
     }
   }
 

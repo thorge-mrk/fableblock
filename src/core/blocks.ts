@@ -103,6 +103,7 @@ export const TILE = {
   ITEM_SHOVEL_STONE: 90,
   ITEM_SHOVEL_IRON: 91,
   ITEM_SHOVEL_DIAMOND: 92,
+  ITEM_BOAT: 93,
 } as const;
 
 export const ATLAS_TILES = 32; // 32x32 grid of tiles

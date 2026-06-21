@@ -436,41 +436,70 @@ const PAINTERS: Record<number, Painter> = {
     p.px(8, 2, 255, 240, 160);
   },
   [TILE.CRAFTING_TABLE_TOP]: (p) => {
-    plankPainter(p);
-    p.border([60, 45, 28], 1);
-    for (let i = 4; i < 12; i++) {
-      p.px(i, 7, 60, 45, 28);
-      p.px(i, 8, 60, 45, 28);
-      p.px(7, i, 60, 45, 28);
-      p.px(8, i, 60, 45, 28);
+    // Wood base with the iconic recessed 3x3 crafting grid.
+    p.noiseFill([150, 120, 74], 0.08);
+    for (const cy of [2, 7, 12]) for (const cx of [2, 7, 12]) p.rect(cx, cy, 3, 3, [126, 100, 60]);
+    const line: RGB = [58, 43, 26];
+    for (const c of [0, 5, 10, 15]) {
+      for (let i = 0; i < N; i++) {
+        p.px(c, i, line[0], line[1], line[2]);
+        p.px(i, c, line[0], line[1], line[2]);
+      }
     }
   },
   [TILE.CRAFTING_TABLE_SIDE]: (p) => {
     plankPainter(p);
-    for (let y = 0; y < 2; y++) for (let x = 0; x < N; x++) p.px(x, y, 92, 70, 40);
+    p.border([74, 56, 32], 1);
+    // A handsaw hung on the cabinet side.
+    for (let x = 2; x <= 11; x++) p.px(x, 5, 152, 152, 160);
+    for (let x = 2; x <= 11; x += 2) p.px(x, 6, 120, 120, 130); // teeth
+    p.rect(11, 4, 3, 3, [96, 70, 38]); // handle
   },
   [TILE.CRAFTING_TABLE_FRONT]: (p) => {
     plankPainter(p);
-    p.line(4, 9, 9, 4, [60, 45, 28]);
-    p.line(10, 5, 12, 11, [70, 50, 30]);
-  },
-  [TILE.FURNACE_FRONT]: (p) => {
-    p.cellNoise(STONE_GRAY, 0.2, 4);
-    p.rect(5, 9, 6, 5, [30, 30, 30]);
-  },
-  [TILE.FURNACE_FRONT_LIT]: (p) => {
-    p.cellNoise(STONE_GRAY, 0.2, 4);
-    for (let y = 9; y < 14; y++) {
-      for (let x = 5; x < 11; x++) {
-        if (p.rand() < 0.5) p.px(x, y, 255, 140 + p.rand() * 60, 30);
-        else p.px(x, y, 60, 30, 15);
+    p.border([74, 56, 32], 1);
+    // 2x2 grid emblem framed in the panel.
+    p.rect(4, 4, 8, 8, [122, 94, 56]);
+    const ln: RGB = [58, 43, 26];
+    for (const c of [4, 7, 11]) {
+      for (let i = 4; i <= 11; i++) {
+        p.px(c, i, ln[0], ln[1], ln[2]);
+        p.px(i, c, ln[0], ln[1], ln[2]);
       }
     }
   },
-  [TILE.FURNACE_SIDE]: (p) => p.cellNoise(STONE_GRAY, 0.2, 4),
+  [TILE.FURNACE_FRONT]: (p) => {
+    p.cellNoise([122, 122, 124], 0.16, 4);
+    p.border([84, 84, 86], 1);
+    // Recessed stone-framed mouth with a hearth floor.
+    p.rect(4, 7, 8, 7, [60, 60, 62]);
+    p.rect(5, 8, 6, 5, [26, 26, 28]);
+    p.rect(5, 12, 6, 1, [46, 42, 40]);
+  },
+  [TILE.FURNACE_FRONT_LIT]: (p) => {
+    p.cellNoise([122, 122, 124], 0.16, 4);
+    p.border([84, 84, 86], 1);
+    p.rect(4, 7, 8, 7, [60, 60, 62]);
+    p.rect(5, 8, 6, 5, [26, 16, 10]);
+    // Glowing embers, hotter toward the hearth floor.
+    for (let y = 9; y < 13; y++) {
+      const heat = (13 - y) / 4;
+      for (let x = 5; x < 11; x++) {
+        if (p.rand() < 0.45 + heat * 0.4) p.px(x, y, 255, 120 + p.rand() * 110, 20 + p.rand() * 40);
+      }
+    }
+    p.rect(5, 12, 6, 1, [150, 60, 20]);
+  },
+  [TILE.FURNACE_SIDE]: (p) => {
+    p.cellNoise([120, 120, 122], 0.16, 4);
+    p.border([90, 90, 92], 1);
+  },
   [TILE.FURNACE_TOP]: (p) => {
-    p.cellNoise(STONE_GRAY, 0.18, 4);
-    p.border([95, 95, 95], 1);
+    p.cellNoise([124, 124, 126], 0.14, 4);
+    p.border([92, 92, 94], 1);
+    // Chimney hole.
+    p.disc(8, 8, 3, [44, 44, 46], 0.12);
+    p.disc(8, 8, 1.6, [22, 22, 24]);
   },
   [TILE.CHEST_FRONT]: (p) => {
     p.noiseFill([162, 116, 56], 0.1);
@@ -676,7 +705,35 @@ const PAINTERS: Record<number, Painter> = {
   [TILE.ITEM_BUCKET]: (p) => bucketPainter(p, null),
   [TILE.ITEM_WATER_BUCKET]: (p) => bucketPainter(p, [60, 110, 210]),
   [TILE.ITEM_LAVA_BUCKET]: (p) => bucketPainter(p, [220, 110, 30]),
+  [TILE.ITEM_BOAT]: boatPainter,
 };
+
+/** Side view of a small wooden rowboat with a paddle. */
+function boatPainter(p: TilePainter): void {
+  p.clear();
+  const wood: RGB = [150, 110, 60];
+  const dark: RGB = [110, 78, 42];
+  const light: RGB = [178, 136, 80];
+  // Hull: a shallow curved trough.
+  for (let y = 8; y <= 12; y++) {
+    const inset = Math.max(0, y - 9);
+    for (let x = 2 + inset; x < 14 - inset; x++) {
+      const f = 1 + (p.rand() - 0.5) * 0.12;
+      p.px(x, y, wood[0] * f, wood[1] * f, wood[2] * f);
+    }
+  }
+  // Top rim plank + bow/stern posts.
+  for (let x = 2; x < 14; x++) p.px(x, 8, light[0], light[1], light[2]);
+  for (let y = 5; y <= 8; y++) {
+    p.px(2, y, dark[0], dark[1], dark[2]);
+    p.px(13, y, dark[0], dark[1], dark[2]);
+  }
+  // Interior shadow line.
+  for (let x = 4; x < 12; x++) p.px(x, 9, dark[0], dark[1], dark[2]);
+  // Paddle.
+  p.line(9, 9, 13, 3, [120, 90, 50]);
+  p.rect(12, 2, 3, 2, [150, 110, 60]);
+}
 
 /** Brick-bond stone texture; optional cracks; optional mossy tint. */
 function stoneBrickPainter(cracked: boolean, mossy: boolean): Painter {
