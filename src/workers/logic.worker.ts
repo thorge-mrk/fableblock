@@ -1332,18 +1332,27 @@ let golemCooldown = 0;
 function trySpawnAt(type: EntityType, x: number, y: number, z: number, maxScan: number): boolean {
   // Scan downward for ground.
   const def = ENTITY_DEFS[type];
+  const ix = Math.floor(x);
+  const iz = Math.floor(z);
   for (let dy = 0; dy < maxScan; dy++) {
     const yy = Math.floor(y) - dy;
     if (yy < 1) return false;
-    const floor = world.getBlockId(Math.floor(x), yy - 1, Math.floor(z));
-    if (!blockDef(floor).solid) continue;
-    if (isLava(world.getBlockId(Math.floor(x), yy, Math.floor(z)))) return false;
+    const floorId = world.getBlockId(ix, yy - 1, iz);
+    if (!blockDef(floorId).solid) continue;
+    const feet = world.getBlockId(ix, yy, iz);
+    const head = world.getBlockId(ix, yy + 1, iz);
+    // Land only: never spawn in or under fluids (Module 5 request).
+    if (isLava(feet) || isLava(head) || isWater(floorId) || isWater(feet) || isWater(head)) return false;
     if (boxIntersectsSolid(world, x - def.width / 2, yy + 0.01, z - def.width / 2, def.width, def.height, def.width)) {
       continue;
     }
     if (ENTITY_DEFS[type].hostile) {
-      const light = world.lightAt(Math.floor(x), yy, Math.floor(z), Math.round(sunFactor() * 15));
-      if (light > 0) return false;
+      // Hostiles spawn only in darkness: no block light, AND either it is
+      // night (low sun) or the spot has no sky access (a cave). This makes
+      // surface zombies/skeletons strictly night-time while caves still spawn.
+      if (world.getBlockLight(ix, yy, iz) > 0) return false;
+      const sky = world.getSun(ix, yy, iz);
+      if (!isNight() && sky >= 8) return false;
     }
     makeEntity(type, x, yy + 0.02, z);
     return true;

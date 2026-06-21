@@ -18,6 +18,7 @@ interface RenderEntity {
   parts: Partial<Record<'head' | 'body' | 'armL' | 'armR' | 'legL' | 'legR' | 'extra', THREE.Object3D>>;
   materials: THREE.MeshLambertMaterial[];
   baseColors: THREE.Color[];
+  fire: THREE.Mesh | null;
   // Interpolation state
   px: number; py: number; pz: number; pyaw: number;
   cx: number; cy: number; cz: number; cyaw: number;
@@ -106,6 +107,43 @@ function faceTexture(kind: string): THREE.Texture {
   tex.minFilter = THREE.NearestFilter;
   FACE_TEX_CACHE.set(kind, tex);
   return tex;
+}
+
+let FIRE_TEX: THREE.Texture | null = null;
+/** Procedural tileable flame texture (vertical) shared by all burning mobs. */
+function fireTexture(): THREE.Texture {
+  if (FIRE_TEX) return FIRE_TEX;
+  const c = document.createElement('canvas');
+  c.width = 16;
+  c.height = 16;
+  const g = c.getContext('2d')!;
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      // Flame tongues: brightest at the bottom centre, fading up and outward.
+      const cx = Math.abs(x - 7.5) / 8;
+      const up = y / 15;
+      const flame = (1 - up) * (1 - cx * cx) + Math.sin(x * 1.7 + y) * 0.06;
+      let r = 0;
+      let gr = 0;
+      let b = 0;
+      let a = 0;
+      if (flame > 0.18) {
+        a = Math.min(1, flame * 1.6);
+        r = 255;
+        gr = flame > 0.6 ? 230 : 140;
+        b = flame > 0.8 ? 120 : 20;
+      }
+      const i = (y * 16 + x) * 4;
+      g.fillStyle = `rgba(${r},${gr},${b},${a})`;
+      g.fillRect(x, y, 1, 1);
+      void i;
+    }
+  }
+  FIRE_TEX = new THREE.CanvasTexture(c);
+  FIRE_TEX.magFilter = THREE.NearestFilter;
+  FIRE_TEX.minFilter = THREE.NearestFilter;
+  FIRE_TEX.wrapT = THREE.RepeatWrapping;
+  return FIRE_TEX;
 }
 
 export class EntityRenderer {
@@ -197,8 +235,46 @@ export class EntityRenderer {
         }
       }
 
+      // Fire animation overlay for burning mobs (daytime zombie/skeleton burn).
+      this.updateFire(e, (e.anim & AnimFlag.BURNING) !== 0, cameraYaw);
+
       this.animate(e, x, z, yaw, cameraYaw, dt, alpha);
     }
+  }
+
+  /** Show/animate flickering flame quads on a burning mob. */
+  private updateFire(e: RenderEntity, burning: boolean, cameraYaw: number): void {
+    if (!burning) {
+      if (e.fire) e.fire.visible = false;
+      return;
+    }
+    const def = ENTITY_DEFS[e.type];
+    if (!e.fire) {
+      const geo = new THREE.PlaneGeometry(def.width * 1.9, def.height * 1.25);
+      const mat = new THREE.MeshBasicMaterial({
+        map: fireTexture(),
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+      });
+      e.fire = new THREE.Mesh(geo, mat);
+      e.fire.position.y = def.height * 0.55;
+      e.fire.renderOrder = 20;
+      e.group.add(e.fire);
+    }
+    e.fire.visible = true;
+    // Counter-rotate so the billboard faces the camera (group is yaw-rotated).
+    e.fire.rotation.y = -e.group.rotation.y + cameraYaw;
+    // Flicker via UV scroll on the texture + slight vertical scale wobble.
+    const t = performance.now() / 1000;
+    const mat = e.fire.material as THREE.MeshBasicMaterial;
+    if (mat.map) {
+      mat.map.offset.y = (t * 2.2) % 1;
+      mat.map.needsUpdate = false;
+    }
+    e.fire.scale.y = 1 + Math.sin(t * 18 + e.id) * 0.12;
+    mat.opacity = 0.82 + Math.sin(t * 26 + e.id) * 0.12;
   }
 
   private animate(e: RenderEntity, x: number, z: number, yaw: number, cameraYaw: number, dt: number, alpha: number): void {
@@ -264,7 +340,7 @@ export class EntityRenderer {
   private create(id: number, type: EntityType, x: number, y: number, z: number, yaw: number, a: number): RenderEntity {
     const group = new THREE.Group();
     const e: RenderEntity = {
-      id, type, group, parts: {}, materials: [], baseColors: [],
+      id, type, group, parts: {}, materials: [], baseColors: [], fire: null,
       px: x, py: y, pz: z, pyaw: yaw,
       cx: x, cy: y, cz: z, cyaw: yaw,
       hp: 0, hurt: 0, anim: 0, a, b: 0, pitch: 0, limbPhase: Math.random() * 10, seen: true,
@@ -335,6 +411,7 @@ export class EntityRenderer {
   private remove(e: RenderEntity): void {
     this.group.remove(e.group);
     for (const m of e.materials) m.dispose();
+    if (e.fire) (e.fire.material as THREE.Material).dispose();
     e.group.traverse((o) => {
       if (o instanceof THREE.Mesh && !this.isCachedGeo(o.geometry)) o.geometry.dispose();
     });

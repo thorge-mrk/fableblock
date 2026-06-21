@@ -739,6 +739,27 @@ export class TextureAtlas {
     this.texture.needsUpdate = true;
   }
 
+  /** Average RGB (0..1) of a tile, for block-break particle colouring. */
+  sampleColor(tile: number): [number, number, number] {
+    const ctx = this.canvas.getContext('2d')!;
+    const tx = (tile % 32) * TILE_PX;
+    const ty = Math.floor(tile / 32) * TILE_PX;
+    const data = ctx.getImageData(tx, ty, TILE_PX, TILE_PX).data;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let n = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 128) continue;
+      r += data[i];
+      g += data[i + 1];
+      b += data[i + 2];
+      n++;
+    }
+    if (n === 0) return [1, 1, 1];
+    return [r / n / 255, g / n / 255, b / n / 255];
+  }
+
   /** PNG data-URL for a tile, upscaled to 32px for crisp UI icons. */
   icon(tile: number): string {
     let url = this.iconCache.get(tile);

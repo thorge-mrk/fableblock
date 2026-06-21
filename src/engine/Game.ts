@@ -11,6 +11,7 @@ import { DayNightCycle } from './DayNight';
 import { PlayerController } from './Player';
 import { EntityRenderer, remapBoxToTiles } from './EntityRenderer';
 import { CharacterModel, HeldItemView } from './CharacterModel';
+import { Particles } from './Particles';
 import { raycastBlocks, RayHit } from './Raycast';
 import { attachKeyboard, detachKeyboard, input, setJoystick, setTouchButton, addTouchLook } from './Input';
 import { gameStore, useGameStore } from '../state/store';
@@ -44,6 +45,8 @@ export class Game {
   private entityRenderer!: EntityRenderer;
   private character!: CharacterModel;
   private heldView!: HeldItemView;
+  private particles!: Particles;
+  private particleColor = new THREE.Color();
   private genWorker!: Worker;
   private meshWorker!: Worker;
   private logicWorker!: Worker;
@@ -161,6 +164,7 @@ export class Game {
     this.character.group.visible = false;
     this.scene.add(this.character.group);
     this.heldView = new HeldItemView(this.atlas, this.camera);
+    this.particles = new Particles(this.scene);
 
     // Selection outline + crack overlay
     const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002));
@@ -310,6 +314,7 @@ export class Game {
 
     // Entities
     this.entityRenderer.update(this.world, this.dayNight.sunLevel, this.player.yaw, dt);
+    this.particles.update(dt, this.world);
 
     // 20 Hz uplink to the logic worker
     this.tickAccum += dt * 1000;
@@ -515,6 +520,18 @@ export class Game {
     this.crackMesh.geometry = this.crackGeos[stage];
     this.crackMesh.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
     if (Math.random() < dt * 8) this.heldView.swing();
+    // Trickle a few fragments off the block face while mining.
+    if (Math.random() < dt * 14) {
+      const [pr, pg, pb] = this.atlas.sampleColor(def.tiles[4]);
+      this.particleColor.setRGB(pr, pg, pb);
+      this.particles.burst(
+        hit.x + 0.5 + hit.nx * 0.5,
+        hit.y + 0.5 + hit.ny * 0.5,
+        hit.z + 0.5 + hit.nz * 0.5,
+        this.particleColor,
+        2,
+      );
+    }
 
     if (this.mineProgress >= 1) {
       this.breakBlock(hit, canHarvest);
@@ -531,6 +548,10 @@ export class Game {
 
   private breakBlock(hit: RayHit, canHarvest: boolean): void {
     const def = blockDef(hit.id);
+    // Break-particle burst coloured from the block's side texture.
+    const [pr, pg, pb] = this.atlas.sampleColor(def.tiles[4]);
+    this.particleColor.setRGB(pr, pg, pb);
+    this.particles.burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, this.particleColor);
     if (isChest(hit.id) || isFurnace(hit.id) || hit.id === B.HOPPER || hit.id === B.SPAWNER) {
       this.sendLogic({ t: 'breakBE', x: hit.x, y: hit.y, z: hit.z });
     }
@@ -1129,6 +1150,7 @@ export class Game {
     this.logicWorker?.terminate();
     this.chunks?.dispose();
     this.entityRenderer?.dispose();
+    this.particles?.dispose();
     this.renderer?.dispose();
   }
 }
