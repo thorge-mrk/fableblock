@@ -8,7 +8,7 @@ import { SNAP_STRIDE } from '../net/messages';
 import { EntityType, ENTITY_DEFS, AnimFlag } from '../core/entities';
 import { World } from '../core/world';
 import { itemDef, isPlaceable } from '../core/items';
-import { blockDef } from '../core/blocks';
+import { blockDef, TILE_PX, CELL_PX, TILE_GUTTER, ATLAS_SIZE } from '../core/blocks';
 import { TextureAtlas } from './TextureAtlas';
 
 interface RenderEntity {
@@ -624,15 +624,15 @@ export function remapBoxToTiles(geo: THREE.BufferGeometry, tiles: readonly numbe
 }
 
 function applyTileUV(uv: THREE.BufferAttribute, offset: number, tile: number): void {
-  const tx = tile % 32;
-  const ty = Math.floor(tile / 32);
-  const s = 1 / 32;
-  const pad = 0.06 * s;
-  const u0 = tx * s + pad;
-  const u1 = (tx + 1) * s - pad;
+  // Map to the 16px interior of the tile's gutter-padded atlas cell.
+  const ox = (tile % 32) * CELL_PX + TILE_GUTTER;
+  const oy = Math.floor(tile / 32) * CELL_PX + TILE_GUTTER;
+  const pad = 0.5; // half a texel, in px
+  const u0 = (ox + pad) / ATLAS_SIZE;
+  const u1 = (ox + TILE_PX - pad) / ATLAS_SIZE;
   // Atlas texture v=1 at top row.
-  const v1 = 1 - ty * s - pad;
-  const v0 = 1 - (ty + 1) * s + pad;
+  const v1 = 1 - (oy + pad) / ATLAS_SIZE;
+  const v0 = 1 - (oy + TILE_PX - pad) / ATLAS_SIZE;
   // PlaneGeometry/BoxGeometry UV layout per face: (0,1),(1,1),(0,0),(1,0).
   uv.setXY(offset, u0, v1);
   uv.setXY(offset + 1, u1, v1);

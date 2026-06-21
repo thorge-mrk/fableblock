@@ -5,7 +5,7 @@
  * cutouts, and an animated translucent water variant.
  */
 import * as THREE from 'three';
-import { ATLAS_TILES, TILE_PX } from '../core/blocks';
+import { ATLAS_TILES, TILE_PX, CELL_PX, TILE_GUTTER, ATLAS_SIZE } from '../core/blocks';
 
 export interface EnvUniforms {
   uSunLevel: { value: number };
@@ -66,18 +66,24 @@ varying float vShade;
 varying vec2 vLight;
 varying float vDist;
 
-const float TILES = ${ATLAS_TILES.toFixed(1)};
-const float HALF_TEXEL = 0.5 / ${TILE_PX.toFixed(1)}; // half texel in tile space
+const float GRID = ${ATLAS_TILES.toFixed(1)};
+const float TILEPX = ${TILE_PX.toFixed(1)};
+const float CELLPX = ${CELL_PX.toFixed(1)};
+const float GUT = ${TILE_GUTTER.toFixed(1)};
+const float ATLASPX = ${ATLAS_SIZE.toFixed(1)};
+const float HALF_TEXEL = 0.5; // px, clamps inside the tile interior
 
 void main() {
   float tile = floor(vTile + 0.5);
-  vec2 tileOrigin = vec2(mod(tile, TILES), floor(tile / TILES));
+  vec2 cell = vec2(mod(tile, GRID), floor(tile / GRID));
   ${water
     ? 'vec2 inTile = fract(vUv + vec2(uTime * 0.02, uTime * 0.045));'
     : 'vec2 inTile = fract(vUv);'}
   inTile.y = 1.0 - inTile.y;
-  inTile = clamp(inTile, vec2(HALF_TEXEL), vec2(1.0 - HALF_TEXEL));
-  vec2 atlasUv = (tileOrigin + inTile) / TILES;
+  inTile = clamp(inTile, vec2(HALF_TEXEL / TILEPX), vec2(1.0 - HALF_TEXEL / TILEPX));
+  // Resolve to absolute atlas pixels inside the gutter-padded cell.
+  vec2 px = cell * CELLPX + vec2(GUT) + inTile * TILEPX;
+  vec2 atlasUv = px / ATLASPX;
   // Atlas rows grow downward.
   atlasUv.y = 1.0 - atlasUv.y;
   vec4 tex = texture2D(uAtlas, atlasUv);

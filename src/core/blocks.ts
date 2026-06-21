@@ -105,9 +105,11 @@ export const TILE = {
   ITEM_SHOVEL_DIAMOND: 92,
 } as const;
 
-export const ATLAS_TILES = 32; // 32x32 grid of 16px tiles = 512px atlas
-export const ATLAS_SIZE = 512;
-export const TILE_PX = 16;
+export const ATLAS_TILES = 32; // 32x32 grid of tiles
+export const TILE_PX = 16; // painted tile resolution (authentic 16x16)
+export const TILE_GUTTER = 8; // replicated-edge padding around each tile (mipmap-safe)
+export const CELL_PX = TILE_PX + TILE_GUTTER * 2; // 32px atlas cell
+export const ATLAS_SIZE = ATLAS_TILES * CELL_PX; // 1024px (power-of-two for mipmaps)
 
 // ---------------------------------------------------------------------------
 // Block IDs

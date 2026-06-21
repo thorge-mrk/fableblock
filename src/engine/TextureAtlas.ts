@@ -5,11 +5,37 @@
  * Also exports per-tile PNG data-URLs for the React inventory UI.
  */
 import * as THREE from 'three';
-import { ATLAS_SIZE, TILE, TILE_PX } from '../core/blocks';
+import { ATLAS_SIZE, TILE, TILE_PX, CELL_PX, TILE_GUTTER } from '../core/blocks';
 import { mulberry32 } from '../core/prng';
 
 type RGB = [number, number, number];
 const N = TILE_PX; // 16
+
+/**
+ * Replicate a freshly painted tile's edge pixels outward into its gutter so
+ * mipmap downsampling never pulls colour from neighbouring tiles.
+ * (ix,iy) = top-left of the 16px interior inside its 32px cell.
+ */
+function extrudeCell(img: ImageData, ix: number, iy: number): void {
+  const d = img.data;
+  const w = ATLAS_SIZE;
+  const cellX = ix - TILE_GUTTER;
+  const cellY = iy - TILE_GUTTER;
+  for (let y = 0; y < CELL_PX; y++) {
+    for (let x = 0; x < CELL_PX; x++) {
+      const inside = x >= TILE_GUTTER && x < TILE_GUTTER + TILE_PX && y >= TILE_GUTTER && y < TILE_GUTTER + TILE_PX;
+      if (inside) continue;
+      const sx = Math.min(TILE_PX - 1, Math.max(0, x - TILE_GUTTER));
+      const sy = Math.min(TILE_PX - 1, Math.max(0, y - TILE_GUTTER));
+      const si = ((iy + sy) * w + ix + sx) * 4;
+      const di = ((cellY + y) * w + cellX + x) * 4;
+      d[di] = d[si];
+      d[di + 1] = d[si + 1];
+      d[di + 2] = d[si + 2];
+      d[di + 3] = d[si + 3];
+    }
+  }
+}
 
 class TilePainter {
   constructor(
@@ -722,17 +748,22 @@ export class TextureAtlas {
 
     for (const [tileStr, painter] of Object.entries(PAINTERS)) {
       const tile = Number(tileStr);
-      const tx = (tile % 32) * TILE_PX;
-      const ty = Math.floor(tile / 32) * TILE_PX;
-      const p = new TilePainter(img, tx, ty, mulberry32(seed ^ (tile * 7919 + 17)));
+      // Paint the 16px art into the interior of a gutter-padded cell.
+      const ix = (tile % 32) * CELL_PX + TILE_GUTTER;
+      const iy = Math.floor(tile / 32) * CELL_PX + TILE_GUTTER;
+      const p = new TilePainter(img, ix, iy, mulberry32(seed ^ (tile * 7919 + 17)));
       painter(p);
+      extrudeCell(img, ix, iy);
     }
     ctx.putImageData(img, 0, 0);
 
     this.texture = new THREE.CanvasTexture(this.canvas);
+    // Crisp up close (nearest mag), smooth far (trilinear mipmaps). The gutter
+    // around every tile keeps mip levels from bleeding across tile borders.
     this.texture.magFilter = THREE.NearestFilter;
-    this.texture.minFilter = THREE.NearestFilter;
-    this.texture.generateMipmaps = false;
+    this.texture.minFilter = THREE.LinearMipmapLinearFilter;
+    this.texture.generateMipmaps = true;
+    this.texture.anisotropy = 4;
     this.texture.wrapS = THREE.ClampToEdgeWrapping;
     this.texture.wrapT = THREE.ClampToEdgeWrapping;
     this.texture.colorSpace = THREE.SRGBColorSpace;
@@ -742,8 +773,8 @@ export class TextureAtlas {
   /** Average RGB (0..1) of a tile, for block-break particle colouring. */
   sampleColor(tile: number): [number, number, number] {
     const ctx = this.canvas.getContext('2d')!;
-    const tx = (tile % 32) * TILE_PX;
-    const ty = Math.floor(tile / 32) * TILE_PX;
+    const tx = (tile % 32) * CELL_PX + TILE_GUTTER;
+    const ty = Math.floor(tile / 32) * CELL_PX + TILE_GUTTER;
     const data = ctx.getImageData(tx, ty, TILE_PX, TILE_PX).data;
     let r = 0;
     let g = 0;
@@ -772,8 +803,8 @@ export class TextureAtlas {
       cctx.imageSmoothingEnabled = false;
       cctx.drawImage(
         this.canvas,
-        (tile % 32) * TILE_PX,
-        Math.floor(tile / 32) * TILE_PX,
+        (tile % 32) * CELL_PX + TILE_GUTTER,
+        Math.floor(tile / 32) * CELL_PX + TILE_GUTTER,
         TILE_PX,
         TILE_PX,
         0,
