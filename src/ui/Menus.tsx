@@ -23,7 +23,7 @@ export function TitleScreen(): React.ReactElement {
         className="text-6xl font-extrabold text-white mb-1 tracking-wider"
         style={{ textShadow: '4px 4px 0 #3f3f3f' }}
       >
-        VOXELCRAFT
+        FableBlock
       </h1>
       <p className="text-yellow-300 mb-10 italic" style={{ textShadow: '2px 2px 0 #3f3f3f' }}>
         100% browser-native voxel engine
