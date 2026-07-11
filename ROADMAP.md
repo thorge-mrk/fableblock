@@ -29,6 +29,22 @@ Für neue Systeme zusätzlich einen `scripts/<feature>-test.mjs` im Stil von
 | — | Kein Bett / Nacht nicht überspringbar | Feature existiert nicht (Grep bestätigt) | P3-1 |
 | — | Welt geht bei Reload verloren | Keinerlei Persistenz — nur Settings in localStorage (store.ts:91) | P3-2 |
 
+### Status-Update (2. Analyse-Runde, selbst gefunden & sofort behoben)
+
+| # | Bug | Root Cause | Status |
+|---|---|---|---|
+| N1 | Items werden manchmal nicht aufgehoben/gemergt, Pfeile fliegen durch Mobs, Hopper saugen unzuverlässig | `queryRange()` (logic.worker) sprang in Roh-Koordinaten um 4 statt zellen-ausgerichtet → ganze Spatial-Hash-Zellen wurden übersprungen | ✅ behoben |
+| N2 | Spieler fällt durch die Welt, wenn der Chunk unter ihm noch nicht geladen ist (langsame Geräte, schnelles Boot) | Kein Ready-Check vor der Physik; ungeladene Chunks lesen sich als Luft | ✅ behoben (Physik friert ein, bis Chunk-Daten da sind) |
+| N3 | Creeper zünden durch Wände/Böden | Zünd-Branch prüfte nur Distanz ≤ 3, keine Sichtlinie | ✅ behoben (hasLOS-Gate) |
+| N4 | Brennende Zombies/Skelette brennen im Wasser weiter | Burn-Check ignorierte Wasser | ✅ behoben |
+| N5 | Item-Drops überleben ewig in Lava | Lava-Schaden schloss Items explizit aus | ✅ behoben (Items verbrennen) |
+
+**Neu gefunden, noch offen (Backlog, klein):**
+- Explosionsschaden ignoriert Wände (nur Distanz-Falloff) — Sichtlinien-Dämpfung ergänzen (S, in P2-1 oder eigenes Mini-Paket).
+- Blöcke lassen sich in Mobs hinein platzieren (`tryPlace` prüft nur den Spieler-AABB) — Entity-AABB-Check ergänzen (S).
+- Villager-Pfadfindung wertet Wasser als begehbar → Dorfbewohner waten in Teiche (S: `walkable()` Wasser nur für Nicht-Villager).
+- Chunk-Rand-Fluid-Wake sampelt nur jede 4./8. Zelle → selten stehende Wasserwände an Ozean-Höhlen (M, niedrige Prio).
+
 **Unklar — bitte vom Projektinhaber präzisieren:**
 1. „mobil geht auch Shake" — Gemeint: Kamera wackelt? Gerät-Schütteln als Geste? Bitte 1 Satz Repro.
 2. „Blöcke manchmal nicht sichtbar" (alter Report) — Meshing-Pipeline geprüft und korrekt
@@ -39,7 +55,7 @@ Für neue Systeme zusätzlich einen `scripts/<feature>-test.mjs` im Stil von
 
 ## Phase 0 — Kritische Bugfixes (zuerst, in dieser Reihenfolge)
 
-### P0-1 · Touch-Input reparieren: Hotbar, Menü-Reopen-Loop, Geister-Eingaben (S)
+### ✅ P0-1 · ERLEDIGT — Touch-Input reparieren: Hotbar, Menü-Reopen-Loop, Geister-Eingaben (S)
 **Dateien:** `src/App.tsx`, `src/ui/TouchControls.tsx`, `src/engine/Game.ts`
 1. `App.tsx`: `<TouchControls />` VOR `<HUD />` rendern (DOM-Reihenfolge = Stapelreihenfolge).
    HUD-Root ist `pointer-events-none`, nur Hotbar-Slots sind `auto` → Slots fangen dann ihre
@@ -61,7 +77,7 @@ Für neue Systeme zusätzlich einen `scripts/<feature>-test.mjs` im Stil von
 wechselt; (b) Crafting-Table per Place-Button öffnen, per ✕ schließen → bleibt zu;
 (c) Joystick halten + Inventar öffnen + schließen → Spieler steht still.
 
-### P0-2 · Entity-Nebel & Distanz-Culling (S)
+### ✅ P0-2 · ERLEDIGT — Entity-Nebel & Distanz-Culling (S)
 **Dateien:** `src/engine/Game.ts` (Szenen-Setup), `src/engine/DayNight.ts`, `src/engine/EntityRenderer.ts`
 1. Beim Szenen-Setup `scene.fog = new THREE.Fog(0x8ec2ee, 1, 100)` setzen.
 2. `DayNightCycle.update()`: `scene.fog.color.copy(this.skyColor)`,
@@ -73,7 +89,7 @@ wechselt; (b) Crafting-Table per Place-Button öffnen, per ✕ schließen → bl
 **Abnahme:** Smoke-Test läuft; visuell (Screenshot, Render-Distanz 3): kein Mob vor/hinter
 der Nebelwand frei schwebend sichtbar.
 
-### P0-3 · Nacht heller + Helligkeitsregler (S)
+### ✅ P0-3 · ERLEDIGT — Nacht heller + Helligkeitsregler (S)
 **Dateien:** `src/engine/DayNight.ts`, `src/engine/EntityRenderer.ts`, `src/state/store.ts`, `src/ui/Menus.tsx`, `src/engine/materials.ts`
 1. `DayNight.ts:41`: `this.sunLevel = 0.16 + 0.84 * dayF` → `0.30 + 0.70 * dayF`.
 2. `EntityRenderer.ts:218`: Minimum `0.06` → `0.14`, Exponent `1.3` → `1.15`.
@@ -224,6 +240,80 @@ Werkzeug-Upgrades (Effizienz/Haltbarkeit/Schärfe als flache Multiplikatoren auf
 - **Nether-Dimension** (Portal, eigenes Gen-Preset, 2 Mobs) — XL.
 - **Multiplayer** — strukturell nicht vorgesehen (4-Thread-Worker-Topologie, kein Netcode);
   nur mit eigener Server-Architektur sinnvoll. Bewusst NICHT eingeplant.
+
+---
+
+## Phase 5 — Grafik-Generalüberholung („FableBlock-Look")
+
+Ziel: ALLE Grafiken überarbeiten, sodass FableBlock einen eigenen, konsistenten Stil hat —
+weiterhin 100 % prozedural (Projektregel: keine externen Assets). Ein Paket = ein Commit.
+Vor Phase 5 zuerst P2-2 (GUI-Theme) abschließen, damit die Stilrichtung feststeht.
+
+**Stil-Leitplanken (für alle Pakete verbindlich):**
+- 16×16-Pixel-Tiles behalten, aber je Material eine 3–4-stufige eigene Palette
+  (Basis / Schatten / Licht / Akzent) statt Zufallsrauschen über einer Farbe.
+- Erkennbare Silhouetten & Muster, die NICHT Mojang-Texturen nachzeichnen
+  (z. B. Diamant-Erz als facettierte Rauten-Cluster statt MC-Punktmuster).
+- Einheitliche Lichtrichtung in allen Tiles (oben-links), einheitliche Sättigung.
+- Jede Änderung per Vorher/Nachher-Screenshot dokumentieren (scripts/smoke.mjs macht Screenshots).
+
+### P5-1 · TilePainter-Werkzeugkasten erweitern (S)
+`src/engine/TextureAtlas.ts`: Hilfsfunktionen ergänzen — `shade(x,y,w,h,amt)` (relatives
+Abdunkeln/Aufhellen statt Festfarbe), `dither(x,y,w,h,c1,c2)` (2×2-Checker),
+`bevel(x,y,w,h)` (1-px-Licht/Schattenkante), `palette(name)` (zentrale Material-Paletten).
+Basis für alle folgenden Pakete. **Abnahme:** tsc/tests grün, Atlas-Dump-Screenshot.
+
+### P5-2 · Terrain-Blöcke: Erde/Gras/Stein/Sand/Kies (M)
+Neue Painter für DIRT, GRASS (Top/Side), STONE, COBBLE, SAND, GRAVEL, SNOW, CLAY:
+Gras mit gezacktem Übergang + Grashalm-Pixeln, Stein mit Bruchkanten-Clustern,
+Sand mit Wellen-Dithering. **Abnahme:** Screenshot einer Hügellandschaft — keine sichtbare
+Kachel-Wiederholung auf 8×8 Blöcken (Painter darf Koordinaten-Hash für Varianz nutzen,
+siehe cellNoise).
+
+### P5-3 · Holz & Pflanzen (M)
+OAK/BIRCH (Log-Seiten mit Rinden-Riefen, Ring-Top), PLANKS (Brettfugen + Astlöcher),
+LEAVES (dichteres Blattmuster, 2 Grüntöne + Löcher), Setzling, Blumen, Gras-Cross,
+Zuckerrohr. **Abnahme:** Wald-Screenshot Tag + Nacht.
+
+### P5-4 · Erze & Wertblöcke (S)
+COAL/IRON/GOLD/DIAMOND-Erz: je eigene Kristall-/Ader-Signatur (Facetten, Nuggets,
+Adern) + Erz-Blöcke (IRON_BLOCK usw.), GLOWSTONE (leuchtende Zellstruktur),
+OBSIDIAN (violette Splitter). **Abnahme:** Mine-Screenshot mit allen Erzen nebeneinander
+(Creative-Platzierung im Test-Save oder gestampfte Testwand über scripts).
+
+### P5-5 · Funktionsblöcke (M)
+CHEST (Bänder + Schloss neu), FURNACE (bereits poliert — nur Palette angleichen), TNT,
+BOOKSHELF, SPAWNER (Gitter mit Innenglut), TORCH (klareres Kopf-Glühen), Türen/Glas
+(eigenes Rahmen-Muster). **Abnahme:** Screenshot Dorf-Interieur.
+
+### P5-6 · Item-Icons komplett (M)
+Alle Werkzeug-/Waffen-Icons (Stiel-Winkel, Materialglanz je Tier), Essen, Eimer, Boot —
+einheitlicher 1-px-Dunkel-Outline-Stil (lesbar auf hellem UND dunklem Slot-Hintergrund).
+**Abnahme:** Inventar-Screenshot mit allen Items; jedes Icon auf 44 px klar erkennbar.
+
+### P5-7 · Himmel & Atmosphäre (L)
+`src/engine/DayNight.ts` + neues `src/engine/Sky.ts`: sichtbare Sonne/Mond als texturierte
+Sprites (statt nur Licht), Sternenfeld nachts (Instanced Points, seeded), 2–3 driftende
+prozedurale Wolkenebenen (Perlin-Alpha-Quads ~y=128), Horizont-Gradient (Skydome statt
+Flat-Color). **Abnahme:** Screenshots Dämmerung/Mitternacht/Mittag; FPS-Verlust < 3.
+
+### P5-8 · Wasser & Effekte (M)
+Wasser: animierte Normal-Wellen im Shader (uTime-basiertes UV-Warping verfeinern),
+Ufer-Schaumkante (Fresnel-Aufhellung flacher Blickwinkel); Partikel: Blasen unter Wasser,
+Blatt-Partikel im Wald, Feuerfunken; Treffer-Marker beim Schlagen von Mobs.
+**Abnahme:** See-Screenshot + Unterwasser-Screenshot.
+
+### P5-9 · Mob-Texturen statt Flat-Color (L)
+`EntityRenderer.ts`: `partBox` um optionale prozedurale Canvas-Texturen je Körperteil
+erweitern (analog faceTexture) — Zombie-Fetzen, Skelett-Rippen, Schaf-Wollstruktur,
+Creeper-Tarnmuster, Villager-Robe mit Gürtel, Golem-Ranken. Baut auf P2-1 auf.
+**Abnahme:** Mob-Lineup-Screenshot (alle Typen nebeneinander, Tag).
+
+### P5-10 · HUD-/GUI-Grafiken finalisieren (S)
+Eigene Pip-Grafiken (HP/Hunger/Rüstung) im FableBlock-Stil, Crosshair-Varianten
+(Standard/Interagierbar), Break-Ring durch Pixel-Riss-Overlay auf dem Block ersetzen
+(crackGeos-Texturen neu zeichnen), Titel-Screen mit animiertem Voxel-Panorama-Hintergrund
+(langsame Kamerafahrt über Beispiel-Seed). **Abnahme:** Titel- + HUD-Screenshot.
 
 ## Merkregeln für jeden Agent-Lauf
 1. Vor dem Commit: `npx tsc --noEmit && npm test && npm run build && node scripts/smoke.mjs`.

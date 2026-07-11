@@ -120,6 +120,9 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x87b5e5);
+    // Scene fog covers Lambert-lit objects (mobs/boat/character); the terrain
+    // shader has its own matching uFog uniforms. Kept in sync every frame.
+    this.scene.fog = new THREE.Fog(0x87b5e5, 60, 120);
     const settings = gameStore.get().settings;
     this.camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.06, 600);
     this.scene.add(this.camera);
@@ -312,14 +315,29 @@ export class Game {
     this.dayNight.dayLengthSec = store.settings.dayLengthSec;
     this.dayNight.update(dt, this.env, this.scene, this.camera, this.chunks.renderDistance);
     this.env.uTime.value = now / 1000;
+    this.env.uGamma.value = store.settings.brightness;
     if (this.player.headInFluid) {
       this.env.uFogNear.value = 2;
       this.env.uFogFar.value = this.player.inLava ? 6 : 24;
       this.env.uFogColor.value.setHex(this.player.inLava ? 0xc04808 : 0x1840a0);
     }
+    if (this.scene.fog instanceof THREE.Fog) {
+      this.scene.fog.color.copy(this.env.uFogColor.value);
+      this.scene.fog.near = this.env.uFogNear.value;
+      this.scene.fog.far = this.env.uFogFar.value;
+    }
 
     // Entities
-    this.entityRenderer.update(this.world, this.dayNight.sunLevel, this.player.yaw, dt);
+    this.entityRenderer.update(
+      this.world,
+      this.dayNight.sunLevel,
+      this.player.yaw,
+      dt,
+      this.player.x,
+      this.player.z,
+      this.env.uFogFar.value,
+      store.settings.brightness,
+    );
     this.particles.update(dt, this.world);
 
     // 20 Hz uplink to the logic worker
@@ -418,7 +436,12 @@ export class Game {
       this.dismountBoat();
     }
     this.prevSneak = effInput.sneak;
-    this.player.update(dt, this.world, effInput);
+    // Freeze physics while the chunk underfoot has no data yet — otherwise a
+    // missing chunk reads as air and the player falls through unloaded terrain
+    // (slow devices, fast boats). Look input above still applies.
+    if (this.chunks.isReady(Math.floor(this.player.x) >> 4, Math.floor(this.player.z) >> 4)) {
+      this.player.update(dt, this.world, effInput);
+    }
 
     // Environmental damage
     this.updateHazards(dt, alive);
@@ -1043,6 +1066,12 @@ export class Game {
     });
     document.exitPointerLock?.();
     this.stopMining();
+    // Clear held-action state: on touch the overlay unmounts before its
+    // touchend fires, which would otherwise leave use/mine latched and
+    // instantly re-open the screen after closing it.
+    input.useHeld = false;
+    input.useClicked = false;
+    input.mineHeld = false;
   }
 
   private closeScreen(): void {
@@ -1076,6 +1105,10 @@ export class Game {
     if (!gameStore.get().settings.touchMode && gameStore.get().phase === 'playing') {
       this.canvas.requestPointerLock();
     }
+    // Grace period so any stale use-press can't re-open a screen this frame.
+    input.useHeld = false;
+    input.useClicked = false;
+    this.useRepeat = 0.3;
   }
 
   private setPaused(paused: boolean): void {

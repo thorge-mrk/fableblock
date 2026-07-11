@@ -163,6 +163,15 @@ export function PauseScreen(): React.ReactElement {
           format={(v) => `${Math.round(v * 100)}%`}
           onChange={(v) => apply({ sensitivity: v })}
         />
+        <SettingSlider
+          label="Brightness"
+          value={settings.brightness}
+          min={0.6}
+          max={1.8}
+          step={0.05}
+          format={(v) => `${Math.round(v * 100)}%`}
+          onChange={(v) => apply({ brightness: v })}
+        />
         <label className="flex w-72 mx-auto my-3 text-white text-sm justify-between items-center">
           <span>Touch Controls</span>
           <input

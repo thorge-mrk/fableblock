@@ -38,9 +38,11 @@ export default function App(): React.ReactElement {
           {phase === 'loading' && <LoadingScreen />}
           {(phase === 'playing' || phase === 'dead') && (
             <>
+              {/* Touch layer first: HUD renders above it so hotbar taps hit
+                  the slots instead of spawning the joystick / look drag. */}
+              {phase === 'playing' && screen === 'none' && touchMode && <TouchControls />}
               <HUD />
               <DebugOverlay />
-              {phase === 'playing' && screen === 'none' && touchMode && <TouchControls />}
               {screen === 'inventory' && <InventoryScreen />}
               {screen === 'crafting' && <CraftingScreen />}
               {screen === 'container' && <ContainerScreen />}

@@ -54,7 +54,7 @@ try {
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'networkidle' });
 
   // Title screen present?
-  await page.waitForSelector('text=VOXELCRAFT', { timeout: 10000 });
+  await page.waitForSelector('text=FableBlock', { timeout: 10000 });
   console.log('✓ title screen rendered');
 
   // Enter a fixed seed and create the world.

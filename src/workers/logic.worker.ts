@@ -544,11 +544,13 @@ function rebuildSpatial(): void {
 
 function queryRange(x: number, y: number, z: number, r: number): Ent[] {
   const out: Ent[] = [];
-  const minX = Math.floor(x - r);
+  // Align to the 4-block hash cells: stepping by 4 from an unaligned start
+  // would skip the cell containing max* whenever the span crosses a boundary.
+  const minX = Math.floor(x - r) & ~3;
   const maxX = Math.floor(x + r);
-  const minY = Math.floor(Math.max(0, y - r));
+  const minY = Math.floor(Math.max(0, y - r)) & ~3;
   const maxY = Math.floor(Math.min(255, y + r));
-  const minZ = Math.floor(z - r);
+  const minZ = Math.floor(z - r) & ~3;
   const maxZ = Math.floor(z + r);
   const seen = new Set<number>();
   for (let by = minY; by <= maxY; by += 4) {
@@ -761,7 +763,11 @@ function stepEntity(e: Ent, walkX: number, walkZ: number, wantJump: boolean): vo
   const fluid = entityInFluid(e);
   const inFluid = fluid.water || fluid.lava;
 
-  if (fluid.lava && e.type !== EntityType.ITEM) {
+  if (fluid.lava) {
+    if (e.type === EntityType.ITEM) {
+      e.dead = true; // dropped items burn up in lava
+      return;
+    }
     damageEntity(e, 4, 0, 0);
     e.burning = true;
   }
@@ -890,8 +896,12 @@ function distToPlayer(e: Ent): number {
 
 function tickZombie(e: Ent): void {
   const def = ENTITY_DEFS[e.type];
-  // Day burning under open sky.
-  if (sunFactor() > 0.5 && world.getSun(Math.floor(e.x), Math.floor(e.y + def.height), Math.floor(e.z)) >= 14) {
+  // Day burning under open sky (water extinguishes).
+  if (
+    sunFactor() > 0.5 &&
+    world.getSun(Math.floor(e.x), Math.floor(e.y + def.height), Math.floor(e.z)) >= 14 &&
+    !entityInFluid(e).water
+  ) {
     e.burning = true;
     if (tickCount % 20 === 0) damageEntity(e, 1, 0, 0);
   } else {
@@ -955,7 +965,11 @@ function tickZombie(e: Ent): void {
 
 function tickSkeleton(e: Ent): void {
   const def = ENTITY_DEFS[e.type];
-  if (sunFactor() > 0.5 && world.getSun(Math.floor(e.x), Math.floor(e.y + def.height), Math.floor(e.z)) >= 14) {
+  if (
+    sunFactor() > 0.5 &&
+    world.getSun(Math.floor(e.x), Math.floor(e.y + def.height), Math.floor(e.z)) >= 14 &&
+    !entityInFluid(e).water
+  ) {
     e.burning = true;
     if (tickCount % 20 === 0) damageEntity(e, 1, 0, 0);
   } else {
@@ -1012,7 +1026,8 @@ function tickCreeper(e: Ent): void {
   const pd = distToPlayer(e);
   let move = { x: 0, z: 0, jump: false };
   if (pd < 16 && player.valid && player.health > 0) {
-    if (pd <= 3) {
+    // Fuse only with a clear line of sight — no detonating through walls/floors.
+    if (pd <= 3 && hasLOS(e.x, e.y + 1.2, e.z, player.x, player.y + 1.2, player.z)) {
       // Stop and swell (silent fuse).
       e.swell = Math.min(1, e.swell + 1 / 30);
       const dx = player.x - e.x;

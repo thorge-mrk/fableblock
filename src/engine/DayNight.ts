@@ -38,7 +38,7 @@ export class DayNightCycle {
 
     // Sun-level for voxel sunlight: full at day, moonlit floor at night.
     const dayF = THREE.MathUtils.smoothstep(alt, -0.12, 0.18);
-    this.sunLevel = 0.16 + 0.84 * dayF;
+    this.sunLevel = 0.3 + 0.7 * dayF;
     env.uSunLevel.value = this.sunLevel;
 
     // Sky color: night -> dusk band -> day.
@@ -56,6 +56,13 @@ export class DayNightCycle {
     const far = renderDistance * 16;
     env.uFogFar.value = far * (0.92 - 0.1 * (1 - dayF));
     env.uFogNear.value = env.uFogFar.value * 0.55;
+    // Mirror into scene.fog so Lambert-lit objects (mobs, boat, character)
+    // fade out with the terrain instead of staying visible past the fog wall.
+    if (scene.fog instanceof THREE.Fog) {
+      scene.fog.color.copy(this.skyColor);
+      scene.fog.near = env.uFogNear.value;
+      scene.fog.far = env.uFogFar.value;
+    }
 
     // Directional light: sun by day, dim moon by night (opposite side).
     const isDay = alt > -0.04;

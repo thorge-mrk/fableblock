@@ -46,6 +46,18 @@ export function TouchControls(): React.ReactElement {
   const [joyPos, setJoyPos] = React.useState<[number, number] | null>(null);
   const [knob, setKnob] = React.useState<[number, number]>([0, 0]);
 
+  // The overlay unmounts when a screen opens — often BEFORE the finger lifts,
+  // so touchend never reaches our handlers. Release everything on unmount or
+  // the player keeps walking/mining/using behind the open menu.
+  React.useEffect(
+    () => () => {
+      const b = bridge();
+      b.touchMove(0, 0);
+      (['jump', 'sneak', 'attack', 'use'] as const).forEach((k) => b.touchButton(k, false));
+    },
+    [],
+  );
+
   const onTouchStart = (e: React.TouchEvent) => {
     for (let i = 0; i < e.changedTouches.length; i++) {
       const t = e.changedTouches[i];

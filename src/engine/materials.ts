@@ -14,6 +14,7 @@ export interface EnvUniforms {
   uFogFar: { value: number };
   uTime: { value: number };
   uSkyTint: { value: THREE.Color };
+  uGamma: { value: number };
 }
 
 export function createEnvUniforms(): EnvUniforms {
@@ -24,6 +25,7 @@ export function createEnvUniforms(): EnvUniforms {
     uFogFar: { value: 120 },
     uTime: { value: 0 },
     uSkyTint: { value: new THREE.Color(1, 1, 1) },
+    uGamma: { value: 1 },
   };
 }
 
@@ -59,6 +61,7 @@ uniform float uFogNear;
 uniform float uFogFar;
 uniform float uTime;
 uniform vec3 uSkyTint;
+uniform float uGamma;
 
 varying vec2 vUv;
 varying float vTile;
@@ -99,6 +102,8 @@ void main() {
   vec3 col = tex.rgb * vShade * brightness * lightColor;
   float fogF = smoothstep(uFogNear, uFogFar, vDist);
   col = mix(col, uFogColor, fogF);
+  // User brightness (gamma) — applied after fog so night lift is uniform.
+  col = pow(col, vec3(1.0 / uGamma));
   ${water
     ? 'float shimmer = 0.92 + 0.08 * sin(uTime * 2.2 + vUv.x * 6.2831 + vUv.y * 4.0);\n  gl_FragColor = vec4(col * shimmer, 0.72);'
     : 'gl_FragColor = vec4(col, 1.0);'}

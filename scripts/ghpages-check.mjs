@@ -104,7 +104,7 @@ try {
   console.log('Serving dist/ at', url, '(simulating GitHub Pages sub-path)');
   await page.goto(url, { waitUntil: 'networkidle' });
 
-  await page.waitForSelector('text=VOXELCRAFT', { timeout: 10000 });
+  await page.waitForSelector('text=FableBlock', { timeout: 10000 });
   console.log('✓ title screen loaded under sub-path');
 
   await page.fill('input[placeholder*="seed" i]', 'ghpages-seed');

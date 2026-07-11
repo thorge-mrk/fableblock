@@ -34,6 +34,7 @@ export interface Settings {
   quality: 0 | 1 | 2;
   dayLengthSec: number;
   sensitivity: number;
+  brightness: number; // display gamma, 1 = neutral
   thirdPerson: boolean;
   touchMode: boolean;
   showDebug: boolean;
@@ -83,6 +84,7 @@ function loadSettings(): Settings {
     quality: 1,
     dayLengthSec: DEFAULT_DAY_LENGTH_SEC,
     sensitivity: 1,
+    brightness: 1,
     thirdPerson: false,
     touchMode: typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true,
     showDebug: false,

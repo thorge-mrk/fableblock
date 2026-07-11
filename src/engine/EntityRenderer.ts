@@ -198,12 +198,29 @@ export class EntityRenderer {
   }
 
   /** Per-frame interpolation + animation + light tinting. */
-  update(world: World, sunLevel: number, cameraYaw: number, dt: number): void {
+  update(
+    world: World,
+    sunLevel: number,
+    cameraYaw: number,
+    dt: number,
+    camX = 0,
+    camZ = 0,
+    fogFar = Infinity,
+    gamma = 1,
+  ): void {
     const alpha = Math.min(1.2, (performance.now() - this.lastSnapAt) / 50);
+    const cullDist = fogFar + 8;
+    const cullSq = cullDist * cullDist;
     for (const e of this.entities.values()) {
       const x = e.px + (e.cx - e.px) * alpha;
       const y = e.py + (e.cy - e.py) * alpha;
       const z = e.pz + (e.cz - e.pz) * alpha;
+      // Beyond the fog wall: skip animation work and hide entirely.
+      const ddx = x - camX;
+      const ddz = z - camZ;
+      const visible = ddx * ddx + ddz * ddz < cullSq;
+      e.group.visible = visible;
+      if (!visible) continue;
       let dyaw = e.cyaw - e.pyaw;
       if (dyaw > Math.PI) dyaw -= Math.PI * 2;
       if (dyaw < -Math.PI) dyaw += Math.PI * 2;
@@ -215,7 +232,8 @@ export class EntityRenderer {
       const v = world.getVoxel(Math.floor(x), Math.floor(y + 0.5), Math.floor(z));
       const sun = ((v >> 8) & 0xf) / 15;
       const bl = ((v >> 12) & 0xf) / 15;
-      const bright = Math.max(0.06, Math.pow(Math.max(sun * sunLevel, bl), 1.3));
+      let bright = Math.max(0.14, Math.pow(Math.max(sun * sunLevel, bl), 1.15));
+      bright = Math.pow(Math.min(1, bright), 1 / gamma);
       const hurtF = e.hurt > 0 ? 1 : 0;
       const flash =
         e.type === EntityType.CREEPER && e.a > 0
