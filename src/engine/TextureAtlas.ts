@@ -141,6 +141,41 @@ class TilePainter {
     }
   }
 
+  /** Multiply existing pixels by f (relative shading, keeps texture). */
+  shade(x: number, y: number, w: number, h: number, f: number): void {
+    for (let dy = 0; dy < h; dy++) {
+      for (let dx = 0; dx < w; dx++) {
+        const xx = x + dx;
+        const yy = y + dy;
+        if (xx < 0 || xx >= N || yy < 0 || yy >= N) continue;
+        const i = ((this.oy + yy) * ATLAS_SIZE + this.ox + xx) * 4;
+        const d = this.img.data;
+        d[i] = Math.min(255, d[i] * f);
+        d[i + 1] = Math.min(255, d[i + 1] * f);
+        d[i + 2] = Math.min(255, d[i + 2] * f);
+      }
+    }
+  }
+
+  /** 2x2 checkerboard of two colours (soft material transitions). */
+  dither(x: number, y: number, w: number, h: number, c1: RGB, c2: RGB): void {
+    for (let dy = 0; dy < h; dy++) {
+      for (let dx = 0; dx < w; dx++) {
+        const c = ((x + dx) + (y + dy)) % 2 === 0 ? c1 : c2;
+        const f = 1 + (this.rand() - 0.5) * 0.08;
+        this.px(x + dx, y + dy, c[0] * f, c[1] * f, c[2] * f);
+      }
+    }
+  }
+
+  /** 1px light top/left + dark bottom/right edge (consistent TL light). */
+  bevel(strength = 0.18): void {
+    this.shade(0, 0, N, 1, 1 + strength);
+    this.shade(0, 1, 1, N - 1, 1 + strength * 0.7);
+    this.shade(0, N - 1, N, 1, 1 - strength);
+    this.shade(N - 1, 1, 1, N - 2, 1 - strength * 0.7);
+  }
+
   clear(): void {
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) this.px(x, y, 0, 0, 0, 0);
   }

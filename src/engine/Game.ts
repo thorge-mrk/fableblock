@@ -23,6 +23,7 @@ import { chunkKeyNum, blockIndex } from '../core/coords';
 import { saveWorld, loadWorld, SaveData } from './persistence';
 import { SoundEngine } from './Sound';
 import { Weather } from './Weather';
+import { Sky } from './Sky';
 import {
   B, blockDef, isChest, isFurnace, isInteractive, TILE, isWater,
 } from '../core/blocks';
@@ -56,6 +57,7 @@ export class Game {
   private particleColor = new THREE.Color();
   readonly sound = new SoundEngine();
   private weather!: Weather;
+  private sky!: Sky;
   private wasInWater = false;
   private genWorker!: Worker;
   private meshWorker!: Worker;
@@ -222,6 +224,8 @@ export class Game {
     this.scene.add(this.boat.group);
     this.weather = new Weather();
     this.scene.add(this.weather.group);
+    this.sky = new Sky(seed);
+    this.scene.add(this.sky.group);
     this.heldView = new HeldItemView(this.atlas, this.camera);
     this.particles = new Particles(this.scene);
 
@@ -375,6 +379,9 @@ export class Game {
     this.dayNight.update(dt, this.env, this.scene, this.camera, this.chunks.renderDistance);
     this.env.uTime.value = now / 1000;
     this.env.uGamma.value = store.settings.brightness;
+
+    // Celestial bodies track the camera and the time of day.
+    this.sky.update(this.dayNight.time, this.player.x, this.player.y, this.player.z);
 
     // Weather: rain curtain + darkened sky/fog while a shower passes.
     const camSky =
