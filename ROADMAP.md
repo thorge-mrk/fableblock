@@ -138,9 +138,24 @@ P3-6 Rüstung, P3-7 Wetter, P3-8 XP+Verzauberung).
 **Zusätzlich (User-Wünsche):**
 - Drag&Drop-Manager: echtes Ziehen-und-Loslassen in einer Geste (Maus + Touch),
   Teal-Highlight des Ziel-Slots, Doppelklick sammelt gleiche Items; per Smoke-Test
-  mit echten Maus-Events verifiziert (window.__fableStore-Hook).
+  mit echten Maus-Events verifiziert (window.__fableStore-Hook); Cursor-Icon ohne
+  React-Rerender (butterweich).
 - Blockspezifische Hitboxen: Blumen/Gras/Fackeln/Hebel klein, Türen/Platten/Kabel
   exakt; Fehlschüsse fliegen zum Block dahinter weiter; Outline + Crack skalieren mit.
+
+**PRO-Pass (Profi-Niveau, alles selbst gemacht):**
+- Hand-Rendering: Fackeln/Blumen/Gras/Hebel sind Sprites in Hand & als Drop, keine Würfel.
+- Bewegungsgefühl: Sprint-FOV-Kick, View-Bobbing (abschaltbar), Lande-Senke;
+  Chunk-Uploads auf 3/Frame budgetiert → kein Start-/Reise-Ruckeln.
+- Pause-Menü: „Save & Quit to Title" oben sichtbar, Settings in eigener Scroll-Box.
+- **Creative-Modus**: Titel-Wahl Survival/Creative (persistiert), Doppel-Sprung-Flug,
+  Instant-Break inkl. Bedrock ohne Drops, unendliche Items, kein Schaden/Hunger,
+  Mobs ignorieren Creative-Spieler, 80-Einträge-Palette im Inventar, HUD ohne Survival-Anzeigen.
+- Spieler-Skin: eigenes Gesicht (Brauen/Iris/Lächeln) + FableBlock-Held-Jacke.
+- **Worldgen 2.0**: Domain-Warping (organische Küsten/Grate statt Gitter-Optik),
+  atmende Höhlen + Tropfsteine, Wüsten-Stufenpyramiden (Goldspitze, Schatzkammer
+  mit Spawner-Wache), Steinbrick-Ruinen, Moos-Findlinge; Dörfer mit Kapelle
+  (Glowstone-Glockenturm), Farm-Parzellen mit Wasserkanal, 2 breiten Wegen, 5–8 Gebäuden.
 
 ## Phase 1 — Mobile-UX
 
