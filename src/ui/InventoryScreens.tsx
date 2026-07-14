@@ -14,18 +14,24 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   return (
     <div
       className="absolute inset-0 flex items-center justify-center bg-black/55 pointer-events-auto"
-      style={{ touchAction: 'none' }}
+      style={{
+        touchAction: 'none',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) bridge().closeScreen();
       }}
     >
-      <div className="bg-mc-panel border-4 border-t-white border-l-white border-b-mc-slot-dark border-r-mc-slot-dark p-4 rounded-sm shadow-2xl">
+      <div className="bg-mc-panel border-4 border-t-white border-l-white border-b-mc-slot-dark border-r-mc-slot-dark p-4 rounded-sm shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-mc-slot-dark font-bold">{title}</h2>
           <button
-            className="text-mc-slot-dark font-bold px-2 hover:text-red-700"
+            className="text-mc-slot-dark font-bold text-xl w-11 h-11 -my-2 -mr-2 flex items-center justify-center hover:text-red-700"
+            style={{ touchAction: 'none' }}
             onPointerDown={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               bridge().closeScreen();
             }}
           >

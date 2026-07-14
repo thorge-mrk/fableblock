@@ -1,6 +1,7 @@
 /**
  * Single inventory slot: icon, count badge, durability bar, click routing
  * (left / right / shift+click) for the drag-and-drop state machine.
+ * Touch: tap = click, long-press (400ms) = quick-move (shift-click).
  */
 import React from 'react';
 import { ItemStack, itemDef } from '../core/items';
@@ -13,16 +14,50 @@ interface SlotProps {
   highlight?: boolean;
 }
 
+const LONG_PRESS_MS = 400;
+
 export function Slot({ stack, onClickSlot, size = 44, highlight = false }: SlotProps): React.ReactElement {
-  // Pointer events fire identically for mouse, touch and pen, so a single
-  // handler makes inventory/crafting work on PC and mobile alike.
-  const handlePointer = (e: React.PointerEvent) => {
+  const longPress = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longFired = React.useRef(false);
+  const [flash, setFlash] = React.useState(false);
+
+  React.useEffect(
+    () => () => {
+      if (longPress.current) clearTimeout(longPress.current);
+    },
+    [],
+  );
+
+  // Pointer events fire identically for mouse, touch and pen. Mouse clicks
+  // act immediately on pointerdown; touch defers to distinguish tap from
+  // long-press (there is no shift key on a phone).
+  const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Touch/pen report button -1 on contact; treat as left click.
+    if (e.pointerType === 'touch') {
+      longFired.current = false;
+      longPress.current = setTimeout(() => {
+        longPress.current = null;
+        longFired.current = true;
+        setFlash(true);
+        setTimeout(() => setFlash(false), 180);
+        onClickSlot(0, true); // quick-move
+      }, LONG_PRESS_MS);
+      return;
+    }
     const button = e.button === 2 ? 2 : 0;
     onClickSlot(button, e.shiftKey);
   };
+
+  const finishTouch = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return;
+    if (longPress.current) {
+      clearTimeout(longPress.current);
+      longPress.current = null;
+      if (!longFired.current && e.type === 'pointerup') onClickSlot(0, false);
+    }
+  };
+
   const def = stack ? itemDef(stack.id) : null;
   const durFrac =
     stack && stack.dur !== undefined && def?.tool
@@ -31,10 +66,17 @@ export function Slot({ stack, onClickSlot, size = 44, highlight = false }: SlotP
   return (
     <div
       className={`relative border-2 select-none ${
-        highlight ? 'bg-white/40 border-white/70' : 'bg-black/25 border-t-mc-slot-dark border-l-mc-slot-dark border-b-white/60 border-r-white/60'
+        flash
+          ? 'bg-white/70 border-white'
+          : highlight
+            ? 'bg-white/40 border-white/70'
+            : 'bg-black/25 border-t-mc-slot-dark border-l-mc-slot-dark border-b-white/60 border-r-white/60'
       }`}
       style={{ width: size, height: size, touchAction: 'none' }}
-      onPointerDown={handlePointer}
+      onPointerDown={handlePointerDown}
+      onPointerUp={finishTouch}
+      onPointerLeave={finishTouch}
+      onPointerCancel={finishTouch}
       onContextMenu={(e) => e.preventDefault()}
     >
       {stack && def && (
@@ -72,13 +114,19 @@ export function Slot({ stack, onClickSlot, size = 44, highlight = false }: SlotP
   );
 }
 
-/** Item stack glued to the mouse cursor while dragging. */
+/** Item stack glued to the pointer (mouse or finger) while dragging. */
 export function CursorStack({ stack }: { stack: ItemStack | null }): React.ReactElement | null {
   const [pos, setPos] = React.useState<[number, number]>([0, 0]);
   React.useEffect(() => {
-    const onMove = (e: MouseEvent) => setPos([e.clientX, e.clientY]);
-    window.addEventListener('mousemove', onMove);
-    return () => window.removeEventListener('mousemove', onMove);
+    // pointer events cover mouse AND touch; capture-phase pointerdown also
+    // seats the stack at the tap position (touch has no hover moves).
+    const onPointer = (e: PointerEvent) => setPos([e.clientX, e.clientY]);
+    window.addEventListener('pointermove', onPointer);
+    window.addEventListener('pointerdown', onPointer, true);
+    return () => {
+      window.removeEventListener('pointermove', onPointer);
+      window.removeEventListener('pointerdown', onPointer, true);
+    };
   }, []);
   if (!stack) return null;
   return (
