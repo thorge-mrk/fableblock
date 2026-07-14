@@ -152,3 +152,9 @@ export const gameStore = {
   set: (partial: Parameters<GameStore['set']>[0]) => useGameStore.getState().set(partial),
   subscribe: useGameStore.subscribe,
 };
+
+// Read access for the headless smoke harness (scripts/smoke.mjs asserts
+// drag-and-drop actually moved stacks).
+if (typeof window !== 'undefined') {
+  (window as unknown as { __fableStore?: typeof gameStore }).__fableStore = gameStore;
+}

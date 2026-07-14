@@ -128,6 +128,7 @@ export class Game {
       closeScreen: () => this.closeScreen(),
       invClick: (slot, button, shift) => this.invClick(slot, button, shift),
       armorClick: (slot) => this.armorClick(slot),
+      collectAll: () => this.collectToCursor(),
       enchantHeld: (kind) => this.enchantHeld(kind),
       craftGridClick: (slot, button, shift) => this.craftGridClick(slot, button, shift),
       craftResultClick: (shift) => this.craftResultClick(shift),
@@ -1791,6 +1792,34 @@ export class Game {
     held.ench = ench;
     gameStore.set({ inventory: inv, xpLevel: s.xpLevel - cost });
     this.sound.levelup();
+  }
+
+  /** Double-click: pull every matching stack in reach onto the cursor. */
+  private collectToCursor(): void {
+    const s = gameStore.get();
+    if (!s.cursor || s.screen === 'container') return;
+    const cursor = cloneStack(s.cursor)!;
+    const max = itemDef(cursor.id).maxStack;
+    if (cursor.count >= max || cursor.dur !== undefined) return;
+    const inv = s.inventory.map(cloneStack);
+    const grid = s.craftGrid.map(cloneStack);
+    for (const arr of [inv, grid]) {
+      for (let i = 0; i < arr.length && cursor.count < max; i++) {
+        const st = arr[i];
+        if (!st || st.id !== cursor.id || st.dur !== undefined) continue;
+        const take = Math.min(st.count, max - cursor.count);
+        st.count -= take;
+        cursor.count += take;
+        if (st.count <= 0) arr[i] = null;
+      }
+    }
+    gameStore.set({
+      inventory: inv,
+      craftGrid: grid,
+      cursor,
+      craftResult: this.computeCraft(grid, s.craftSize),
+    });
+    this.sound.click();
   }
 
   /** Armor slot click: swap with the cursor when the piece fits the slot. */

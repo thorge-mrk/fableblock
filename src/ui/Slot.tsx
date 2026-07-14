@@ -1,25 +1,52 @@
 /**
  * Single inventory slot: icon, count badge, durability bar, click routing
  * (left / right / shift+click) for the drag-and-drop state machine.
- * Touch: tap = click, long-press (400ms) = quick-move (shift-click).
+ *
+ * Drag manager: every routed slot registers its click action in a module
+ * registry and tags its DOM node with `data-dnd`. A window-level pointerup
+ * (in CursorStack) resolves the slot under the release point, so users can
+ * press on one slot and RELEASE over another to move a stack in one gesture
+ * (mouse and touch). Tap-tap and shift-click keep working unchanged.
+ * Touch: tap = click, long-press (400ms) = quick-move. Double-click while
+ * holding a stack collects all matching items onto the cursor.
  */
 import React from 'react';
 import { ItemStack, itemDef } from '../core/items';
 import { bridge } from '../state/bridge';
+import { gameStore } from '../state/store';
 
 interface SlotProps {
   stack: ItemStack | null;
   onClickSlot: (button: 0 | 2, shift: boolean) => void;
   size?: number;
   highlight?: boolean;
+  /** Unique drop-target id (e.g. "inv:5"); undefined = not a drop target. */
+  route?: string;
+  /** Double-click / double-tap action (collect-all). */
+  onDouble?: () => void;
 }
 
 const LONG_PRESS_MS = 400;
+const DRAG_MIN_PX = 12;
+const DOUBLE_TAP_MS = 300;
 
-export function Slot({ stack, onClickSlot, size = 44, highlight = false }: SlotProps): React.ReactElement {
+/** Route id -> live click action of the mounted slot. */
+const slotActions = new Map<string, (button: 0 | 2, shift: boolean) => void>();
+
+export function Slot({ stack, onClickSlot, size = 44, highlight = false, route, onDouble }: SlotProps): React.ReactElement {
   const longPress = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const longFired = React.useRef(false);
+  const lastTap = React.useRef(0);
   const [flash, setFlash] = React.useState(false);
+
+  // Keep the registry pointing at this render's closure.
+  React.useEffect(() => {
+    if (!route) return;
+    slotActions.set(route, onClickSlot);
+    return () => {
+      slotActions.delete(route);
+    };
+  });
 
   React.useEffect(
     () => () => {
@@ -45,6 +72,11 @@ export function Slot({ stack, onClickSlot, size = 44, highlight = false }: SlotP
       }, LONG_PRESS_MS);
       return;
     }
+    // Second click of a double-click gathers matching stacks onto the cursor.
+    if (e.button === 0 && e.detail >= 2 && onDouble) {
+      onDouble();
+      return;
+    }
     const button = e.button === 2 ? 2 : 0;
     onClickSlot(button, e.shiftKey);
   };
@@ -54,7 +86,12 @@ export function Slot({ stack, onClickSlot, size = 44, highlight = false }: SlotP
     if (longPress.current) {
       clearTimeout(longPress.current);
       longPress.current = null;
-      if (!longFired.current && e.type === 'pointerup') onClickSlot(0, false);
+      if (!longFired.current && e.type === 'pointerup') {
+        const now = performance.now();
+        if (onDouble && now - lastTap.current < DOUBLE_TAP_MS) onDouble();
+        else onClickSlot(0, false);
+        lastTap.current = now;
+      }
     }
   };
 
@@ -65,6 +102,7 @@ export function Slot({ stack, onClickSlot, size = 44, highlight = false }: SlotP
       : null;
   return (
     <div
+      data-dnd={route}
       className={`relative rounded-md border select-none ${
         flash
           ? 'bg-vc-accent/60 border-vc-accent'
@@ -114,20 +152,58 @@ export function Slot({ stack, onClickSlot, size = 44, highlight = false }: SlotP
   );
 }
 
-/** Item stack glued to the pointer (mouse or finger) while dragging. */
+/**
+ * Item stack glued to the pointer (mouse or finger) while dragging — and the
+ * window-level half of the drag manager: releasing the pointer over another
+ * routed slot drops the cursor stack there.
+ */
 export function CursorStack({ stack }: { stack: ItemStack | null }): React.ReactElement | null {
   const [pos, setPos] = React.useState<[number, number]>([0, 0]);
+
   React.useEffect(() => {
+    let downRoute: string | null = null;
+    let downX = 0;
+    let downY = 0;
+    const routeAt = (x: number, y: number): string | null => {
+      const el = document.elementFromPoint(x, y);
+      return (el?.closest('[data-dnd]') as HTMLElement | null)?.dataset.dnd ?? null;
+    };
     // pointer events cover mouse AND touch; capture-phase pointerdown also
     // seats the stack at the tap position (touch has no hover moves).
-    const onPointer = (e: PointerEvent) => setPos([e.clientX, e.clientY]);
-    window.addEventListener('pointermove', onPointer);
-    window.addEventListener('pointerdown', onPointer, true);
+    const onMove = (e: PointerEvent) => setPos([e.clientX, e.clientY]);
+    const onDown = (e: PointerEvent) => {
+      setPos([e.clientX, e.clientY]);
+      downRoute = routeAt(e.clientX, e.clientY);
+      downX = e.clientX;
+      downY = e.clientY;
+    };
+    const onUp = (e: PointerEvent) => {
+      // The slot's own handlers write the store synchronously, so by the
+      // time this bubbles here the picked-up stack is already on the cursor.
+      if (!gameStore.get().cursor) return;
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) < DRAG_MIN_PX) return;
+      const target = routeAt(e.clientX, e.clientY);
+      if (target && target !== downRoute) slotActions.get(target)?.(0, false);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('pointerup', onUp);
     return () => {
-      window.removeEventListener('pointermove', onPointer);
-      window.removeEventListener('pointerdown', onPointer, true);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('pointerup', onUp);
     };
   }, []);
+
+  // Flag the document while an item rides the cursor so CSS can light up
+  // potential drop targets under the pointer.
+  const dragging = stack !== null;
+  React.useEffect(() => {
+    if (dragging) document.body.setAttribute('data-dragging', '1');
+    else document.body.removeAttribute('data-dragging');
+    return () => document.body.removeAttribute('data-dragging');
+  }, [dragging]);
+
   if (!stack) return null;
   return (
     <div

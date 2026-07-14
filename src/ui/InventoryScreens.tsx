@@ -61,19 +61,20 @@ function InventoryGrid({
     if (container) bridge().containerClick(area, slot, button, shift);
     else bridge().invClick(slot, button, shift);
   };
+  const collect = container ? undefined : () => bridge().collectAll();
   return (
     <div>
       {/* Main storage 9..35 */}
       <div className="grid grid-cols-9 gap-0.5">
         {Array.from({ length: 27 }, (_, i) => {
           const idx = i + 9;
-          return <Slot key={idx} stack={slots[idx]} onClickSlot={click(idx)} />;
+          return <Slot key={idx} stack={slots[idx]} onClickSlot={click(idx)} route={`inv:${idx}`} onDouble={collect} />;
         })}
       </div>
       {/* Hotbar 0..8 */}
       <div className="grid grid-cols-9 gap-0.5 mt-2">
         {Array.from({ length: 9 }, (_, i) => (
-          <Slot key={i} stack={slots[i]} onClickSlot={click(i)} />
+          <Slot key={i} stack={slots[i]} onClickSlot={click(i)} route={`inv:${i}`} onDouble={collect} />
         ))}
       </div>
     </div>
@@ -91,6 +92,8 @@ function CraftArea({ size }: { size: 2 | 3 }): React.ReactElement {
             key={i}
             stack={craftGrid[i]}
             onClickSlot={(b, s) => bridge().craftGridClick(i, b, s)}
+            route={`craft:${i}`}
+            onDouble={() => bridge().collectAll()}
           />
         ))}
       </div>
@@ -113,7 +116,7 @@ function ArmorColumn(): React.ReactElement {
     <div className="flex flex-col gap-0.5 mr-3">
       {armor.map((piece, i) => (
         <div key={i} className="relative">
-          <Slot stack={piece} onClickSlot={() => bridge().armorClick(i)} />
+          <Slot stack={piece} onClickSlot={() => bridge().armorClick(i)} route={`armor:${i}`} />
           {!piece && (
             <span className="absolute inset-0 flex items-center justify-center text-vc-text-dim/50 text-lg pointer-events-none">
               {ARMOR_LABELS[i]}

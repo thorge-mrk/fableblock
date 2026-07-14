@@ -105,6 +105,33 @@ try {
   const invOpen = await page.evaluate(() => /inventory/i.test(document.body.innerText));
   if (!invOpen) fail('inventory did not open on E');
   else console.log('✓ inventory screen opens');
+
+  // Drag & drop manager: press on hotbar slot 5 (planks), release over
+  // empty storage slot 20 — the stack must move in ONE gesture.
+  const dragBefore = await page.evaluate(() => {
+    const s = window.__fableStore.get();
+    return { from: s.inventory[5]?.id ?? 0, to: s.inventory[20]?.id ?? 0 };
+  });
+  const fromBox = await page.locator('[data-dnd="inv:5"]').boundingBox();
+  const toBox = await page.locator('[data-dnd="inv:20"]').boundingBox();
+  if (!fromBox || !toBox || dragBefore.from === 0 || dragBefore.to !== 0) {
+    fail(`dnd precondition broken: ${JSON.stringify({ dragBefore, fromBox: !!fromBox, toBox: !!toBox })}`);
+  } else {
+    await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(toBox.x + toBox.width / 2, toBox.y + toBox.height / 2, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const dragAfter = await page.evaluate(() => {
+      const s = window.__fableStore.get();
+      return { from: s.inventory[5]?.id ?? 0, to: s.inventory[20]?.id ?? 0, cursor: s.cursor?.id ?? 0 };
+    });
+    if (dragAfter.to === dragBefore.from && dragAfter.from === 0 && dragAfter.cursor === 0) {
+      console.log('✓ drag & drop moves a stack in one gesture');
+    } else {
+      fail(`drag & drop broken: ${JSON.stringify({ dragBefore, dragAfter })}`);
+    }
+  }
   await page.keyboard.press('KeyE');
 
   await page.screenshot({ path: 'scripts/smoke-screenshot.png' });

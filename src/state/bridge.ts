@@ -18,6 +18,8 @@ export interface GameBridge {
   invClick(slot: number, button: 0 | 2, shift: boolean): void;
   /** Click one of the 4 armor slots (equip/unequip via cursor). */
   armorClick(slot: number): void;
+  /** Double-click: gather all matching stacks onto the cursor. */
+  collectAll(): void;
   /** Buy an enchantment level for the held tool (enchanting table UI). */
   enchantHeld(kind: 'eff' | 'unb' | 'sharp'): void;
   craftGridClick(slot: number, button: 0 | 2, shift: boolean): void;
