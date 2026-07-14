@@ -6,15 +6,13 @@ import React from 'react';
 import { useGameStore } from '../state/store';
 import { bridge } from '../state/bridge';
 import { itemDef } from '../core/items';
-import { PLAYER_MAX_HP } from '../core/config';
+import { PLAYER_MAX_HP, PLAYER_MAX_FOOD } from '../core/config';
 
 /**
- * FableBlock HP pip: a faceted diamond (own visual identity, not the
- * Minecraft heart). full / half (left side lit) / empty.
+ * FableBlock status pip: a faceted diamond (own visual identity, not the
+ * Minecraft heart/drumstick). full / half (left side lit) / empty.
  */
-function HpPip({ fill }: { fill: 'full' | 'half' | 'empty' }): React.ReactElement {
-  const lit = '#ef4655';
-  const litHi = '#ff8091';
+function Pip({ fill, lit, litHi }: { fill: 'full' | 'half' | 'empty'; lit: string; litHi: string }): React.ReactElement {
   const dim = '#2c3b4e';
   const showL = fill !== 'empty';
   const showR = fill === 'full';
@@ -31,10 +29,16 @@ function HpPip({ fill }: { fill: 'full' | 'half' | 'empty' }): React.ReactElemen
   );
 }
 
+function pipFill(value: number, i: number): 'full' | 'half' | 'empty' {
+  const v = value - i * 2;
+  return v >= 2 ? 'full' : v >= 1 ? 'half' : 'empty';
+}
+
 export function HUD(): React.ReactElement {
   const inventory = useGameStore((s) => s.inventory);
   const hotbarIndex = useGameStore((s) => s.hotbarIndex);
   const health = useGameStore((s) => s.health);
+  const food = useGameStore((s) => s.food);
   const breakProgress = useGameStore((s) => s.breakProgress);
   const toast = useGameStore((s) => s.toast);
   const screen = useGameStore((s) => s.screen);
@@ -64,13 +68,18 @@ export function HUD(): React.ReactElement {
         </div>
       )}
 
-      {/* HP pips — faceted diamonds, update reactively with health */}
-      <div className="absolute bottom-[76px] left-1/2 -translate-x-1/2 flex gap-0.5">
-        {Array.from({ length: PLAYER_MAX_HP / 2 }, (_, i) => {
-          const v = health - i * 2;
-          const fill = v >= 2 ? 'full' : v >= 1 ? 'half' : 'empty';
-          return <HpPip key={i} fill={fill} />;
-        })}
+      {/* Status pips: HP (red) left, hunger (amber) right */}
+      <div className="absolute bottom-[76px] left-1/2 -translate-x-1/2 flex gap-5">
+        <div className="flex gap-0.5">
+          {Array.from({ length: PLAYER_MAX_HP / 2 }, (_, i) => (
+            <Pip key={i} fill={pipFill(health, i)} lit="#ef4655" litHi="#ff8091" />
+          ))}
+        </div>
+        <div className="flex gap-0.5">
+          {Array.from({ length: PLAYER_MAX_FOOD / 2 }, (_, i) => (
+            <Pip key={i} fill={pipFill(food, i)} lit="#e8963c" litHi="#ffc46e" />
+          ))}
+        </div>
       </div>
 
       {/* Held item name */}

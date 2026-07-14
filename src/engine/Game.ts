@@ -26,10 +26,11 @@ import {
   B, blockDef, isChest, isFurnace, isInteractive, TILE, isWater,
 } from '../core/blocks';
 import { ITEM, itemDef, isPlaceable, makeStack, ItemStack } from '../core/items';
+import { isFarmAnimal } from '../core/entities';
 import { clickSlot, insertStack, cloneStack, Slots, decrementSlot } from '../core/inventory';
 import { matchRecipe } from '../core/recipes';
 import {
-  PLAYER_REACH, PLAYER_MAX_HP, SEA_LEVEL, TICK_MS, PLAYER_WIDTH,
+  PLAYER_REACH, PLAYER_MAX_HP, PLAYER_MAX_FOOD, SEA_LEVEL, TICK_MS, PLAYER_WIDTH,
 } from '../core/config';
 import type { FromLogicMsg, ToLogicMsg, GenChunkMsg } from '../net/messages';
 
@@ -80,6 +81,9 @@ export class Game {
   private lavaTimer = 0;
   private fireTicks = 0;
   private regenTimer = 0;
+  private starveTimer = 0;
+  private exhaustion = 0;
+  private prevJump = false;
   private shake = 0;
 
   private spawn: [number, number, number] | null = null;
@@ -467,6 +471,7 @@ export class Game {
       inventory: d.inventory.map(cloneStack),
       hotbarIndex: d.hotbarIndex,
       health: d.player.health,
+      food: d.player.food ?? PLAYER_MAX_FOOD,
     });
     this.sendLogic({ t: 'time', time: d.time });
     this.toast('Welcome back!');
@@ -503,7 +508,7 @@ export class Game {
       player: {
         x: this.player.x, y: this.player.y, z: this.player.z,
         yaw: this.player.yaw, pitch: this.player.pitch,
-        health: s.health,
+        health: s.health, food: s.food,
       },
       spawnPoint: this.spawnPoint,
       inventory: s.inventory.map(cloneStack),
@@ -583,6 +588,16 @@ export class Game {
     this.eatCooldown = Math.max(0, this.eatCooldown - dt);
     this.prevMineHeld = input.mineHeld;
 
+    // Exertion feeds the hunger drain: sprinting, swimming, jumping.
+    if (alive && !uiOpen) {
+      const moving = effInput.moveX !== 0 || effInput.moveZ !== 0;
+      if (moving && effInput.sprint) this.exhaustion += dt * 0.5;
+      else if (moving && this.player.inWater) this.exhaustion += dt * 0.25;
+      else if (moving) this.exhaustion += dt * 0.06;
+      if (effInput.jump && !this.prevJump && this.player.onGround) this.exhaustion += 0.2;
+      this.prevJump = effInput.jump;
+    }
+
     // Footsteps + sparse day/night ambience; splash on entering water.
     if (this.player.inWater && !this.wasInWater) this.sound.splash();
     this.wasInWater = this.player.inWater;
@@ -622,14 +637,32 @@ export class Game {
         }
       }
     }
-    // Slow natural regen
+    // Hunger drain: exhaustion accumulates from exertion, 4 points = 1 food.
+    const s = gameStore.get();
+    if (this.exhaustion >= 4) {
+      this.exhaustion -= 4;
+      if (s.food > 0) gameStore.set({ food: s.food - 1 });
+    }
+    const food = gameStore.get().food;
     const hp = gameStore.get().health;
-    if (hp > 0 && hp < PLAYER_MAX_HP) {
+    if (food >= 18 && hp > 0 && hp < PLAYER_MAX_HP) {
+      // Well fed: regenerate quickly (costs a little hunger).
       this.regenTimer += dt;
-      if (this.regenTimer >= 4) {
+      if (this.regenTimer >= 2) {
         this.regenTimer = 0;
+        this.exhaustion += 1.5;
         gameStore.set({ health: Math.min(PLAYER_MAX_HP, hp + 1) });
       }
+    } else if (food <= 0 && hp > 1) {
+      // Starvation gnaws down to half a heart, never kills outright.
+      this.starveTimer += dt;
+      if (this.starveTimer >= 4) {
+        this.starveTimer = 0;
+        this.damagePlayer(1, 0, 0, 'starve');
+      }
+    } else {
+      this.regenTimer = 0;
+      this.starveTimer = 0;
     }
   }
 
@@ -735,6 +768,7 @@ export class Game {
     }
     this.world.setBlock(hit.x, hit.y, hit.z, B.AIR);
     this.sound.breakBlock();
+    this.exhaustion += 0.03;
     if (canHarvest && def.drop !== -1) {
       const dropId = def.drop ?? hit.id;
       this.sendLogic({
@@ -751,6 +785,7 @@ export class Game {
 
   private attackEntity(id: number): void {
     this.attackCooldown = 0.4;
+    this.exhaustion += 0.1;
     const held = this.heldStack();
     const tool = held ? itemDef(held.id).tool : undefined;
     const damage = tool ? tool.damage : 1;
@@ -800,9 +835,21 @@ export class Game {
     if (!held) return;
     const def = itemDef(held.id);
 
-    if (def.food && this.eatCooldown <= 0 && gameStore.get().health < PLAYER_MAX_HP) {
+    // Feeding an animal (breeding) wins over eating when aiming at one.
+    if (def.food) {
+      const target = this.entityRenderer.pick(ox, oy, oz, dx, dy, dz, 3.2);
+      if (target && isFarmAnimal(target.type) && (!hit || target.dist < hit.dist)) {
+        this.sendLogic({ t: 'interactEntity', entityId: target.id, itemId: held.id });
+        this.consumeHeld();
+        this.sound.eat();
+        this.heldView.swing();
+        return;
+      }
+    }
+
+    if (def.food && this.eatCooldown <= 0 && gameStore.get().food < PLAYER_MAX_FOOD) {
       this.eatCooldown = 1;
-      gameStore.set({ health: Math.min(PLAYER_MAX_HP, gameStore.get().health + def.food) });
+      gameStore.set({ food: Math.min(PLAYER_MAX_FOOD, gameStore.get().food + def.food) });
       this.consumeHeld();
       this.sound.eat();
       this.heldView.swing();
@@ -1183,7 +1230,8 @@ export class Game {
     this.boat.group.visible = false;
     this.player.teleport(sp[0], sp[1], sp[2]);
     this.fireTicks = 0;
-    gameStore.set({ phase: 'playing', health: PLAYER_MAX_HP });
+    this.exhaustion = 0;
+    gameStore.set({ phase: 'playing', health: PLAYER_MAX_HP, food: PLAYER_MAX_FOOD });
   }
 
   /** Bed interaction: at night, skip to dawn and set the respawn point. */

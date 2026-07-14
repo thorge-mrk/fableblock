@@ -100,7 +100,9 @@ try {
   // Open inventory (E) and confirm the crafting UI appears.
   await page.keyboard.press('KeyE');
   await page.waitForTimeout(400);
-  const invOpen = await page.evaluate(() => document.body.innerText.includes('Inventory'));
+  // Panel titles render text-transform:uppercase, and innerText reflects the
+  // RENDERED text — match case-insensitively.
+  const invOpen = await page.evaluate(() => /inventory/i.test(document.body.innerText));
   if (!invOpen) fail('inventory did not open on E');
   else console.log('✓ inventory screen opens');
   await page.keyboard.press('KeyE');

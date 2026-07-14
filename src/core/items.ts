@@ -35,6 +35,14 @@ export const ITEM = {
   IRON_SHOVEL: 283,
   DIAMOND_SHOVEL: 284,
   BOAT: 285,
+  RAW_BEEF: 286,
+  COOKED_BEEF: 287,
+  RAW_PORKCHOP: 288,
+  COOKED_PORKCHOP: 289,
+  RAW_CHICKEN: 290,
+  COOKED_CHICKEN: 291,
+  LEATHER: 292,
+  FEATHER: 293,
 } as const;
 
 export interface ItemDef {
@@ -98,6 +106,14 @@ defItem({
 });
 defItem({ id: ITEM.RAW_MUTTON, name: 'Raw Mutton', maxStack: 64, icon: TILE.ITEM_MUTTON_RAW, food: 4 });
 defItem({ id: ITEM.COOKED_MUTTON, name: 'Cooked Mutton', maxStack: 64, icon: TILE.ITEM_MUTTON_COOKED, food: 12 });
+defItem({ id: ITEM.RAW_BEEF, name: 'Raw Beef', maxStack: 64, icon: TILE.ITEM_BEEF, food: 4 });
+defItem({ id: ITEM.COOKED_BEEF, name: 'Steak', maxStack: 64, icon: TILE.ITEM_BEEF_COOKED, food: 14 });
+defItem({ id: ITEM.RAW_PORKCHOP, name: 'Raw Porkchop', maxStack: 64, icon: TILE.ITEM_PORKCHOP, food: 4 });
+defItem({ id: ITEM.COOKED_PORKCHOP, name: 'Cooked Porkchop', maxStack: 64, icon: TILE.ITEM_PORKCHOP_COOKED, food: 14 });
+defItem({ id: ITEM.RAW_CHICKEN, name: 'Raw Chicken', maxStack: 64, icon: TILE.ITEM_CHICKEN_RAW, food: 3 });
+defItem({ id: ITEM.COOKED_CHICKEN, name: 'Cooked Chicken', maxStack: 64, icon: TILE.ITEM_CHICKEN_COOKED, food: 10 });
+defItem({ id: ITEM.LEATHER, name: 'Leather', maxStack: 64, icon: TILE.ITEM_LEATHER });
+defItem({ id: ITEM.FEATHER, name: 'Feather', maxStack: 64, icon: TILE.ITEM_FEATHER });
 defItem({ id: ITEM.ARROW, name: 'Arrow', maxStack: 64, icon: TILE.ITEM_ARROW });
 defItem({ id: ITEM.BUCKET, name: 'Bucket', maxStack: 16, icon: TILE.ITEM_BUCKET });
 defItem({ id: ITEM.BOAT, name: 'Oak Boat', maxStack: 1, icon: TILE.ITEM_BOAT, fuelTicks: 400 });

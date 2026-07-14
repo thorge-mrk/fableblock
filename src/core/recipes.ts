@@ -153,6 +153,9 @@ export const SMELTING: SmeltRecipe[] = [
   { input: B.OAK_LOG, output: ITEM.CHARCOAL, ticks: 200 },
   { input: B.BIRCH_LOG, output: ITEM.CHARCOAL, ticks: 200 },
   { input: ITEM.RAW_MUTTON, output: ITEM.COOKED_MUTTON, ticks: 200 },
+  { input: ITEM.RAW_BEEF, output: ITEM.COOKED_BEEF, ticks: 200 },
+  { input: ITEM.RAW_PORKCHOP, output: ITEM.COOKED_PORKCHOP, ticks: 200 },
+  { input: ITEM.RAW_CHICKEN, output: ITEM.COOKED_CHICKEN, ticks: 200 },
 ];
 
 export function smeltResult(inputId: number): SmeltRecipe | null {

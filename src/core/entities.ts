@@ -14,6 +14,19 @@ export const enum EntityType {
   VILLAGER = 5,
   IRON_GOLEM = 6,
   ARROW = 7,
+  COW = 8,
+  PIG = 9,
+  CHICKEN = 10,
+}
+
+/** Passive farm animals that wander, can be fed and bred. */
+export function isFarmAnimal(type: EntityType): boolean {
+  return (
+    type === EntityType.SHEEP ||
+    type === EntityType.COW ||
+    type === EntityType.PIG ||
+    type === EntityType.CHICKEN
+  );
 }
 
 export interface EntityDef {
@@ -64,6 +77,21 @@ export const ENTITY_DEFS: Record<EntityType, EntityDef> = {
   [EntityType.ARROW]: {
     width: 0.25, height: 0.25, maxHp: 1, speed: 28, hostile: false,
     attackDamage: 4, attackRange: 0, drops: [], eye: 0.125,
+  },
+  [EntityType.COW]: {
+    width: 0.9, height: 1.4, maxHp: 10, speed: 1.5, hostile: false,
+    attackDamage: 0, attackRange: 0,
+    drops: [[ITEM.LEATHER, 0, 2], [ITEM.RAW_BEEF, 1, 3]], eye: 1.2,
+  },
+  [EntityType.PIG]: {
+    width: 0.9, height: 0.9, maxHp: 10, speed: 1.7, hostile: false,
+    attackDamage: 0, attackRange: 0,
+    drops: [[ITEM.RAW_PORKCHOP, 1, 3]], eye: 0.7,
+  },
+  [EntityType.CHICKEN]: {
+    width: 0.4, height: 0.7, maxHp: 4, speed: 1.4, hostile: false,
+    attackDamage: 0, attackRange: 0,
+    drops: [[ITEM.FEATHER, 0, 2], [ITEM.RAW_CHICKEN, 1, 1]], eye: 0.55,
   },
 };
 

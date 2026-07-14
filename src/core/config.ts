@@ -18,6 +18,7 @@ export const PLAYER_JUMP_SPEED = 8.6;
 export const PLAYER_SWIM_SPEED = 3.2;
 export const PLAYER_REACH = 4.8;
 export const PLAYER_MAX_HP = 20;
+export const PLAYER_MAX_FOOD = 20;
 
 // --- Physics ---
 export const GRAVITY = -30;

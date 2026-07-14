@@ -727,6 +727,32 @@ const PAINTERS: Record<number, Painter> = {
     }
     p.border([110, 78, 42]);
   },
+  [TILE.ITEM_BEEF]: (p) => meatPainter(p, [196, 60, 60], [230, 120, 110], false),
+  [TILE.ITEM_BEEF_COOKED]: (p) => meatPainter(p, [140, 84, 48], [180, 120, 76], false),
+  [TILE.ITEM_PORKCHOP]: (p) => meatPainter(p, [232, 140, 140], [244, 190, 180], true),
+  [TILE.ITEM_PORKCHOP_COOKED]: (p) => meatPainter(p, [176, 116, 68], [210, 160, 104], true),
+  [TILE.ITEM_CHICKEN_RAW]: (p) => drumstickPainter(p, [228, 178, 160], [244, 226, 214]),
+  [TILE.ITEM_CHICKEN_COOKED]: (p) => drumstickPainter(p, [186, 122, 62], [226, 178, 120]),
+  [TILE.ITEM_LEATHER]: (p) => {
+    p.clear();
+    // Hide with a wavy edge + stitch marks.
+    for (let y = 3; y <= 12; y++) {
+      const inset = y === 3 || y === 12 ? 2 : y === 4 || y === 11 ? 1 : 0;
+      for (let x = 2 + inset; x < 14 - inset; x++) {
+        const f = 1 + (p.rand() - 0.5) * 0.14;
+        p.px(x, y, 168 * f, 108 * f, 62 * f);
+      }
+    }
+    for (const [x, y] of [[4, 5], [11, 5], [4, 10], [11, 10]] as const) p.px(x, y, 96, 60, 34);
+  },
+  [TILE.ITEM_FEATHER]: (p) => {
+    p.clear();
+    // Quill diagonal + soft vane.
+    p.line(4, 13, 11, 3, [240, 240, 236]);
+    p.line(5, 13, 12, 4, [222, 224, 222]);
+    p.line(4, 12, 10, 4, [250, 250, 248]);
+    p.line(3, 14, 6, 11, [170, 150, 120]); // quill tip
+  },
   [TILE.BED_SIDE]: (p) => {
     // Plank base with a red blanket band on the upper half.
     p.noiseFill([150, 110, 60], 0.1);
@@ -743,6 +769,34 @@ const PAINTERS: Record<number, Painter> = {
     p.border([110, 78, 42]);
   },
 };
+
+/** Meat slab icon: rounded steak/chop with fat marbling, optional bone. */
+function meatPainter(p: TilePainter, meat: RGB, fat: RGB, bone: boolean): void {
+  p.clear();
+  for (let y = 4; y <= 12; y++) {
+    const inset = y === 4 || y === 12 ? 2 : y === 5 || y === 11 ? 1 : 0;
+    for (let x = 2 + inset; x < 14 - inset; x++) {
+      const f = 1 + (p.rand() - 0.5) * 0.12;
+      p.px(x, y, meat[0] * f, meat[1] * f, meat[2] * f);
+    }
+  }
+  // Fat marbling streaks.
+  p.line(4, 6, 11, 7, fat);
+  p.line(5, 9, 10, 10, fat);
+  if (bone) {
+    p.rect(1, 7, 3, 3, [236, 232, 220]);
+    p.px(1, 7, 210, 205, 190);
+  }
+}
+
+/** Drumstick icon: meat lobe + white bone handle. */
+function drumstickPainter(p: TilePainter, meat: RGB, boneEnd: RGB): void {
+  p.clear();
+  p.disc(6, 6, 4, meat);
+  p.disc(8, 8, 3, meat);
+  p.line(9, 9, 13, 13, [235, 230, 220]);
+  p.disc(13, 13, 1.6, boneEnd);
+}
 
 /** Side view of a small wooden rowboat with a paddle. */
 function boatPainter(p: TilePainter): void {

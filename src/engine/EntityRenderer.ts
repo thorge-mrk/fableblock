@@ -90,6 +90,31 @@ function faceTexture(kind: string): THREE.Texture {
       px(10, 6, 3, 3, '#503830');
       px(6, 9, 4, 6, '#8a7a6a');
       break;
+    case 'cow':
+      fill('#5a4436');
+      px(3, 6, 3, 2, '#1c1410');
+      px(10, 6, 3, 2, '#1c1410');
+      px(5, 10, 6, 5, '#d8c8bc'); // muzzle
+      px(6, 11, 1, 2, '#3c2c22');
+      px(9, 11, 1, 2, '#3c2c22');
+      px(0, 2, 3, 2, '#d8c8bc'); // horns
+      px(13, 2, 3, 2, '#d8c8bc');
+      break;
+    case 'pig':
+      fill('#eea4a4');
+      px(3, 6, 3, 2, '#28181c');
+      px(10, 6, 3, 2, '#28181c');
+      px(5, 9, 6, 4, '#d97f7f'); // snout
+      px(6, 10, 1, 2, '#69333c');
+      px(9, 10, 1, 2, '#69333c');
+      break;
+    case 'chicken':
+      fill('#e8e4dc');
+      px(4, 6, 2, 2, '#181818');
+      px(10, 6, 2, 2, '#181818');
+      px(6, 9, 4, 3, '#e8b83c'); // beak
+      px(6, 12, 4, 3, '#c84040'); // wattle
+      break;
     case 'player':
       fill('#d8a888');
       px(3, 6, 3, 2, '#3858c8');
@@ -367,6 +392,9 @@ export class EntityRenderer {
     if (e.type === EntityType.CREEPER) {
       const s = e.a > 0 ? 1 + e.a * 0.1 * (0.5 + 0.5 * Math.sin(performance.now() / 45)) : 1;
       e.group.scale.setScalar(s);
+    } else {
+      // Babies render at ~half size.
+      e.group.scale.setScalar((e.anim & AnimFlag.BABY) !== 0 ? 0.55 : 1);
     }
 
     if (e.type === EntityType.SHEEP && (e.anim & AnimFlag.ATTACKING) !== 0 && p.head) {
@@ -412,8 +440,8 @@ export class EntityRenderer {
 
   /** Nearest mob hit by the attack ray, or null. */
   pick(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number):
-    { id: number; dist: number } | null {
-    let best: { id: number; dist: number } | null = null;
+    { id: number; dist: number; type: EntityType } | null {
+    let best: { id: number; dist: number; type: EntityType } | null = null;
     for (const e of this.entities.values()) {
       if (e.type === EntityType.ITEM || e.type === EntityType.ARROW) continue;
       const def = ENTITY_DEFS[e.type];
@@ -424,7 +452,7 @@ export class EntityRenderer {
         e.cx + hw, e.cy + def.height + 0.1, e.cz + hw,
       );
       if (t !== null && t <= maxDist && (!best || t < best.dist)) {
-        best = { id: e.id, dist: t };
+        best = { id: e.id, dist: t, type: e.type };
       }
     }
     return best;
@@ -494,6 +522,27 @@ export class EntityRenderer {
         break;
       case EntityType.SHEEP:
         buildSheep(e);
+        break;
+      case EntityType.COW:
+        buildQuadruped(e, {
+          body: 0x5a4436, legs: 0x4a3830, headColor: 0x5a4436, face: 'cow',
+          bodyW: 0.9, bodyH: 0.75, bodyL: 1.3, legH: 0.65, headSize: 0.5,
+          extras: (g, ee) => {
+            // White belly patch + udder.
+            const patch = partBox(ee, 0.7, 0.2, 0.9, 0xe4d8cc);
+            patch.position.set(0, 0.62, 0.05);
+            g.add(patch);
+          },
+        });
+        break;
+      case EntityType.PIG:
+        buildQuadruped(e, {
+          body: 0xeea4a4, legs: 0xd98f8f, headColor: 0xeea4a4, face: 'pig',
+          bodyW: 0.8, bodyH: 0.6, bodyL: 1.1, legH: 0.35, headSize: 0.45,
+        });
+        break;
+      case EntityType.CHICKEN:
+        buildChicken(e);
         break;
       case EntityType.IRON_GOLEM:
         buildGolem(e);
@@ -739,6 +788,81 @@ function buildGolem(e: RenderEntity): void {
   e.parts.armR = mkArm(1);
   e.parts.legL = mkLeg(-1);
   e.parts.legR = mkLeg(1);
+}
+
+interface QuadrupedSpec {
+  body: number;
+  legs: number;
+  headColor: number;
+  face: string;
+  bodyW: number;
+  bodyH: number;
+  bodyL: number;
+  legH: number;
+  headSize: number;
+  extras?: (g: THREE.Group, e: RenderEntity) => void;
+}
+
+/** Shared four-legged body plan (cow, pig — sheep keeps its wool build). */
+function buildQuadruped(e: RenderEntity, s: QuadrupedSpec): void {
+  const g = e.group;
+  const bodyY = s.legH + s.bodyH / 2;
+  const body = partBox(e, s.bodyW, s.bodyH, s.bodyL, s.body);
+  body.position.y = bodyY;
+  g.add(body);
+  const head = new THREE.Group();
+  const hb = partBox(e, s.headSize, s.headSize, s.headSize * 0.9, s.headColor, faceTexture(s.face));
+  hb.position.set(0, 0, -s.headSize * 0.3);
+  head.add(hb);
+  head.position.set(0, bodyY + s.bodyH * 0.35, -s.bodyL / 2 - 0.05);
+  g.add(head);
+  const lx = s.bodyW / 2 - 0.12;
+  const lz = s.bodyL / 2 - 0.14;
+  for (const [sx, sz] of [[-lx, lz], [lx, lz], [-lx, -lz], [lx, -lz]] as const) {
+    const pivot = new THREE.Group();
+    const leg = partBox(e, 0.2, s.legH, 0.2, s.legs);
+    leg.position.y = -s.legH / 2;
+    pivot.add(leg);
+    pivot.position.set(sx, s.legH, sz);
+    g.add(pivot);
+    if (!e.parts.legL) e.parts.legL = pivot;
+    else if (!e.parts.legR) e.parts.legR = pivot;
+  }
+  e.parts.head = head;
+  e.parts.body = body;
+  s.extras?.(g, e);
+}
+
+function buildChicken(e: RenderEntity): void {
+  const g = e.group;
+  const body = partBox(e, 0.4, 0.4, 0.55, 0xe8e4dc);
+  body.position.y = 0.42;
+  g.add(body);
+  const head = new THREE.Group();
+  const hb = partBox(e, 0.28, 0.32, 0.26, 0xe8e4dc, faceTexture('chicken'));
+  hb.position.y = 0.1;
+  head.add(hb);
+  head.position.set(0, 0.62, -0.26);
+  g.add(head);
+  // Wings.
+  for (const sign of [-1, 1] as const) {
+    const wing = partBox(e, 0.06, 0.28, 0.4, 0xd8d4c8);
+    wing.position.set(sign * 0.24, 0.46, 0.02);
+    g.add(wing);
+  }
+  // Legs.
+  for (const sign of [-1, 1] as const) {
+    const pivot = new THREE.Group();
+    const leg = partBox(e, 0.06, 0.24, 0.06, 0xe8b83c);
+    leg.position.y = -0.12;
+    pivot.add(leg);
+    pivot.position.set(sign * 0.1, 0.24, 0.05);
+    g.add(pivot);
+    if (!e.parts.legL) e.parts.legL = pivot;
+    else e.parts.legR = pivot;
+  }
+  e.parts.head = head;
+  e.parts.body = body;
 }
 
 function buildArrow(e: RenderEntity): void {

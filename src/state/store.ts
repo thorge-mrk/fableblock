@@ -58,6 +58,7 @@ interface GameStore {
   loadProgress: number;
   screen: Screen;
   health: number;
+  food: number;
   breathe: number;
   hotbarIndex: number;
   inventory: Slots;
@@ -108,6 +109,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   loadProgress: 0,
   screen: 'none',
   health: PLAYER_MAX_HP,
+  food: 20,
   breathe: 10,
   hotbarIndex: 0,
   inventory: new Array<ItemStack | null>(36).fill(null),

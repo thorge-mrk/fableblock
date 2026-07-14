@@ -196,6 +196,13 @@ export interface LogicSetTimeMsg {
   time: number;
 }
 
+/** Player right-clicked an entity while holding an item (feeding/breeding). */
+export interface LogicInteractEntityMsg {
+  t: 'interactEntity';
+  entityId: number;
+  itemId: number;
+}
+
 export type ToLogicMsg =
   | LogicInitMsg
   | LogicChunkMsg
@@ -209,7 +216,8 @@ export type ToLogicMsg =
   | LogicOpenContainerMsg
   | LogicCloseContainerMsg
   | LogicClickMsg
-  | LogicSetTimeMsg;
+  | LogicSetTimeMsg
+  | LogicInteractEntityMsg;
 
 // Entity snapshot: Float32Array with stride 12:
 // [id, type, x, y, z, yaw, pitch, hp, hurt, anim, a, b]

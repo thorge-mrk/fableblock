@@ -11,7 +11,7 @@ export interface SaveData {
   version: 1;
   seed: number;
   time: number;
-  player: { x: number; y: number; z: number; yaw: number; pitch: number; health: number };
+  player: { x: number; y: number; z: number; yaw: number; pitch: number; health: number; food?: number };
   spawnPoint: [number, number, number] | null;
   inventory: (ItemStack | null)[];
   hotbarIndex: number;

@@ -18,7 +18,7 @@ import {
 } from '../core/blocks';
 import { voxelId, CHUNK_HEIGHT, chunkKey } from '../core/coords';
 import { moveEntity, boxIntersectsSolid } from '../core/aabb';
-import { EntityType, ENTITY_DEFS, AnimFlag } from '../core/entities';
+import { EntityType, ENTITY_DEFS, AnimFlag, isFarmAnimal } from '../core/entities';
 import { ItemStack, makeStack, itemDef } from '../core/items';
 import { Slots, insertStack, clickSlot, cloneStack, stacksEqualType } from '../core/inventory';
 import { smeltResult, stackFuel } from '../core/recipes';
@@ -467,6 +467,8 @@ interface Ent {
   age: number;
   pickupDelay: number;
   stuck: boolean; // arrows
+  love: number; // breeding: ticks of love-mode remaining
+  growTicks: number; // > 0 while a baby
 }
 
 const entities = new Map<number, Ent>();
@@ -506,6 +508,8 @@ function makeEntity(type: EntityType, x: number, y: number, z: number): Ent {
     age: 0,
     pickupDelay: 10,
     stuck: false,
+    love: 0,
+    growTicks: 0,
   };
   entities.set(e.id, e);
   return e;
@@ -1103,6 +1107,47 @@ function explode(x: number, y: number, z: number, radius: number): void {
   post({ t: 'explosion', x, y, z, radius });
 }
 
+/**
+ * Love-mode steering shared by all farm animals: seek the nearest partner
+ * of the same type also in love; touching spawns a baby. Returns a move
+ * vector while courting, null otherwise.
+ */
+function tickLove(e: Ent): { x: number; z: number; jump: boolean } | null {
+  if (e.love <= 0) return null;
+  e.love--;
+  let partner: Ent | null = null;
+  let best = 8;
+  for (const o of queryRange(e.x, e.y, e.z, 8)) {
+    if (o === e || o.dead || o.type !== e.type || o.love <= 0 || o.growTicks > 0) continue;
+    const d = Math.hypot(o.x - e.x, o.z - e.z);
+    if (d < best) {
+      best = d;
+      partner = o;
+    }
+  }
+  if (!partner) return { x: 0, z: 0, jump: false };
+  if (best < 1.4) {
+    e.love = 0;
+    partner.love = 0;
+    const baby = makeEntity(e.type, (e.x + partner.x) / 2, e.y, (e.z + partner.z) / 2);
+    baby.growTicks = 20 * 60 * 3; // grows up in 3 minutes
+    return { x: 0, z: 0, jump: false };
+  }
+  const dx = partner.x - e.x;
+  const dz = partner.z - e.z;
+  e.yaw = Math.atan2(-dx, -dz);
+  return { x: dx / best, z: dz / best, jump: false };
+}
+
+/** Generic passive animal: wander, court while in love; chickens flutter. */
+function tickAnimal(e: Ent): void {
+  let move = tickLove(e) ?? wander(e);
+  if (e.type === EntityType.CHICKEN && !e.onGround && e.vy < -2.5) {
+    e.vy = -2.5; // wing-flap slow fall
+  }
+  stepEntity(e, move.x, move.z, move.jump);
+}
+
 function tickSheep(e: Ent): void {
   e.grazeTimer = Math.max(0, e.grazeTimer - 1);
   if (e.grazeTimer === 20) {
@@ -1117,7 +1162,10 @@ function tickSheep(e: Ent): void {
     }
   }
   let move = { x: 0, z: 0, jump: false };
-  if (e.grazeTimer === 0) {
+  const loveMove = tickLove(e);
+  if (loveMove) {
+    move = loveMove;
+  } else if (e.grazeTimer === 0) {
     e.hungerTimer--;
     if (e.hungerTimer <= 0 && world.getBlockId(Math.floor(e.x), Math.floor(e.y) - 1, Math.floor(e.z)) === B.GRASS) {
       e.grazeTimer = 40;
@@ -1382,7 +1430,7 @@ function naturalSpawning(): void {
   for (const e of entities.values()) {
     if (e.dead) continue;
     if (ENTITY_DEFS[e.type].hostile) hostiles++;
-    else if (e.type === EntityType.SHEEP) passives++;
+    else if (isFarmAnimal(e.type)) passives++;
   }
   if (hostiles < HOSTILE_CAP) {
     for (let i = 0; i < 4; i++) {
@@ -1405,7 +1453,12 @@ function naturalSpawning(): void {
     if (chunkLoaded(x, z)) {
       const h = world.highestSolid(Math.floor(x), Math.floor(z));
       if (world.getBlockId(Math.floor(x), h, Math.floor(z)) === B.GRASS) {
-        trySpawnAt(EntityType.SHEEP, x, h + 2, z, 4);
+        const roll = rand.float();
+        const type =
+          roll < 0.35 ? EntityType.SHEEP :
+          roll < 0.6 ? EntityType.COW :
+          roll < 0.85 ? EntityType.PIG : EntityType.CHICKEN;
+        trySpawnAt(type, x, h + 2, z, 4);
       }
     }
   }
@@ -1653,6 +1706,8 @@ function postSnapshot(): void {
     if (e.sheared) anim |= AnimFlag.SHEARED;
     if (e.type === EntityType.SHEEP && e.grazeTimer > 0) anim |= AnimFlag.ATTACKING;
     if (e.type === EntityType.IRON_GOLEM && e.swell > 0) anim |= AnimFlag.ATTACKING;
+    if (e.growTicks > 0) anim |= AnimFlag.BABY;
+    if (e.love > 0) anim |= AnimFlag.PANIC; // reuse: hearts wiggle client-side
     buf[o] = e.id;
     buf[o + 1] = e.type;
     buf[o + 2] = e.x;
@@ -1722,7 +1777,13 @@ function tick(): void {
       case EntityType.IRON_GOLEM: tickGolem(e); break;
       case EntityType.ITEM: tickItem(e); break;
       case EntityType.ARROW: tickArrow(e); break;
+      case EntityType.COW:
+      case EntityType.PIG:
+      case EntityType.CHICKEN:
+        tickAnimal(e);
+        break;
     }
+    if (e.growTicks > 0) e.growTicks--;
   }
 
   naturalSpawning();
@@ -1909,5 +1970,17 @@ ctx.onmessage = (e: MessageEvent<ToLogicMsg>) => {
     case 'time':
       timeOfDay = msg.time;
       break;
+    case 'interactEntity': {
+      const e = entities.get(msg.entityId);
+      if (
+        e && !e.dead && isFarmAnimal(e.type) &&
+        e.growTicks <= 0 && e.love <= 0 &&
+        (itemDef(msg.itemId).food ?? 0) > 0
+      ) {
+        e.love = 600; // 30s of courting
+        e.hp = Math.min(ENTITY_DEFS[e.type].maxHp, e.hp + 2);
+      }
+      break;
+    }
   }
 };
