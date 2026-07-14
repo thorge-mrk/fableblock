@@ -50,6 +50,8 @@ export class ChunkManager {
   centerX = 0;
   centerZ = 0;
   renderDistance = 6;
+  /** Active dimension; gen requests carry it and stale results are dropped. */
+  dim = 0;
 
   constructor(
     scene: THREE.Scene,
@@ -117,7 +119,7 @@ export class ChunkManager {
     while (this.genInFlight.size < 8 && this.genQueue.length > 0) {
       const key = this.genQueue.shift()!;
       this.genInFlight.add(key);
-      this.genWorker.postMessage({ t: 'gen', cx: chunkKeyNumX(key), cz: chunkKeyNumZ(key) });
+      this.genWorker.postMessage({ t: 'gen', cx: chunkKeyNumX(key), cz: chunkKeyNumZ(key), dim: this.dim });
     }
 
     // --- Absorb world dirty set into the mesh queue ---
@@ -179,6 +181,7 @@ export class ChunkManager {
 
   private handleGen(msg: FromGenMsg): void {
     if (msg.t !== 'chunk') return;
+    if (msg.dim !== this.dim) return; // stale result from before a dimension switch
     const key = chunkKeyNum(msg.cx, msg.cz);
     this.genInFlight.delete(key);
     const data = new Uint16Array(msg.data);
@@ -291,6 +294,19 @@ export class ChunkManager {
       }
     }
     return out;
+  }
+
+  /** Drop every chunk + queue and switch dimension (portal travel). */
+  reset(dim: number): void {
+    this.dim = dim;
+    for (const rec of this.records.values()) this.disposeMeshes(rec);
+    this.records.clear();
+    this.world.chunks.clear();
+    this.world.dirty.clear();
+    this.genQueue.length = 0;
+    this.genInFlight.clear();
+    this.meshQueue.clear();
+    // meshInFlight results for vanished records are ignored in handleMesh.
   }
 
   dispose(): void {

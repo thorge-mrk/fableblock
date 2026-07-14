@@ -146,6 +146,12 @@ export const TILE = {
   PISTON_OPEN: 133,
   ITEM_REDSTONE: 134,
   ITEM_DOOR: 135,
+  NETHERRACK_T: 136,
+  SOUL_SAND_T: 137,
+  PORTAL_T: 138,
+  MAGMA_T: 139,
+  ITEM_FLINT: 140,
+  ITEM_FLINT_STEEL: 141,
 } as const;
 
 export const ATLAS_TILES = 32; // 32x32 grid of tiles
@@ -257,6 +263,11 @@ export const B = {
   PISTON_HEAD_S: 94,
   PISTON_HEAD_E: 95,
   PISTON_HEAD_W: 96,
+  // Nether dimension (Phase 4)
+  NETHERRACK: 97,
+  SOUL_SAND: 98,
+  NETHER_PORTAL: 99,
+  MAGMA: 100,
 } as const;
 
 export type BlockId = number;
@@ -524,6 +535,17 @@ for (let i = 0; i < 4; i++) {
     lightFilter: 0, boxes: HEAD_BODY[face],
   });
 }
+
+// --- Nether -------------------------------------------------------------
+def(B.NETHERRACK, 'Netherrack', tile6(TILE.NETHERRACK_T), { hardness: 0.4, tool: 'pickaxe', minTier: 1 });
+def(B.SOUL_SAND, 'Soul Sand', tile6(TILE.SOUL_SAND_T), { hardness: 0.5, tool: 'shovel' });
+def(B.NETHER_PORTAL, 'Nether Portal', tile6(TILE.PORTAL_T), {
+  solid: false, opaque: false, renderType: RenderType.BOX, hardness: 0.1, drop: -1,
+  lightEmit: 11, lightFilter: 0, boxes: [[0.25, 0, 0.25, 0.75, 1, 0.75]],
+});
+def(B.MAGMA, 'Magma Block', tile6(TILE.MAGMA_T), {
+  hardness: 0.5, tool: 'pickaxe', minTier: 1, lightEmit: 3,
+});
 
 const fluidDefaults = {
   solid: false,

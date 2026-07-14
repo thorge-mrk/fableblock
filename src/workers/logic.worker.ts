@@ -44,6 +44,7 @@ let seed = 0;
 let rand = new Random(1);
 const world = new World();
 let tickCount = 0;
+let dim = 0; // 0 overworld, 1 nether
 
 const player = { x: 0, y: 80, z: 0, yaw: 0, sneak: false, health: 20, valid: false };
 let timeOfDay = 0.05;
@@ -1521,6 +1522,7 @@ function naturalSpawning(): void {
     if (ENTITY_DEFS[e.type].hostile) hostiles++;
     else if (isFarmAnimal(e.type)) passives++;
   }
+  if (dim === 1) return; // nether spawn table arrives with its own mobs (P4-4)
   if (hostiles < HOSTILE_CAP) {
     for (let i = 0; i < 4; i++) {
       const ang = rand.float() * Math.PI * 2;
@@ -2075,6 +2077,22 @@ ctx.onmessage = (e: MessageEvent<ToLogicMsg>) => {
     case 'time':
       timeOfDay = msg.time;
       break;
+    case 'dim': {
+      // Dimension switch: drop the whole mirrored world + simulation state.
+      dim = msg.dim;
+      closeSession();
+      entities.clear();
+      blockEntities.clear();
+      fluidQueue.clear();
+      plates.clear();
+      devicePrev.clear();
+      redstoneDirty.length = 0;
+      redstoneDirtySet.clear();
+      villages.length = 0;
+      consumedChunks.clear();
+      world.chunks.clear();
+      break;
+    }
     case 'interactEntity': {
       const e = entities.get(msg.entityId);
       if (

@@ -1,14 +1,15 @@
 /**
- * World persistence (v1): a single IndexedDB save slot holding the seed,
- * time of day, player state, inventory and a block-edit journal
+ * World persistence (v2): a single IndexedDB save slot holding the seed,
+ * time of day, player state, inventory and per-dimension block-edit journals
  * (chunkKey -> [blockIndex, blockId, ...]). On load the world regenerates
  * from the seed and the journal is replayed as each chunk arrives.
- * Deliberately NOT saved in v1: container contents, mobs, fluids in flight.
+ * v1 saves (no dim / editsNether) load as overworld.
+ * Deliberately NOT saved: container contents, mobs, fluids in flight.
  */
 import type { ItemStack } from '../core/items';
 
 export interface SaveData {
-  version: 1;
+  version: 1 | 2;
   seed: number;
   time: number;
   player: { x: number; y: number; z: number; yaw: number; pitch: number; health: number; food?: number };
@@ -19,6 +20,9 @@ export interface SaveData {
   hotbarIndex: number;
   /** chunkKeyNum (as string) -> flat [blockIndex, blockId, ...] pairs. */
   edits: Record<string, number[]>;
+  /** Nether journal (v2); player dimension at save time. */
+  editsNether?: Record<string, number[]>;
+  dim?: number;
   savedAt: number;
 }
 
@@ -62,7 +66,7 @@ export async function loadWorld(): Promise<SaveData | null> {
       req.onerror = () => reject(req.error);
     });
     db.close();
-    if (data && data.version === 1 && typeof data.seed === 'number') return data;
+    if (data && (data.version === 1 || data.version === 2) && typeof data.seed === 'number') return data;
     return null;
   } catch {
     return null;

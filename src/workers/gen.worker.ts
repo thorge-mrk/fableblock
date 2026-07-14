@@ -711,7 +711,85 @@ const DZ6 = [0, 0, 0, 0, 1, -1];
 export function initGenerator(s: number): void {
   seed = s;
   villageCache.clear();
+  netherCarve = null;
   initNoise();
+}
+
+// ---------------------------------------------------------------------------
+// Nether generation (Phase 4): one giant cavern system between two bedrock
+// plates, a lava ocean at the bottom, soul-sand shores, magma seams and
+// glowstone clusters hanging from the ceiling.
+// ---------------------------------------------------------------------------
+const NETHER_CEIL = 127; // bedrock ceiling; above is void
+
+let netherCarve: FBM3D | null = null;
+
+export function generateNetherChunk(cx: number, cz: number): GenChunkMsg {
+  if (!netherCarve) netherCarve = new FBM3D(deriveSeed(seed, 'nether'), 3, 1 / 70, 0.5, 2.1);
+  const data = new Uint16Array(CHUNK_VOLUME);
+  const rand = new Random(deriveSeed(seed, 'nchunk:' + cx + ',' + cz));
+
+  const LAVA_LEVEL = 31;
+  for (let z = 0; z < 16; z++) {
+    for (let x = 0; x < 16; x++) {
+      const wx = cx * 16 + x;
+      const wz = cz * 16 + z;
+      for (let y = 0; y <= NETHER_CEIL; y++) {
+        let id: number;
+        if (y === 0 || y === NETHER_CEIL) {
+          id = B.BEDROCK;
+        } else {
+          // Carve caverns: widest in the middle band, pinched at the plates.
+          const shape = Math.abs(y - 64) / 64; // 0 center .. 1 at plates
+          const t = 0.1 + shape * 0.28;
+          const n = netherCarve.sample(wx, y * 1.35, wz);
+          const open = n > t;
+          if (open) id = y <= LAVA_LEVEL ? B.LAVA_SRC : B.AIR;
+          else id = B.NETHERRACK;
+        }
+        data[blockIndex(x, y, z)] = packVoxel(id, 0, 0);
+      }
+    }
+  }
+
+  // Surface dressing: soul sand shores, magma seams near lava, glowstone
+  // clusters under ceiling overhangs.
+  for (let z = 0; z < 16; z++) {
+    for (let x = 0; x < 16; x++) {
+      const wx = cx * 16 + x;
+      const wz = cz * 16 + z;
+      for (let y = 2; y < NETHER_CEIL - 1; y++) {
+        const idx = blockIndex(x, y, z);
+        if (voxelId(data[idx]) !== B.NETHERRACK) continue;
+        const above = voxelId(data[blockIndex(x, y + 1, z)]);
+        const below = voxelId(data[blockIndex(x, y - 1, z)]);
+        if (above === B.AIR) {
+          const r = hash2D(deriveSeed(seed, 'ndeco'), wx * 3 + y, wz * 5);
+          if (y <= LAVA_LEVEL + 4 && r < 0.3) data[idx] = packVoxel(B.MAGMA, 0, 0);
+          else if (r < 0.16) data[idx] = packVoxel(B.SOUL_SAND, 0, 0);
+        } else if (below === B.AIR && y > 80) {
+          // Hanging glowstone buds.
+          if (hash2D(deriveSeed(seed, 'nglow'), wx, wz * 7 + y) < 0.045) {
+            data[blockIndex(x, y - 1, z)] = packVoxel(B.GLOWSTONE, 0, 0);
+            if (y > 3 && rand.chance(0.5)) data[blockIndex(x, y - 2, z)] = packVoxel(B.GLOWSTONE, 0, 0);
+          }
+        }
+      }
+    }
+  }
+
+  initialLight(data);
+
+  return {
+    t: 'chunk',
+    cx,
+    cz,
+    dim: 1,
+    data: data.buffer,
+    blockEntities: [],
+    mobs: [],
+    village: null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -870,6 +948,7 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
     t: 'chunk',
     cx,
     cz,
+    dim: 0,
     data: data.buffer,
     blockEntities,
     mobs,
@@ -889,7 +968,7 @@ ctx.onmessage = (e: MessageEvent<ToGenMsg>) => {
     return;
   }
   if (msg.t === 'gen') {
-    const result = generateChunk(msg.cx, msg.cz);
+    const result = msg.dim === 1 ? generateNetherChunk(msg.cx, msg.cz) : generateChunk(msg.cx, msg.cz);
     ctx.postMessage(result, [result.data]);
   }
 };

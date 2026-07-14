@@ -48,6 +48,7 @@ export function HUD(): React.ReactElement {
   const toast = useGameStore((s) => s.toast);
   const screen = useGameStore((s) => s.screen);
   const sleeping = useGameStore((s) => s.sleeping);
+  const portalFade = useGameStore((s) => s.portalFade);
 
   const heldName = inventory[hotbarIndex] ? itemDef(inventory[hotbarIndex]!.id).name : null;
 
@@ -180,6 +181,18 @@ export function HUD(): React.ReactElement {
       >
         {sleeping && <span className="text-white/80 text-lg">Sleeping…</span>}
       </div>
+
+      {/* Portal charge overlay */}
+      {portalFade > 0.01 && (
+        <div
+          className="absolute inset-0"
+          style={{
+            opacity: Math.min(1, portalFade),
+            background: 'radial-gradient(circle, rgba(120,40,190,0.55) 0%, rgba(60,10,110,0.92) 100%)',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
 
       {/* Low-health vignette */}
       {health <= 6 && health > 0 && (

@@ -1097,6 +1097,89 @@ const PAINTERS: Record<number, Painter> = {
       p.px(x, 14, 96, 70, 40);
     }
   },
+
+  // --- Nether (Phase 4) -------------------------------------------------------
+  [TILE.NETHERRACK_T]: (p) => {
+    // Fleshy dark-red rock with sinewy pores.
+    p.cellNoise([108, 40, 36], 0.22, 2);
+    for (let i = 0; i < 5; i++) {
+      let x = Math.floor(p.rand() * N);
+      let y = Math.floor(p.rand() * N);
+      for (let k = 0; k < 5; k++) {
+        p.px(x, y, 66, 22, 22);
+        x += Math.floor(p.rand() * 3) - 1;
+        y++;
+        if (x < 0 || x >= N || y >= N) break;
+      }
+    }
+    p.speckle([150, 66, 54], 6, 1);
+  },
+  [TILE.SOUL_SAND_T]: (p) => {
+    // Murky brown sand with trapped hollow "faces".
+    p.cellNoise([82, 62, 48], 0.16, 2);
+    for (const [x, y] of [[3, 4], [10, 3], [6, 10], [12, 11]] as const) {
+      p.px(x, y, 44, 32, 26);
+      p.px(x + 2, y, 44, 32, 26);
+      p.rect(x, y + 2, 3, 1, [40, 30, 24]);
+    }
+    p.speckle([104, 82, 62], 5, 1);
+  },
+  [TILE.PORTAL_T]: (p) => {
+    // Swirling violet energy.
+    p.noiseFill([98, 32, 168], 0.25);
+    for (let i = 0; i < N; i++) {
+      const y = Math.round(7.5 + Math.sin((i / N) * Math.PI * 2) * 4);
+      p.px(i, y, 186, 110, 255);
+      p.px(i, y + 1, 150, 70, 230);
+      const y2 = Math.round(7.5 + Math.cos((i / N) * Math.PI * 2 + 1.3) * 5);
+      p.px(i, y2, 214, 160, 255);
+    }
+    p.speckle([238, 210, 255], 6, 1);
+  },
+  [TILE.MAGMA_T]: (p) => {
+    // Dark crust plates over glowing seams.
+    p.cellNoise([46, 24, 20], 0.2, 3);
+    for (let i = 0; i < 4; i++) {
+      let x = Math.floor(p.rand() * N);
+      let y = Math.floor(p.rand() * N);
+      const horiz = p.rand() < 0.5;
+      for (let k = 0; k < 6; k++) {
+        p.px(x, y, 244, 120, 30);
+        p.px(x + (horiz ? 0 : 1), y + (horiz ? 1 : 0), 190, 70, 20);
+        if (horiz) x++;
+        else y++;
+        if (p.rand() < 0.3) {
+          if (horiz) y += p.rand() < 0.5 ? -1 : 1;
+          else x += p.rand() < 0.5 ? -1 : 1;
+        }
+        if (x < 0 || x >= N || y < 0 || y >= N) break;
+      }
+    }
+  },
+  [TILE.ITEM_FLINT]: (p) => {
+    p.clear();
+    // Chipped dark shard.
+    for (let y = 0; y < 7; y++) {
+      for (let x = 0; x < 9 - y; x++) {
+        const f = 1 + (p.rand() - 0.5) * 0.2;
+        p.px(4 + x + (y >> 1), 5 + y, 58 * f, 60 * f, 66 * f);
+      }
+    }
+    p.px(5, 5, 100, 104, 112);
+    p.px(6, 6, 88, 92, 100);
+  },
+  [TILE.ITEM_FLINT_STEEL]: (p) => {
+    p.clear();
+    // Steel striker arc + flint chip + spark.
+    for (let i = 0; i < 6; i++) {
+      p.px(9 + Math.round(Math.sin(i / 5 * Math.PI) * 3), 5 + i, 206, 208, 214);
+      p.px(10 + Math.round(Math.sin(i / 5 * Math.PI) * 3), 5 + i, 160, 162, 170);
+    }
+    p.rect(3, 9, 4, 3, [58, 60, 66]);
+    p.px(3, 9, 92, 96, 104);
+    p.px(7, 6, 255, 200, 80);
+    p.px(8, 5, 255, 240, 160);
+  },
 };
 
 /** Redstone wire: a dust cross on a transparent tile (BOX top face). */

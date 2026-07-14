@@ -76,6 +76,7 @@ interface GameStore {
   toast: string | null;
   breakProgress: number; // 0..1 while mining
   sleeping: boolean; // bed fade-to-black overlay
+  portalFade: number; // 0..1 purple overlay while standing in a portal
   saveSeed: number | null; // seed of the stored world (Continue button)
 
   set: (partial: Partial<GameStore>) => void;
@@ -130,6 +131,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   toast: null,
   breakProgress: 0,
   sleeping: false,
+  portalFade: 0,
   saveSeed: null,
 
   set: (partial) => set(partial),

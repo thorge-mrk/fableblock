@@ -81,6 +81,8 @@ export const RECIPES: Recipe[] = [
   shaped(['PP', 'PP', 'PP'], { P: B.OAK_PLANKS }, ITEM.DOOR, 1),
   shaped(['PPP', 'PPP'], { P: B.OAK_PLANKS }, B.TRAPDOOR, 2),
   shaped(['PPP', 'CIC', 'CRC'], { P: B.OAK_PLANKS, C: B.COBBLESTONE, I: ITEM.IRON_INGOT, R: ITEM.REDSTONE }, B.PISTON_N, 1),
+  // Flint and steel ignites nether portals.
+  shapeless([ITEM.IRON_INGOT, ITEM.FLINT], ITEM.FLINT_AND_STEEL, 1),
   // Armor sets (leather / iron / diamond).
   ...([
     [ITEM.LEATHER, [ITEM.LEATHER_HELMET, ITEM.LEATHER_CHESTPLATE, ITEM.LEATHER_LEGGINGS, ITEM.LEATHER_BOOTS]],

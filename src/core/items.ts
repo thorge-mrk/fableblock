@@ -57,6 +57,8 @@ export const ITEM = {
   DIAMOND_BOOTS: 305,
   REDSTONE: 306, // NOTE: blocks.ts hardcodes 256+50 in drop tables
   DOOR: 307, //     and 256+51 for door drops — keep in sync
+  FLINT: 308,
+  FLINT_AND_STEEL: 309,
 } as const;
 
 export interface ItemDef {
@@ -132,6 +134,8 @@ defItem({ id: ITEM.LEATHER, name: 'Leather', maxStack: 64, icon: TILE.ITEM_LEATH
 defItem({ id: ITEM.FEATHER, name: 'Feather', maxStack: 64, icon: TILE.ITEM_FEATHER });
 defItem({ id: ITEM.REDSTONE, name: 'Redstone Dust', maxStack: 64, icon: TILE.ITEM_REDSTONE });
 defItem({ id: ITEM.DOOR, name: 'Oak Door', maxStack: 64, icon: TILE.ITEM_DOOR });
+defItem({ id: ITEM.FLINT, name: 'Flint', maxStack: 64, icon: TILE.ITEM_FLINT });
+defItem({ id: ITEM.FLINT_AND_STEEL, name: 'Flint and Steel', maxStack: 1, icon: TILE.ITEM_FLINT_STEEL });
 
 // --- Armor sets: leather < iron < diamond ------------------------------------
 {

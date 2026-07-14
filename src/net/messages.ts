@@ -18,6 +18,8 @@ export interface GenRequestMsg {
   t: 'gen';
   cx: number;
   cz: number;
+  /** Dimension: 0 overworld, 1 nether. */
+  dim: number;
 }
 
 export type ToGenMsg = GenInitMsg | GenRequestMsg;
@@ -49,6 +51,8 @@ export interface GenChunkMsg {
   t: 'chunk';
   cx: number;
   cz: number;
+  /** Dimension the chunk was generated for (echoed from the request). */
+  dim: number;
   /** Uint16Array(65536) buffer — transferred. */
   data: ArrayBuffer;
   blockEntities: BlockEntitySpawn[];
@@ -196,6 +200,12 @@ export interface LogicSetTimeMsg {
   time: number;
 }
 
+/** Dimension switch: the worker drops all chunks, entities and machines. */
+export interface LogicDimMsg {
+  t: 'dim';
+  dim: number;
+}
+
 /** XP grant for a player-attributed kill. */
 export interface XpMsg {
   t: 'xp';
@@ -223,6 +233,7 @@ export type ToLogicMsg =
   | LogicCloseContainerMsg
   | LogicClickMsg
   | LogicSetTimeMsg
+  | LogicDimMsg
   | LogicInteractEntityMsg;
 
 // Entity snapshot: Float32Array with stride 12:

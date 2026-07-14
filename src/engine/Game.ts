@@ -28,6 +28,7 @@ import {
   B, blockDef, isChest, isFurnace, isInteractive, TILE, isWater,
   isDoor, isToggleable, isPistonBase, isPistonHead, pistonDir, needsFloorSupport, isWire,
 } from '../core/blocks';
+import { ignitePortal, findPortalNear, buildReturnPortal } from '../core/portal';
 import { ITEM, itemDef, isPlaceable, makeStack, ItemStack } from '../core/items';
 import { isFarmAnimal } from '../core/entities';
 import { clickSlot, insertStack, cloneStack, Slots, decrementSlot } from '../core/inventory';
@@ -92,9 +93,16 @@ export class Game {
   private shake = 0;
 
   private spawn: [number, number, number] | null = null;
-  private spawnPoint: [number, number, number] | null = null; // bed respawn
-  // World persistence: journal of every block-ID change, replayed on resume.
-  private editJournal = new Map<number, Map<number, number>>();
+  private spawnPoint: [number, number, number] | null = null; // bed respawn (always overworld)
+  // World persistence: per-dimension journals of every block-ID change,
+  // replayed on resume. Index 0 = overworld, 1 = nether.
+  private journals: Array<Map<number, Map<number, number>>> = [new Map(), new Map()];
+  private dim = 0;
+  private portalTimer = 0;
+  private portalCooldown = 0;
+  private magmaTimer = 0;
+  /** Pending cross-dimension arrival (chunks stream in first). */
+  private arrival: { x: number; z: number; exact: [number, number, number] | null } | null = null;
   private worldSeed = 0;
   private resumeData: SaveData | null = null;
   private resumeApplied = false;
@@ -146,13 +154,21 @@ export class Game {
     this.worldSeed = seed;
     this.resumeData = resume;
     this.resumeApplied = false;
-    this.editJournal.clear();
+    this.journals = [new Map(), new Map()];
+    this.dim = resume?.dim === 1 ? 1 : 0;
+    this.arrival = null;
+    this.portalTimer = 0;
+    this.portalCooldown = 0;
     if (resume) {
-      for (const [key, flat] of Object.entries(resume.edits)) {
-        const m = new Map<number, number>();
-        for (let i = 0; i < flat.length; i += 2) m.set(flat[i], flat[i + 1]);
-        this.editJournal.set(Number(key), m);
-      }
+      const parse = (src: Record<string, number[]> | undefined, into: Map<number, Map<number, number>>) => {
+        for (const [key, flat] of Object.entries(src ?? {})) {
+          const m = new Map<number, number>();
+          for (let i = 0; i < flat.length; i += 2) m.set(flat[i], flat[i + 1]);
+          into.set(Number(key), m);
+        }
+      };
+      parse(resume.edits, this.journals[0]);
+      parse(resume.editsNether, this.journals[1]);
     }
 
     gameStore.set({ phase: 'loading', loadProgress: 0 });
@@ -186,13 +202,14 @@ export class Game {
     this.world.onCellChanged = (x, y, z, v) => {
       this.patchOut.push(x, y, z, v);
     };
-    // Journal every real block change for the save file.
+    // Journal every real block change (into the active dimension's journal).
     this.world.onBlockChanged = (x, y, z, id) => {
+      const journal = this.journals[this.dim];
       const ck = chunkKeyNum(x >> 4, z >> 4);
-      let m = this.editJournal.get(ck);
+      let m = journal.get(ck);
       if (!m) {
         m = new Map();
-        this.editJournal.set(ck, m);
+        journal.set(ck, m);
       }
       m.set(blockIndex(x & 15, y, z & 15), id);
     };
@@ -210,6 +227,8 @@ export class Game {
       this.sendLogic({ t: 'unchunk', cx, cz });
     };
     this.chunks.renderDistance = settings.renderDistance;
+    this.chunks.dim = this.dim;
+    if (this.dim === 1) this.sendLogic({ t: 'dim', dim: 1 });
 
     this.dayNight = new DayNightCycle(settings.dayLengthSec);
     this.scene.add(this.dayNight.sun);
@@ -381,14 +400,31 @@ export class Game {
     this.env.uTime.value = now / 1000;
     this.env.uGamma.value = store.settings.brightness;
 
+    // The nether overrides the sky: sunless red gloom, tight warm fog.
+    if (this.dim === 1) {
+      this.env.uSunLevel.value = 0.32;
+      this.env.uSkyTint.value.setRGB(1.0, 0.82, 0.72);
+      (this.scene.background as THREE.Color).setHex(0x1c0806);
+      this.env.uFogColor.value.setHex(0x2a0d08);
+      const far = Math.min(this.env.uFogFar.value, 72);
+      this.env.uFogFar.value = far;
+      this.env.uFogNear.value = far * 0.35;
+      this.dayNight.sun.intensity = 0.3;
+      this.dayNight.sun.color.setHex(0xff9a70);
+      this.dayNight.ambient.intensity = 0.55;
+    }
+    this.sky.group.visible = this.dim === 0;
+
     // Celestial bodies track the camera and the time of day.
     this.sky.update(this.dayNight.time, this.player.x, this.player.y, this.player.z);
 
     // Weather: rain curtain + darkened sky/fog while a shower passes.
+    // No weather below the nether's bedrock ceiling.
     const camSky =
+      this.dim === 0 &&
       this.world.getSun(Math.floor(this.player.x), Math.floor(this.player.y) + 2, Math.floor(this.player.z)) >= 8;
     this.weather.update(dt, this.player.x, this.player.y + 2, this.player.z, camSky);
-    this.sound.rain(this.weather.intensity * (camSky ? 1 : 0.4));
+    this.sound.rain(this.dim === 0 ? this.weather.intensity * (camSky ? 1 : 0.4) : 0);
     if (this.weather.intensity > 0.01) {
       const w = this.weather.intensity;
       this.env.uSunLevel.value *= 1 - 0.3 * w;
@@ -469,6 +505,25 @@ export class Game {
   }
 
   private updateLoading(): void {
+    // Cross-dimension arrival: wait for terrain around the arrival column.
+    if (this.arrival) {
+      const acx = Math.floor(this.arrival.x) >> 4;
+      const acz = Math.floor(this.arrival.z) >> 4;
+      const progress = this.chunks.spawnProgress(acx, acz, 1);
+      gameStore.set({ loadProgress: progress });
+      if (progress >= 1) {
+        const a = this.arrival;
+        this.arrival = null;
+        const pos = a.exact ?? this.arriveThroughPortal(a.x, a.z);
+        this.player.teleport(pos[0], pos[1], pos[2]);
+        this.player.vx = 0;
+        this.player.vy = 0;
+        this.player.vz = 0;
+        gameStore.set({ phase: 'playing', loadProgress: 1 });
+        this.toast(this.dim === 1 ? 'The Nether' : 'Back in the overworld');
+      }
+      return;
+    }
     if (!this.spawnChunkSearched && this.chunks.isReady(0, 0)) {
       this.spawnChunkSearched = true;
       this.spawn = this.findSpawn();
@@ -511,7 +566,7 @@ export class Game {
 
   /** Replay journaled edits onto a freshly generated chunk. */
   private replayEdits(cx: number, cz: number): void {
-    const m = this.editJournal.get(chunkKeyNum(cx, cz));
+    const m = this.journals[this.dim].get(chunkKeyNum(cx, cz));
     if (!m) return;
     const bx = cx * 16;
     const bz = cz * 16;
@@ -523,18 +578,111 @@ export class Game {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Dimension travel
+  // -------------------------------------------------------------------------
+  /**
+   * Swap dimensions: persists the current one, resets chunk + logic mirrors
+   * and schedules the arrival (portal-linked unless `exact` is given).
+   */
+  private switchDimension(target: number, exact: [number, number, number] | null = null): void {
+    void this.saveNow();
+    this.dim = target;
+    this.portalTimer = 0;
+    this.portalCooldown = 4;
+    this.magmaTimer = 0;
+    this.player.inBoat = false;
+    this.boat.group.visible = false;
+    this.stopMining();
+    const ax = exact ? exact[0] : this.player.x;
+    const az = exact ? exact[2] : this.player.z;
+    this.arrival = { x: ax, z: az, exact };
+    // Park the player over the arrival column so chunk streaming centers there.
+    this.player.teleport(ax, 140, az);
+    this.chunks.reset(target);
+    this.sendLogic({ t: 'dim', dim: target });
+    gameStore.set({ phase: 'loading', loadProgress: 0, portalFade: 1 });
+  }
+
+  /** Find (or build) the linked portal and return a safe standing spot. */
+  private arriveThroughPortal(x: number, z: number): [number, number, number] {
+    const ix = Math.floor(x);
+    const iz = Math.floor(z);
+    const probeY = this.dim === 1 ? 72 : this.world.highestSolid(ix, iz) + 1;
+    const existing = findPortalNear(this.world, ix, probeY, iz, 12);
+    if (existing) {
+      return this.standNearPortal(existing[0], existing[1], existing[2]);
+    }
+    const [gx, gy, gz] = this.findArrivalGround(ix, iz);
+    buildReturnPortal(this.world, gx - 1, gy, gz - 2, (bx, by, bz, id) => {
+      this.world.setBlock(bx, by, bz, id);
+    });
+    return [gx + 0.5, gy + 0.1, gz + 0.5];
+  }
+
+  /** First open-air spot next to a portal block. */
+  private standNearPortal(px: number, py: number, pz: number): [number, number, number] {
+    const spots: Array<[number, number]> = [[0, 1], [0, -1], [1, 0], [-1, 0], [0, 2], [0, -2], [2, 0], [-2, 0]];
+    for (const [dx, dz] of spots) {
+      const x = px + dx;
+      const z = pz + dz;
+      if (
+        !blockDef(this.world.getBlockId(x, py, z)).solid &&
+        this.world.getBlockId(x, py, z) !== B.NETHER_PORTAL &&
+        !blockDef(this.world.getBlockId(x, py + 1, z)).solid &&
+        blockDef(this.world.getBlockId(x, py - 1, z)).solid
+      ) {
+        return [x + 0.5, py + 0.1, z + 0.5];
+      }
+    }
+    return [px + 0.5, py + 0.1, pz + 0.5];
+  }
+
+  /** Safe floor column for a fresh return portal (carves one if needed). */
+  private findArrivalGround(ix: number, iz: number): [number, number, number] {
+    if (this.dim === 1) {
+      for (let y = 96; y >= 24; y--) {
+        if (!blockDef(this.world.getBlockId(ix, y - 1, iz)).solid) continue;
+        let clear = true;
+        for (let k = 0; k < 5; k++) {
+          if (this.world.getBlockId(ix, y + k, iz) !== B.AIR) {
+            clear = false;
+            break;
+          }
+        }
+        if (clear) return [ix, y, iz];
+      }
+      // No natural cavity: carve a pocket into the netherrack.
+      for (let dx = -2; dx <= 3; dx++) {
+        for (let dz = -3; dz <= 2; dz++) {
+          this.world.setBlock(ix + dx, 63, iz + dz, B.NETHERRACK);
+          for (let k = 1; k <= 5; k++) this.world.setBlock(ix + dx, 63 + k, iz + dz, B.AIR);
+        }
+      }
+      return [ix, 64, iz];
+    }
+    const h = this.world.highestSolid(ix, iz);
+    return [ix, h + 1, iz];
+  }
+
   /** Serialize the world state and write it to IndexedDB. */
   saveNow(): Promise<void> {
     const s = gameStore.get();
     if (s.phase !== 'playing' && s.phase !== 'dead') return Promise.resolve();
-    const edits: Record<string, number[]> = {};
-    for (const [key, m] of this.editJournal) {
-      const flat: number[] = [];
-      for (const [idx, id] of m) flat.push(idx, id);
-      if (flat.length > 0) edits[String(key)] = flat;
-    }
+    const flatten = (journal: Map<number, Map<number, number>>): Record<string, number[]> => {
+      const out: Record<string, number[]> = {};
+      for (const [key, m] of journal) {
+        const flat: number[] = [];
+        for (const [idx, id] of m) flat.push(idx, id);
+        if (flat.length > 0) out[String(key)] = flat;
+      }
+      return out;
+    };
+    const edits = flatten(this.journals[0]);
     return saveWorld({
-      version: 1,
+      version: 2,
+      dim: this.dim,
+      editsNether: flatten(this.journals[1]),
       seed: this.worldSeed,
       time: this.dayNight.time,
       player: {
@@ -604,6 +752,25 @@ export class Game {
     // Environmental damage
     this.updateHazards(dt, alive);
 
+    // Nether portal travel: stand inside for ~1.2s (cooldown after arrival).
+    this.portalCooldown = Math.max(0, this.portalCooldown - dt);
+    const inPortal =
+      this.world.getBlockId(
+        Math.floor(this.player.x), Math.floor(this.player.y + 0.4), Math.floor(this.player.z),
+      ) === B.NETHER_PORTAL;
+    if (inPortal && alive && this.portalCooldown <= 0) {
+      this.portalTimer += dt;
+      gameStore.set({ portalFade: Math.min(1, this.portalTimer / 1.2) });
+      if (this.portalTimer >= 1.2) {
+        this.switchDimension(this.dim === 0 ? 1 : 0);
+        return;
+      }
+    } else {
+      this.portalTimer = 0;
+      const fade = gameStore.get().portalFade;
+      if (fade > 0) gameStore.set({ portalFade: Math.max(0, fade - dt * 1.4) });
+    }
+
     // Interactions
     if (alive && !uiOpen) {
       if (this.player.inBoat) {
@@ -640,7 +807,7 @@ export class Game {
     );
     this.sound.update(
       dt,
-      this.dayNight.sunLevel > 0.6,
+      this.dim === 0 && this.dayNight.sunLevel > 0.6,
       alive && !uiOpen && !this.player.inBoat && (effInput.moveX !== 0 || effInput.moveZ !== 0),
       this.player.onGround,
       this.player.inWater,
@@ -670,6 +837,19 @@ export class Game {
           if (Math.ceil(this.fireTicks) < before) this.damagePlayer(1, 0, 0, 'fire');
         }
       }
+    }
+    // Standing on magma sears the feet (sneak to tiptoe across).
+    const floorId = this.world.getBlockId(
+      Math.floor(this.player.x), Math.floor(this.player.y) - 1, Math.floor(this.player.z),
+    );
+    if (floorId === B.MAGMA && this.player.onGround && !this.player.sneaking) {
+      this.magmaTimer += dt;
+      if (this.magmaTimer >= 0.8) {
+        this.magmaTimer = 0;
+        this.damagePlayer(1, 0, 0, 'fire');
+      }
+    } else {
+      this.magmaTimer = 0;
     }
     // Hunger drain: exhaustion accumulates from exertion, 4 points = 1 food.
     const s = gameStore.get();
@@ -813,7 +993,9 @@ export class Game {
       if (xp) this.gainXp(xp);
     }
     if (canHarvest && def.drop !== -1) {
-      const dropId = def.drop ?? hit.id;
+      let dropId = def.drop ?? hit.id;
+      // Gravel knaps into flint now and then (portal lighter ingredient).
+      if (hit.id === B.GRAVEL && Math.random() < 0.25) dropId = ITEM.FLINT;
       const [c0, c1] = def.dropCount ?? [1, 1];
       const n = c0 + Math.floor(Math.random() * (c1 - c0 + 1));
       if (n > 0) {
@@ -947,6 +1129,21 @@ export class Game {
     }
     if (held.id === ITEM.DOOR && hit) {
       this.tryPlaceDoor(hit);
+      return;
+    }
+    // Flint and steel: light a nether portal inside an obsidian frame.
+    if (held.id === ITEM.FLINT_AND_STEEL && hit) {
+      if (hit.id === B.OBSIDIAN) {
+        const lit = ignitePortal(
+          this.world, hit.x + hit.nx, hit.y + hit.ny, hit.z + hit.nz,
+          (x, y, z, id) => this.world.setBlock(x, y, z, id),
+        );
+        if (lit) {
+          this.sound.place();
+          this.toast('The portal hums to life…');
+        }
+      }
+      this.heldView.swing();
       return;
     }
 
@@ -1433,14 +1630,23 @@ export class Game {
     const sp = this.spawnPoint ?? this.spawn ?? [8.5, 90, 8.5];
     this.player.inBoat = false;
     this.boat.group.visible = false;
-    this.player.teleport(sp[0], sp[1], sp[2]);
     this.fireTicks = 0;
     this.exhaustion = 0;
     gameStore.set({ phase: 'playing', health: PLAYER_MAX_HP, food: PLAYER_MAX_FOOD });
+    // Spawn points live in the overworld: dying in the nether travels back.
+    if (this.dim !== 0) {
+      this.switchDimension(0, [sp[0], sp[1], sp[2]]);
+    } else {
+      this.player.teleport(sp[0], sp[1], sp[2]);
+    }
   }
 
   /** Bed interaction: at night, skip to dawn and set the respawn point. */
   private trySleep(hit: RayHit): void {
+    if (this.dim !== 0) {
+      this.toast('The bed refuses to work here');
+      return;
+    }
     const alt = Math.sin(this.dayNight.time * Math.PI * 2);
     if (alt > -0.04) {
       this.toast('You can only sleep at night');
