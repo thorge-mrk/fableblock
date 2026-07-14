@@ -615,6 +615,7 @@ function genOres(data: Uint16Array, rand: Random): void {
     [B.COAL_ORE, 14, 6, 100, 8],
     [B.IRON_ORE, 9, 4, 56, 6],
     [B.GOLD_ORE, 3, 4, 30, 5],
+    [B.REDSTONE_ORE, 6, 2, 18, 6],
     [B.DIAMOND_ORE, 2, 2, 14, 4],
   ];
   for (const [id, attempts, minY, maxY, size] of veins) {

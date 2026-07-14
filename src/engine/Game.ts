@@ -26,6 +26,7 @@ import { Weather } from './Weather';
 import { Sky } from './Sky';
 import {
   B, blockDef, isChest, isFurnace, isInteractive, TILE, isWater,
+  isDoor, isToggleable, isPistonBase, isPistonHead, pistonDir, needsFloorSupport, isWire,
 } from '../core/blocks';
 import { ITEM, itemDef, isPlaceable, makeStack, ItemStack } from '../core/items';
 import { isFarmAnimal } from '../core/entities';
@@ -800,28 +801,83 @@ export class Game {
       this.sendLogic({ t: 'breakBE', x: hit.x, y: hit.y, z: hit.z });
     }
     this.world.setBlock(hit.x, hit.y, hit.z, B.AIR);
+    this.removeAttachedParts(hit.x, hit.y, hit.z, hit.id);
     this.sound.breakBlock();
     this.exhaustion += 0.03;
     // Mining XP from ores.
     if (canHarvest) {
       const ORE_XP: Record<number, number> = {
-        [B.COAL_ORE]: 1, [B.IRON_ORE]: 2, [B.GOLD_ORE]: 3, [B.DIAMOND_ORE]: 6,
+        [B.COAL_ORE]: 1, [B.IRON_ORE]: 2, [B.GOLD_ORE]: 3, [B.REDSTONE_ORE]: 3, [B.DIAMOND_ORE]: 6,
       };
       const xp = ORE_XP[hit.id];
       if (xp) this.gainXp(xp);
     }
     if (canHarvest && def.drop !== -1) {
       const dropId = def.drop ?? hit.id;
-      this.sendLogic({
-        t: 'spawnItem',
-        x: hit.x + 0.5, y: hit.y + 0.3, z: hit.z + 0.5,
-        stack: makeStack(dropId, 1),
-        vx: (Math.random() - 0.5) * 1.5, vy: 2.4, vz: (Math.random() - 0.5) * 1.5,
-      });
+      const [c0, c1] = def.dropCount ?? [1, 1];
+      const n = c0 + Math.floor(Math.random() * (c1 - c0 + 1));
+      if (n > 0) {
+        this.sendLogic({
+          t: 'spawnItem',
+          x: hit.x + 0.5, y: hit.y + 0.3, z: hit.z + 0.5,
+          stack: makeStack(dropId, n),
+          vx: (Math.random() - 0.5) * 1.5, vy: 2.4, vz: (Math.random() - 0.5) * 1.5,
+        });
+      }
     }
     this.useTool(1);
     this.heldView.swing();
     this.character.swing();
+  }
+
+  /**
+   * Multi-block structures + floor-mounted parts: breaking one half of a
+   * door / an extended piston removes the partner block, and anything sitting
+   * on the broken block that needs floor support pops off as an item.
+   */
+  private removeAttachedParts(x: number, y: number, z: number, brokenId: number): void {
+    const dropAt = (bx: number, by: number, bz: number, itemId: number) => {
+      this.sendLogic({
+        t: 'spawnItem', x: bx + 0.5, y: by + 0.3, z: bz + 0.5,
+        stack: makeStack(itemId, 1), vx: 0, vy: 2, vz: 0,
+      });
+    };
+    // Door halves. Only bottoms carry the item drop, so breaking the top
+    // half drops the door here instead.
+    if (isDoor(brokenId)) {
+      const isTop = brokenId === B.DOOR_TOP || brokenId === B.DOOR_TOP_OPEN;
+      const otherY = isTop ? y - 1 : y + 1;
+      if (isDoor(this.world.getBlockId(x, otherY, z))) {
+        this.world.setBlock(x, otherY, z, B.AIR);
+        if (isTop) dropAt(x, otherY, z, ITEM.DOOR);
+      }
+    }
+    // Extended piston: base and head go together.
+    if (isPistonBase(brokenId) && brokenId >= B.PISTON_EXT_N) {
+      const [dx, dz] = pistonDir(brokenId);
+      if (isPistonHead(this.world.getBlockId(x + dx, y, z + dz))) {
+        this.world.setBlock(x + dx, y, z + dz, B.AIR);
+      }
+    }
+    if (isPistonHead(brokenId)) {
+      const [dx, dz] = pistonDir(brokenId);
+      const baseId = this.world.getBlockId(x - dx, y, z - dz);
+      if (baseId >= B.PISTON_EXT_N && baseId <= B.PISTON_EXT_W) {
+        this.world.setBlock(x - dx, y, z - dz, B.AIR);
+        dropAt(x - dx, y, z - dz, B.PISTON_N);
+      }
+    }
+    // Anything above that needs floor support pops off.
+    const above = this.world.getBlockId(x, y + 1, z);
+    if (needsFloorSupport(above)) {
+      const aDef = blockDef(above);
+      this.world.setBlock(x, y + 1, z, B.AIR);
+      if (isDoor(above) && isDoor(this.world.getBlockId(x, y + 2, z))) {
+        this.world.setBlock(x, y + 2, z, B.AIR);
+      }
+      const drop = aDef.drop ?? above;
+      if (drop !== -1) dropAt(x, y + 1, z, isWire(above) ? ITEM.REDSTONE : drop);
+    }
   }
 
   private attackEntity(id: number): void {
@@ -874,10 +930,25 @@ export class Game {
       this.interactWith(hit);
       return;
     }
+    // Levers, doors, trapdoors toggle in place.
+    if (hit && !this.player.sneaking && isToggleable(hit.id)) {
+      this.toggleBlock(hit);
+      return;
+    }
 
     const held = this.heldStack();
     if (!held) return;
     const def = itemDef(held.id);
+
+    // Redstone dust and doors are pure items with custom placement.
+    if (held.id === ITEM.REDSTONE && hit) {
+      this.tryPlaceWire(hit);
+      return;
+    }
+    if (held.id === ITEM.DOOR && hit) {
+      this.tryPlaceDoor(hit);
+      return;
+    }
 
     // Feeding an animal (breeding) wins over eating when aiming at one.
     if (def.food) {
@@ -1042,6 +1113,70 @@ export class Game {
     // Screen flips to 'container' when the first containerSync arrives.
   }
 
+  /** Right-click toggle for levers, doors and trapdoors. */
+  private toggleBlock(hit: RayHit): void {
+    const id = hit.id;
+    if (id === B.LEVER || id === B.LEVER_ON) {
+      this.world.setBlock(hit.x, hit.y, hit.z, id === B.LEVER ? B.LEVER_ON : B.LEVER);
+    } else if (isDoor(id)) {
+      const bottomY = id === B.DOOR_TOP || id === B.DOOR_TOP_OPEN ? hit.y - 1 : hit.y;
+      const open = id === B.DOOR_BOTTOM_OPEN || id === B.DOOR_TOP_OPEN;
+      this.setDoor(hit.x, bottomY, hit.z, !open);
+    } else if (id === B.TRAPDOOR || id === B.TRAPDOOR_OPEN) {
+      this.world.setBlock(hit.x, hit.y, hit.z, id === B.TRAPDOOR ? B.TRAPDOOR_OPEN : B.TRAPDOOR);
+    }
+    this.sound.click();
+    this.heldView.swing();
+  }
+
+  /** Write both door halves (bottom at y). */
+  private setDoor(x: number, y: number, z: number, open: boolean): void {
+    this.world.setBlock(x, y, z, open ? B.DOOR_BOTTOM_OPEN : B.DOOR_BOTTOM);
+    this.world.setBlock(x, y + 1, z, open ? B.DOOR_TOP_OPEN : B.DOOR_TOP);
+  }
+
+  /** Place redstone dust as wire on top of a solid block. */
+  private tryPlaceWire(hit: RayHit): void {
+    let px = hit.x;
+    let py = hit.y;
+    let pz = hit.z;
+    if (!blockDef(this.world.getBlockId(px, py, pz)).replaceable) {
+      px += hit.nx;
+      py += hit.ny;
+      pz += hit.nz;
+    }
+    if (!blockDef(this.world.getBlockId(px, py, pz)).replaceable) return;
+    if (!blockDef(this.world.getBlockId(px, py - 1, pz)).solid) return;
+    this.world.setBlock(px, py, pz, B.REDSTONE_WIRE);
+    this.consumeHeld();
+    this.sound.place();
+    this.heldView.swing();
+  }
+
+  /** Place a door item as a two-block door facing the player. */
+  private tryPlaceDoor(hit: RayHit): void {
+    const px = hit.x + hit.nx;
+    const py = hit.y + hit.ny;
+    const pz = hit.z + hit.nz;
+    if (py < 0 || py + 1 >= 255) return;
+    if (!blockDef(this.world.getBlockId(px, py, pz)).replaceable) return;
+    if (!blockDef(this.world.getBlockId(px, py + 1, pz)).replaceable) return;
+    if (!blockDef(this.world.getBlockId(px, py - 1, pz)).solid) return;
+    // Doors are solid: keep them out of the player's hitbox.
+    const w = PLAYER_WIDTH / 2;
+    if (
+      px + 1 > this.player.x - w && px < this.player.x + w &&
+      pz + 1 > this.player.z - w && pz < this.player.z + w &&
+      py + 2 > this.player.y && py < this.player.y + this.player.height
+    ) {
+      return;
+    }
+    this.setDoor(px, py, pz, false);
+    this.consumeHeld();
+    this.sound.place();
+    this.heldView.swing();
+  }
+
   private tryPlace(hit: RayHit, blockId: number): void {
     const px = hit.x + hit.nx;
     const py = hit.y + hit.ny;
@@ -1064,9 +1199,15 @@ export class Game {
           blockDef(this.world.getBlockId(px, py, pz + 1)).solid ||
           blockDef(this.world.getBlockId(px, py, pz - 1)).solid;
         if (!hasSupport) return;
+      } else if (blockId === B.LEVER) {
+        if (!blockDef(below).solid) return;
       } else if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW_GRASS) {
         return;
       }
+    }
+    // Floor-mounted redstone parts need a solid block underneath.
+    if (needsFloorSupport(blockId) && !blockDef(this.world.getBlockId(px, py - 1, pz)).solid) {
+      return;
     }
 
     // Solid blocks cannot intersect the player.
@@ -1082,13 +1223,13 @@ export class Game {
       }
     }
 
-    // Facing variants: furnace/chest face the player.
-    if (blockId === B.FURNACE_N || isChest(blockId)) {
+    // Facing variants: furnace/chest/piston face the player.
+    if (blockId === B.FURNACE_N || isChest(blockId) || blockId === B.PISTON_N) {
       const yaw = ((this.player.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
       // Player look cardinal: front of block = toward player (opposite look).
       const look = Math.round(yaw / (Math.PI / 2)) % 4; // 0:-Z 1:-X 2:+Z 3:+X
       const facing = ['s', 'e', 'n', 'w'][look] as 's' | 'e' | 'n' | 'w';
-      const base = isChest(blockId) ? B.CHEST_N : B.FURNACE_N;
+      const base = isChest(blockId) ? B.CHEST_N : blockId === B.PISTON_N ? B.PISTON_N : B.FURNACE_N;
       placeId = base + { n: 0, s: 1, e: 2, w: 3 }[facing];
     }
 

@@ -72,6 +72,15 @@ export const RECIPES: Recipe[] = [
   shaped(['WWW', 'PPP'], { W: B.WOOL, P: B.OAK_PLANKS }, B.BED, 1),
   // Enchanting table: diamond focus on an obsidian base.
   shaped([' D ', 'DOD', 'OOO'], { D: ITEM.DIAMOND, O: B.OBSIDIAN }, B.ENCHANTING_TABLE, 1),
+  // --- Redstone-lite ---
+  shaped(['S', 'C'], { S: ITEM.STICK, C: B.COBBLESTONE }, B.LEVER, 1),
+  shaped(['PP'], { P: B.OAK_PLANKS }, B.PRESSURE_PLATE, 1),
+  shaped([' R ', 'RGR', ' R '], { R: ITEM.REDSTONE, G: B.GLOWSTONE }, B.REDSTONE_LAMP, 1),
+  shaped(['RRR', 'RRR', 'RRR'], { R: ITEM.REDSTONE }, B.REDSTONE_BLOCK, 1),
+  shapeless([B.REDSTONE_BLOCK], ITEM.REDSTONE, 9),
+  shaped(['PP', 'PP', 'PP'], { P: B.OAK_PLANKS }, ITEM.DOOR, 1),
+  shaped(['PPP', 'PPP'], { P: B.OAK_PLANKS }, B.TRAPDOOR, 2),
+  shaped(['PPP', 'CIC', 'CRC'], { P: B.OAK_PLANKS, C: B.COBBLESTONE, I: ITEM.IRON_INGOT, R: ITEM.REDSTONE }, B.PISTON_N, 1),
   // Armor sets (leather / iron / diamond).
   ...([
     [ITEM.LEATHER, [ITEM.LEATHER_HELMET, ITEM.LEATHER_CHESTPLATE, ITEM.LEATHER_LEGGINGS, ITEM.LEATHER_BOOTS]],

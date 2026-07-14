@@ -178,3 +178,49 @@ describe('world generator determinism (Module 3)', () => {
     }
   });
 });
+
+describe('BOX render type (Phase 4 redstone)', () => {
+  it('meshes a closed door as partial panels (not a full cube)', () => {
+    const chunk = emptyChunk();
+    chunk[blockIndex(8, 40, 8)] = packVoxel(B.DOOR_BOTTOM, 15, 0);
+    chunk[blockIndex(8, 41, 8)] = packVoxel(B.DOOR_TOP, 15, 0);
+    const res = mesh(chunk);
+    expect(res.opaque.count).toBe(2 * 36); // 6 faces per panel box
+    const pos = new Float32Array(res.opaque.pos);
+    // No vertex of the closed door reaches past the 0.19 panel depth.
+    let maxZ = 0;
+    for (let i = 0; i < pos.length; i += 3) maxZ = Math.max(maxZ, pos[i + 2]);
+    expect(maxZ).toBeLessThanOrEqual(8.2);
+  });
+
+  it('culls box faces flush against opaque neighbors (wire on stone)', () => {
+    const chunk = emptyChunk();
+    chunk[blockIndex(8, 40, 8)] = packVoxel(B.STONE, 0, 0);
+    chunk[blockIndex(8, 41, 8)] = packVoxel(B.REDSTONE_WIRE, 15, 0);
+    const res = mesh(chunk);
+    // Stone: 6 faces. Wire: 6 - 1 (bottom culled against stone) = 5 faces.
+    expect(res.opaque.count).toBe((6 + 5) * 6);
+  });
+
+  it('meshes a piston head as two boxes (plate + arm)', () => {
+    const chunk = emptyChunk();
+    chunk[blockIndex(8, 40, 8)] = packVoxel(B.PISTON_HEAD_N, 15, 0);
+    const res = mesh(chunk);
+    expect(res.opaque.count).toBe(2 * 36);
+  });
+
+  it('generates redstone ore in the deep stone layer', () => {
+    initGenerator(7);
+    let found = 0;
+    for (let c = 0; c < 24 && !found; c++) {
+      const chunk = new Uint16Array(generateChunk(c, -c).data.slice(0));
+      for (let i = 0; i < chunk.length; i++) {
+        if ((chunk[i] & 0xff) === B.REDSTONE_ORE) {
+          found++;
+          break;
+        }
+      }
+    }
+    expect(found).toBeGreaterThan(0);
+  });
+});

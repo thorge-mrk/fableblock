@@ -318,7 +318,7 @@ function greedyPass(out: GeoBuilder): void {
   }
 }
 
-/** Per-cell pass: CROSS plants + fluids. */
+/** Per-cell pass: CROSS plants, BOX partials + fluids. */
 function specialPass(opaque: GeoBuilder, water: GeoBuilder): void {
   for (let y = 0; y < CHUNK_HEIGHT; y++) {
     for (let z = 0; z < 16; z++) {
@@ -329,10 +329,63 @@ function specialPass(opaque: GeoBuilder, water: GeoBuilder): void {
         const d = blockDef(id);
         if (d.renderType === RenderType.CROSS) {
           emitCross(opaque, x, y, z, d.tiles[0], voxelSun(cv), voxelBlockLight(cv));
+        } else if (d.renderType === RenderType.BOX) {
+          emitBoxes(opaque, x, y, z, d, cv);
         } else if (d.renderType === RenderType.FLUID) {
           emitFluid(isWater(id) ? water : opaque, x, y, z, id, cv);
         }
       }
+    }
+  }
+}
+
+/**
+ * Partial-cuboid blocks (doors, trapdoors, pressure plates, piston heads,
+ * redstone wire). Faces flush with a cell boundary against an opaque
+ * neighbor are culled; everything else is emitted with flat face shading
+ * and the cell's own light.
+ */
+function emitBoxes(
+  out: GeoBuilder,
+  x: number, y: number, z: number,
+  d: ReturnType<typeof blockDef>,
+  cv: number,
+): void {
+  if (!d.boxes) return;
+  const sun = voxelSun(cv);
+  const bl = voxelBlockLight(cv);
+  for (const box of d.boxes) {
+    const min = [box[0], box[1], box[2]];
+    const max = [box[3], box[4], box[5]];
+    for (let dir = 0; dir < 6; dir++) {
+      const axis = dir >> 1;
+      const positive = (dir & 1) === 0;
+      const plane = positive ? max[axis] : min[axis];
+      // Cull faces that sit exactly on the cell border next to an opaque block.
+      if (positive ? plane >= 0.999 : plane <= 0.001) {
+        const n = NORMAL[dir];
+        if (opaqueAt(x + n[0], y + n[1], z + n[2])) continue;
+      }
+      const ua = U_AXIS[dir];
+      const va = V_AXIS[dir];
+      const uAxis = ua[0] ? 0 : ua[1] ? 1 : 2;
+      const vAxis = va[0] ? 0 : va[1] ? 1 : 2;
+      const w = max[uAxis] - min[uAxis];
+      const h = max[vAxis] - min[vAxis];
+      if (w <= 0 || h <= 0) continue;
+      const base = [x, y, z];
+      base[axis] += plane;
+      base[uAxis] += min[uAxis];
+      base[vAxis] += min[vAxis];
+      const fs = FACE_SHADE[dir];
+      const s = Math.round(255 * fs);
+      out.quad(
+        base[0], base[1], base[2],
+        ua[0], ua[1], ua[2],
+        va[0], va[1], va[2],
+        w, h, d.tiles[dir], sun, bl,
+        [s, s, s, s], REVERSE[dir], false,
+      );
     }
   }
 }

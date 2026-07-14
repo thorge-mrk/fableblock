@@ -957,7 +957,203 @@ const PAINTERS: Record<number, Painter> = {
     p.rect(14, 12, 2, 4, [96, 66, 36]);
     p.border([110, 78, 42]);
   },
+
+  // --- Redstone-lite (Phase 4) ----------------------------------------------
+  [TILE.REDSTONE_ORE]: (p) => {
+    // Glowing ruby shards embedded in stone.
+    p.cellNoise(STONE_GRAY, 0.16, 3);
+    for (const [cx, cy] of [[4, 4], [11, 6], [6, 11], [12, 12]] as const) {
+      p.px(cx, cy, 255, 60, 50);
+      p.px(cx + 1, cy, 200, 30, 26);
+      p.px(cx, cy + 1, 200, 30, 26);
+      p.px(cx + 1, cy + 1, 150, 20, 18);
+      p.px(cx - 1, cy, 120, 24, 20);
+    }
+  },
+  [TILE.REDSTONE_WIRE_T]: wirePainter([132, 26, 20]),
+  [TILE.REDSTONE_WIRE_ON_T]: wirePainter([255, 60, 40]),
+  [TILE.LEVER_T]: leverPainter(false),
+  [TILE.LEVER_ON_T]: leverPainter(true),
+  [TILE.PLATE_T]: (p) => {
+    // Worn plank plate with a beveled rim.
+    p.noiseFill([158, 126, 78], 0.1);
+    p.border([120, 92, 54]);
+    p.shade(1, 1, 14, 14, 1.06);
+    p.shade(3, 3, 10, 10, 0.94);
+  },
+  [TILE.REDSTONE_LAMP_T]: (p) => {
+    // Dormant lamp: dark amber cells in an obsidian-ish frame.
+    p.cellNoise([52, 36, 26], 0.12, 2);
+    for (let y = 2; y < 14; y += 4) {
+      for (let x = 2; x < 14; x += 4) {
+        p.rect(x, y, 3, 3, [96, 58, 30]);
+        p.px(x + 1, y + 1, 128, 76, 36);
+      }
+    }
+    p.border([40, 28, 22]);
+  },
+  [TILE.REDSTONE_LAMP_ON_T]: (p) => {
+    // Lit lamp: hot glowing cells.
+    p.cellNoise([120, 70, 34], 0.1, 2);
+    for (let y = 2; y < 14; y += 4) {
+      for (let x = 2; x < 14; x += 4) {
+        p.rect(x, y, 3, 3, [255, 196, 92]);
+        p.px(x + 1, y + 1, 255, 240, 180);
+      }
+    }
+    p.border([150, 90, 40]);
+  },
+  [TILE.REDSTONE_BLOCK_T]: (p) => {
+    p.cellNoise([168, 28, 22], 0.14, 2);
+    p.speckle([255, 90, 70], 6, 1);
+    p.border([110, 18, 14]);
+    p.bevel(0.14);
+  },
+  [TILE.DOOR_BOTTOM_T]: (p) => {
+    doorBase(p);
+    // Handle knob on the right edge.
+    p.px(12, 2, 210, 178, 92);
+    p.px(12, 3, 160, 130, 60);
+  },
+  [TILE.DOOR_TOP_T]: (p) => {
+    doorBase(p);
+    // Window: 2x2 panes.
+    p.rect(5, 4, 6, 6, [40, 34, 30]);
+    p.rect(6, 5, 2, 2, [168, 214, 232]);
+    p.rect(9, 5, 2, 2, [150, 196, 216]);
+    p.rect(6, 8, 2, 1, [150, 196, 216]);
+    p.rect(9, 8, 2, 1, [136, 180, 200]);
+  },
+  [TILE.TRAPDOOR_T]: (p) => {
+    // Plank lattice with a dark cross brace and hinge dots.
+    p.grainV([150, 116, 68], [118, 88, 50], 4);
+    p.border([104, 78, 44]);
+    for (let i = 1; i < 15; i++) {
+      p.px(i, i, 112, 84, 48);
+      p.px(i, 15 - i, 112, 84, 48);
+    }
+    p.px(2, 7, 70, 70, 74);
+    p.px(2, 8, 70, 70, 74);
+    p.px(13, 7, 70, 70, 74);
+    p.px(13, 8, 70, 70, 74);
+  },
+  [TILE.PISTON_SIDE]: (p) => {
+    // Cobble body with a plank cap strip at the top (the sliding face).
+    p.cellNoise([118, 118, 122], 0.14, 3);
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < N; x++) {
+        const f = 1 + (p.rand() - 0.5) * 0.12;
+        p.px(x, y, 156 * f, 122 * f, 72 * f);
+      }
+    }
+    for (let x = 0; x < N; x++) p.px(x, 4, 104, 80, 46);
+    p.border([92, 92, 96]);
+  },
+  [TILE.PISTON_BACK]: (p) => {
+    p.cellNoise([118, 118, 122], 0.14, 3);
+    p.rect(5, 5, 6, 6, [92, 92, 96]);
+    p.rect(6, 6, 4, 4, [74, 74, 78]);
+    p.border([92, 92, 96]);
+  },
+  [TILE.PISTON_FRONT]: (p) => {
+    // Full plank face with cross grooves.
+    p.grainV([160, 126, 74], [126, 96, 54], 4);
+    for (let i = 0; i < N; i++) {
+      p.px(i, 7, 118, 88, 50);
+      p.px(7, i, 118, 88, 50);
+    }
+    p.border([110, 84, 48]);
+  },
+  [TILE.PISTON_OPEN]: (p) => {
+    // Vacated socket: dark hole with an iron arm stub in the center.
+    p.cellNoise([84, 84, 88], 0.14, 2);
+    p.rect(3, 3, 10, 10, [46, 46, 50]);
+    p.rect(6, 6, 4, 4, [140, 140, 148]);
+    p.border([92, 92, 96]);
+  },
+  [TILE.ITEM_REDSTONE]: (p) => {
+    p.clear();
+    // A poured pile of glowing dust.
+    p.disc(8, 10, 4, [190, 40, 30], 0.25);
+    p.disc(7, 9, 2.5, [235, 70, 50], 0.2);
+    p.px(6, 7, 255, 120, 90);
+    p.px(10, 8, 255, 120, 90);
+    p.px(5, 12, 130, 24, 18);
+    p.px(11, 12, 130, 24, 18);
+  },
+  [TILE.ITEM_DOOR]: (p) => {
+    p.clear();
+    // Upright door with window + knob, 1px outline.
+    p.rect(4, 1, 8, 14, [150, 116, 68]);
+    p.rect(5, 2, 6, 12, [166, 130, 76]);
+    p.rect(6, 3, 4, 3, [168, 214, 232]);
+    p.px(10, 8, 210, 178, 92);
+    for (let y = 1; y < 15; y++) {
+      p.px(4, y, 96, 70, 40);
+      p.px(11, y, 96, 70, 40);
+    }
+    for (let x = 4; x < 12; x++) {
+      p.px(x, 1, 96, 70, 40);
+      p.px(x, 14, 96, 70, 40);
+    }
+  },
 };
+
+/** Redstone wire: a dust cross on a transparent tile (BOX top face). */
+function wirePainter(c: RGB): Painter {
+  return (p) => {
+    p.clear();
+    for (let i = 0; i < N; i++) {
+      for (let k = 6; k <= 9; k++) {
+        const f = 1 + (p.rand() - 0.5) * 0.3;
+        if (k === 6 || k === 9 ? p.rand() < 0.55 : true) {
+          p.px(i, k, c[0] * f, c[1] * f, c[2] * f);
+          p.px(k, i, c[0] * f, c[1] * f, c[2] * f);
+        }
+      }
+    }
+    // Bright core line when powered look is wanted (brighter base color).
+    for (let i = 0; i < N; i++) {
+      p.px(i, 7, Math.min(255, c[0] * 1.2), c[1], c[2]);
+      p.px(7, i, Math.min(255, c[0] * 1.2), c[1], c[2]);
+    }
+  };
+}
+
+/** Lever as a CROSS texture: cobble base + tilted handle (red tip when on). */
+function leverPainter(on: boolean): Painter {
+  return (p) => {
+    p.clear();
+    // Base plate.
+    p.rect(5, 12, 6, 3, [110, 110, 114]);
+    p.rect(6, 11, 4, 1, [130, 130, 134]);
+    // Handle: tilts left when off, right when on.
+    for (let i = 0; i < 7; i++) {
+      const x = on ? 8 + Math.floor(i * 0.5) : 8 - Math.floor(i * 0.5);
+      p.px(x, 11 - i, 140, 106, 62);
+      p.px(x + 1, 11 - i, 108, 82, 48);
+    }
+    const tipX = on ? 11 : 5;
+    if (on) {
+      p.px(tipX, 4, 255, 80, 60);
+      p.px(tipX + 1, 4, 255, 120, 90);
+      p.px(tipX, 3, 255, 160, 120);
+    } else {
+      p.px(tipX, 4, 150, 60, 50);
+      p.px(tipX - 1, 4, 120, 50, 42);
+    }
+  };
+}
+
+/** Shared plank door face (panel grooves + frame). */
+function doorBase(p: TilePainter): void {
+  p.grainV([158, 122, 70], [128, 98, 56], 4);
+  p.border([104, 78, 44]);
+  p.rect(3, 3, 10, 1, [118, 90, 52]);
+  p.rect(3, 12, 10, 1, [118, 90, 52]);
+  p.rect(3, 3, 1, 10, [118, 90, 52]);
+  p.rect(12, 3, 1, 10, [118, 90, 52]);
+}
 
 const LEATHER_PAL: [RGB, RGB] = [[168, 108, 62], [204, 146, 92]];
 const IRON_PAL: [RGB, RGB] = [[198, 202, 212], [240, 242, 248]];

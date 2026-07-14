@@ -10,7 +10,7 @@ import {
 import { mulberry32, hashSeed, Random, hash2D } from '../core/prng';
 import { SimplexNoise, FBM2D } from '../core/noise';
 import { matchRecipe, smeltResult, stackFuel } from '../core/recipes';
-import { B, blockDef, fluidLevel, waterWithLevel, lavaWithLevel, furnaceLitVariant } from '../core/blocks';
+import { B, blockDef, fluidLevel, waterWithLevel, lavaWithLevel, furnaceLitVariant, pistonDir } from '../core/blocks';
 import { ITEM, makeStack, itemDef } from '../core/items';
 import { insertStack, clickSlot, Slots } from '../core/inventory';
 
@@ -173,6 +173,38 @@ describe('crafting recipe matrix validator (Module 6)', () => {
     expect(matchRecipe([C, 0, 0, S, 0, 0, S, 0, 0], 3)?.result).toBe(ITEM.STONE_SHOVEL);
     // Stone pickaxe
     expect(matchRecipe([C, C, C, 0, S, 0, 0, S, 0], 3)?.result).toBe(ITEM.STONE_PICKAXE);
+  });
+
+  it('matches the redstone-lite recipes (Phase 4)', () => {
+    const P = B.OAK_PLANKS;
+    const C = B.COBBLESTONE;
+    const R = ITEM.REDSTONE;
+    // Lever: stick over cobblestone.
+    expect(matchRecipe([ITEM.STICK, 0, 0, C, 0, 0, 0, 0, 0], 3)?.result).toBe(B.LEVER);
+    // Pressure plate: two planks side by side.
+    expect(matchRecipe([P, P, 0, 0], 2)?.result).toBe(B.PRESSURE_PLATE);
+    // Lamp: redstone cross around glowstone.
+    expect(matchRecipe([0, R, 0, R, B.GLOWSTONE, R, 0, R, 0], 3)?.result).toBe(B.REDSTONE_LAMP);
+    // Door: 2x3 planks.
+    expect(matchRecipe([P, P, 0, P, P, 0, P, P, 0], 3)?.result).toBe(ITEM.DOOR);
+    // Trapdoor: 3x2 planks -> 2 trapdoors.
+    const td = matchRecipe([P, P, P, P, P, P, 0, 0, 0], 3);
+    expect(td?.result).toBe(B.TRAPDOOR);
+    expect(td?.count).toBe(2);
+    // Piston.
+    expect(
+      matchRecipe([P, P, P, C, ITEM.IRON_INGOT, C, C, R, C], 3)?.result,
+    ).toBe(B.PISTON_N);
+    // Redstone block round-trip.
+    expect(matchRecipe([R, R, R, R, R, R, R, R, R], 3)?.result).toBe(B.REDSTONE_BLOCK);
+    expect(matchRecipe([B.REDSTONE_BLOCK, 0, 0, 0], 2)?.result).toBe(ITEM.REDSTONE);
+  });
+
+  it('piston direction vectors match the N,S,E,W id order', () => {
+    expect(pistonDir(B.PISTON_N)).toEqual([0, -1]);
+    expect(pistonDir(B.PISTON_S)).toEqual([0, 1]);
+    expect(pistonDir(B.PISTON_EXT_E)).toEqual([1, 0]);
+    expect(pistonDir(B.PISTON_HEAD_W)).toEqual([-1, 0]);
   });
 
   it('assigns correct tool categories and tiers', () => {

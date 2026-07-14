@@ -128,6 +128,24 @@ export const TILE = {
   ITEM_BOOTS_DIAMOND: 115,
   ENCHANT_TOP: 116,
   ENCHANT_SIDE: 117,
+  REDSTONE_ORE: 118,
+  REDSTONE_WIRE_T: 119,
+  REDSTONE_WIRE_ON_T: 120,
+  LEVER_T: 121,
+  LEVER_ON_T: 122,
+  PLATE_T: 123,
+  REDSTONE_LAMP_T: 124,
+  REDSTONE_LAMP_ON_T: 125,
+  REDSTONE_BLOCK_T: 126,
+  DOOR_BOTTOM_T: 127,
+  DOOR_TOP_T: 128,
+  TRAPDOOR_T: 129,
+  PISTON_SIDE: 130,
+  PISTON_BACK: 131,
+  PISTON_FRONT: 132,
+  PISTON_OPEN: 133,
+  ITEM_REDSTONE: 134,
+  ITEM_DOOR: 135,
 } as const;
 
 export const ATLAS_TILES = 32; // 32x32 grid of tiles
@@ -206,6 +224,39 @@ export const B = {
   DIAMOND_BLOCK: 66,
   BED: 67,
   ENCHANTING_TABLE: 68,
+  // Redstone-lite (Phase 4). ON/OFF variants are distinct ids so the whole
+  // signal state flows through the ordinary block pipeline (mesh + light +
+  // persistence journal) with zero extra metadata.
+  REDSTONE_ORE: 69,
+  REDSTONE_WIRE: 70,
+  REDSTONE_WIRE_ON: 71,
+  LEVER: 72,
+  LEVER_ON: 73,
+  PRESSURE_PLATE: 74,
+  PRESSURE_PLATE_ON: 75,
+  REDSTONE_LAMP: 76,
+  REDSTONE_LAMP_ON: 77,
+  REDSTONE_BLOCK: 78,
+  DOOR_BOTTOM: 79,
+  DOOR_TOP: 80,
+  DOOR_BOTTOM_OPEN: 81,
+  DOOR_TOP_OPEN: 82,
+  TRAPDOOR: 83,
+  TRAPDOOR_OPEN: 84,
+  // Pistons: 4 horizontal facings (N,S,E,W like furnaces), plus the extended
+  // base and the pushed-out head as separate blocks.
+  PISTON_N: 85,
+  PISTON_S: 86,
+  PISTON_E: 87,
+  PISTON_W: 88,
+  PISTON_EXT_N: 89,
+  PISTON_EXT_S: 90,
+  PISTON_EXT_E: 91,
+  PISTON_EXT_W: 92,
+  PISTON_HEAD_N: 93,
+  PISTON_HEAD_S: 94,
+  PISTON_HEAD_E: 95,
+  PISTON_HEAD_W: 96,
 } as const;
 
 export type BlockId = number;
@@ -216,7 +267,11 @@ export const enum RenderType {
   CUTOUT = 2, // cube with alpha-tested holes (leaves, glass)
   CROSS = 3, // X-shaped pair of quads (plants, torch)
   FLUID = 4, // water / lava with level-based height
+  BOX = 5, // one or more partial cuboids (doors, plates, piston heads, wire)
 }
+
+/** Partial cuboid in block-local coords: [x0, y0, z0, x1, y1, z1] in 0..1. */
+export type BlockBox = readonly [number, number, number, number, number, number];
 
 export interface BlockDef {
   id: number;
@@ -245,6 +300,8 @@ export interface BlockDef {
   replaceable: boolean;
   /** Random-tick behavior participates (grass spread, leaf decay). */
   randomTicks: boolean;
+  /** Partial cuboids for RenderType.BOX blocks. */
+  boxes?: ReadonlyArray<BlockBox>;
 }
 
 function tile6(t: number): [number, number, number, number, number, number] {
@@ -375,6 +432,99 @@ def(B.ENCHANTING_TABLE, 'Enchanting Table', tileTSB(TILE.ENCHANT_TOP, TILE.ENCHA
   hardness: 4, tool: 'pickaxe', minTier: 1, lightEmit: 7,
 });
 
+// --- Redstone-lite ----------------------------------------------------------
+def(B.REDSTONE_ORE, 'Redstone Ore', tile6(TILE.REDSTONE_ORE), {
+  hardness: 3, tool: 'pickaxe', minTier: 2, drop: 256 + 50 /* ITEM.REDSTONE */, dropCount: [1, 4],
+});
+const wireDef = {
+  solid: false, opaque: false, renderType: RenderType.BOX as RenderType,
+  hardness: 0.02, drop: 256 + 50 /* ITEM.REDSTONE */, lightFilter: 0,
+  boxes: [[0, 0, 0, 1, 0.04, 1]] as BlockBox[],
+};
+def(B.REDSTONE_WIRE, 'Redstone Dust', tile6(TILE.REDSTONE_WIRE_T), wireDef);
+def(B.REDSTONE_WIRE_ON, 'Redstone Dust', tile6(TILE.REDSTONE_WIRE_ON_T), { ...wireDef, lightEmit: 3 });
+def(B.LEVER, 'Lever', tile6(TILE.LEVER_T), {
+  solid: false, opaque: false, renderType: RenderType.CROSS, hardness: 0.1, lightFilter: 0,
+});
+def(B.LEVER_ON, 'Lever', tile6(TILE.LEVER_ON_T), {
+  solid: false, opaque: false, renderType: RenderType.CROSS, hardness: 0.1, drop: B.LEVER, lightFilter: 0,
+});
+const plateDef = {
+  solid: false, opaque: false, renderType: RenderType.BOX as RenderType,
+  hardness: 0.4, tool: 'axe' as const, drop: B.PRESSURE_PLATE, lightFilter: 0,
+};
+def(B.PRESSURE_PLATE, 'Pressure Plate', tile6(TILE.PLATE_T), {
+  ...plateDef, boxes: [[0.0625, 0, 0.0625, 0.9375, 0.05, 0.9375]],
+});
+def(B.PRESSURE_PLATE_ON, 'Pressure Plate', tile6(TILE.PLATE_T), {
+  ...plateDef, boxes: [[0.0625, 0, 0.0625, 0.9375, 0.025, 0.9375]],
+});
+def(B.REDSTONE_LAMP, 'Redstone Lamp', tile6(TILE.REDSTONE_LAMP_T), { hardness: 0.6 });
+def(B.REDSTONE_LAMP_ON, 'Redstone Lamp', tile6(TILE.REDSTONE_LAMP_ON_T), {
+  hardness: 0.6, drop: B.REDSTONE_LAMP, lightEmit: 15,
+});
+def(B.REDSTONE_BLOCK, 'Block of Redstone', tile6(TILE.REDSTONE_BLOCK_T), { hardness: 2.5, tool: 'pickaxe', minTier: 1 });
+
+// Doors are two stacked BOX panels; the open variants swing the panel onto
+// the X axis and stop colliding. Both halves drop a single door item.
+const doorDef = {
+  opaque: false, renderType: RenderType.BOX as RenderType,
+  hardness: 2, tool: 'axe' as const, drop: 256 + 51 /* ITEM.DOOR */, lightFilter: 0,
+};
+const DOOR_CLOSED: BlockBox[] = [[0, 0, 0, 1, 1, 0.19]];
+const DOOR_OPEN: BlockBox[] = [[0, 0, 0, 0.19, 1, 1]];
+def(B.DOOR_BOTTOM, 'Door', tile6(TILE.DOOR_BOTTOM_T), { ...doorDef, boxes: DOOR_CLOSED });
+def(B.DOOR_TOP, 'Door', tile6(TILE.DOOR_TOP_T), { ...doorDef, drop: -1, boxes: DOOR_CLOSED });
+def(B.DOOR_BOTTOM_OPEN, 'Door', tile6(TILE.DOOR_BOTTOM_T), { ...doorDef, solid: false, boxes: DOOR_OPEN });
+def(B.DOOR_TOP_OPEN, 'Door', tile6(TILE.DOOR_TOP_T), { ...doorDef, solid: false, drop: -1, boxes: DOOR_OPEN });
+def(B.TRAPDOOR, 'Trapdoor', tile6(TILE.TRAPDOOR_T), {
+  opaque: false, renderType: RenderType.BOX, hardness: 2, tool: 'axe', lightFilter: 0,
+  boxes: [[0, 0.84, 0, 1, 1, 1]],
+});
+def(B.TRAPDOOR_OPEN, 'Trapdoor', tile6(TILE.TRAPDOOR_T), {
+  solid: false, opaque: false, renderType: RenderType.BOX, hardness: 2, tool: 'axe',
+  drop: B.TRAPDOOR, lightFilter: 0, boxes: [[0, 0, 0.84, 1, 1, 1]],
+});
+
+// Pistons. Tile order per face: [+X(E), -X(W), top, bottom, +Z(S), -Z(N)].
+function pistonTiles(face: 'n' | 's' | 'e' | 'w', front: number): [number, number, number, number, number, number] {
+  const S = TILE.PISTON_SIDE;
+  const K = TILE.PISTON_BACK;
+  if (face === 'n') return [S, S, S, S, K, front];
+  if (face === 's') return [S, S, S, S, front, K];
+  if (face === 'e') return [front, K, S, S, S, S];
+  return [K, front, S, S, S, S];
+}
+const FACES4 = ['n', 's', 'e', 'w'] as const;
+// Extended base body: the front quarter is vacated for the head's arm.
+const EXT_BODY: Record<(typeof FACES4)[number], BlockBox[]> = {
+  n: [[0, 0, 0.25, 1, 1, 1]],
+  s: [[0, 0, 0, 1, 1, 0.75]],
+  e: [[0, 0, 0, 0.75, 1, 1]],
+  w: [[0.25, 0, 0, 1, 1, 1]],
+};
+// Head: face plate at the far side + arm reaching back into the base.
+const HEAD_BODY: Record<(typeof FACES4)[number], BlockBox[]> = {
+  n: [[0, 0, 0, 1, 1, 0.25], [0.375, 0.375, 0.25, 0.625, 0.625, 1]],
+  s: [[0, 0, 0.75, 1, 1, 1], [0.375, 0.375, 0, 0.625, 0.625, 0.75]],
+  e: [[0.75, 0, 0, 1, 1, 1], [0, 0.375, 0.375, 0.75, 0.625, 0.625]],
+  w: [[0, 0, 0, 0.25, 1, 1], [0.25, 0.375, 0.375, 1, 0.625, 0.625]],
+};
+for (let i = 0; i < 4; i++) {
+  const face = FACES4[i];
+  def(B.PISTON_N + i, 'Piston', pistonTiles(face, TILE.PISTON_FRONT), {
+    hardness: 1.5, drop: B.PISTON_N,
+  });
+  def(B.PISTON_EXT_N + i, 'Piston', pistonTiles(face, TILE.PISTON_OPEN), {
+    opaque: false, renderType: RenderType.BOX, hardness: 1.5, drop: B.PISTON_N,
+    lightFilter: 0, boxes: EXT_BODY[face],
+  });
+  def(B.PISTON_HEAD_N + i, 'Piston Head', pistonTiles(face, TILE.PISTON_FRONT), {
+    opaque: false, renderType: RenderType.BOX, hardness: 1.5, drop: -1,
+    lightFilter: 0, boxes: HEAD_BODY[face],
+  });
+}
+
 const fluidDefaults = {
   solid: false,
   opaque: false,
@@ -461,6 +611,47 @@ export function isContainer(id: number): boolean {
 
 export function isInteractive(id: number): boolean {
   return isContainer(id) || id === B.CRAFTING_TABLE || id === B.BED || id === B.ENCHANTING_TABLE;
+}
+
+// ---------------------------------------------------------------------------
+// Redstone helpers
+// ---------------------------------------------------------------------------
+export function isDoor(id: number): boolean {
+  return id >= B.DOOR_BOTTOM && id <= B.DOOR_TOP_OPEN;
+}
+
+export function isWire(id: number): boolean {
+  return id === B.REDSTONE_WIRE || id === B.REDSTONE_WIRE_ON;
+}
+
+/** Right-click toggles these directly (no screen). */
+export function isToggleable(id: number): boolean {
+  return (
+    id === B.LEVER || id === B.LEVER_ON ||
+    isDoor(id) ||
+    id === B.TRAPDOOR || id === B.TRAPDOOR_OPEN
+  );
+}
+
+export function isPistonBase(id: number): boolean {
+  return id >= B.PISTON_N && id <= B.PISTON_EXT_W;
+}
+
+export function isPistonHead(id: number): boolean {
+  return id >= B.PISTON_HEAD_N && id <= B.PISTON_HEAD_W;
+}
+
+/** Facing unit vector for any piston base/ext/head id (N,S,E,W order). */
+export function pistonDir(id: number): [number, number] {
+  const face = (id - B.PISTON_N) % 4;
+  // [dx, dz] for n(-Z), s(+Z), e(+X), w(-X)
+  return face === 0 ? [0, -1] : face === 1 ? [0, 1] : face === 2 ? [1, 0] : [-1, 0];
+}
+
+/** Needs a solid block below; pops off otherwise (wire, plates, levers). */
+export function needsFloorSupport(id: number): boolean {
+  return isWire(id) || id === B.PRESSURE_PLATE || id === B.PRESSURE_PLATE_ON ||
+    id === B.LEVER || id === B.LEVER_ON || id === B.DOOR_BOTTOM || id === B.DOOR_BOTTOM_OPEN;
 }
 
 export function blockDef(id: number): BlockDef {
