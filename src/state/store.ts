@@ -35,6 +35,7 @@ export interface Settings {
   dayLengthSec: number;
   sensitivity: number;
   brightness: number; // display gamma, 1 = neutral
+  soundVolume: number; // master volume 0..1
   thirdPerson: boolean;
   touchMode: boolean;
   showDebug: boolean;
@@ -87,6 +88,7 @@ function loadSettings(): Settings {
     dayLengthSec: DEFAULT_DAY_LENGTH_SEC,
     sensitivity: 1,
     brightness: 1,
+    soundVolume: 0.8,
     thirdPerson: false,
     touchMode: typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true,
     showDebug: false,

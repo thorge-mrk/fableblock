@@ -21,6 +21,7 @@ import { World } from '../core/world';
 import { hashSeed } from '../core/prng';
 import { chunkKeyNum, blockIndex } from '../core/coords';
 import { saveWorld, loadWorld, SaveData } from './persistence';
+import { SoundEngine } from './Sound';
 import {
   B, blockDef, isChest, isFurnace, isInteractive, TILE, isWater,
 } from '../core/blocks';
@@ -51,6 +52,8 @@ export class Game {
   private heldView!: HeldItemView;
   private particles!: Particles;
   private particleColor = new THREE.Color();
+  readonly sound = new SoundEngine();
+  private wasInWater = false;
   private genWorker!: Worker;
   private meshWorker!: Worker;
   private logicWorker!: Worker;
@@ -323,6 +326,10 @@ export class Game {
       }
     });
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Browsers only allow audio after a user gesture.
+    const unlockAudio = () => this.sound.unlock();
+    window.addEventListener('pointerdown', unlockAudio);
+    window.addEventListener('keydown', unlockAudio);
     window.addEventListener('pagehide', () => void this.saveNow());
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') void this.saveNow();
@@ -576,6 +583,21 @@ export class Game {
     this.eatCooldown = Math.max(0, this.eatCooldown - dt);
     this.prevMineHeld = input.mineHeld;
 
+    // Footsteps + sparse day/night ambience; splash on entering water.
+    if (this.player.inWater && !this.wasInWater) this.sound.splash();
+    this.wasInWater = this.player.inWater;
+    const under = blockDef(
+      this.world.getBlockId(Math.floor(this.player.x), Math.floor(this.player.y) - 1, Math.floor(this.player.z)),
+    );
+    this.sound.update(
+      dt,
+      this.dayNight.sunLevel > 0.6,
+      alive && !uiOpen && !this.player.inBoat && (effInput.moveX !== 0 || effInput.moveZ !== 0),
+      this.player.onGround,
+      this.player.inWater,
+      under.tool === 'pickaxe',
+    );
+
     // Camera rig
     this.updateCamera(dt);
   }
@@ -686,6 +708,9 @@ export class Game {
       );
     }
 
+    // Rhythmic dig thunks while mining.
+    if (Math.random() < dt * 5) this.sound.dig(def.tool === 'pickaxe');
+
     if (this.mineProgress >= 1) {
       this.breakBlock(hit, canHarvest);
       this.stopMining();
@@ -709,6 +734,7 @@ export class Game {
       this.sendLogic({ t: 'breakBE', x: hit.x, y: hit.y, z: hit.z });
     }
     this.world.setBlock(hit.x, hit.y, hit.z, B.AIR);
+    this.sound.breakBlock();
     if (canHarvest && def.drop !== -1) {
       const dropId = def.drop ?? hit.id;
       this.sendLogic({
@@ -778,6 +804,7 @@ export class Game {
       this.eatCooldown = 1;
       gameStore.set({ health: Math.min(PLAYER_MAX_HP, gameStore.get().health + def.food) });
       this.consumeHeld();
+      this.sound.eat();
       this.heldView.swing();
       return;
     }
@@ -975,6 +1002,7 @@ export class Game {
       this.sendLogic({ t: 'placeBE', x: px, y: py, z: pz, blockId: placeId });
     }
     this.consumeHeld();
+    this.sound.place();
     this.heldView.swing();
     this.character.swing();
   }
@@ -1104,6 +1132,7 @@ export class Game {
       case 'explosion': {
         const d = Math.hypot(msg.x - this.player.x, msg.y - this.player.y, msg.z - this.player.z);
         this.shake = Math.max(this.shake, Math.min(1.5, (msg.radius * 3) / Math.max(2, d)));
+        this.sound.explosion();
         break;
       }
       case 'stats':
@@ -1118,6 +1147,7 @@ export class Game {
     if (s.phase !== 'playing') return;
     const hp = Math.max(0, s.health - amount);
     gameStore.set({ health: hp });
+    this.sound.hurt();
     this.player.vx += kx;
     this.player.vz += kz;
     if (kx !== 0 || kz !== 0) this.player.vy += 3;
@@ -1168,6 +1198,7 @@ export class Game {
       return;
     }
     this.spawnPoint = [hit.x + 0.5, hit.y + 1.1, hit.z + 0.5];
+    this.sound.sleep();
     gameStore.set({ sleeping: true });
     window.setTimeout(() => {
       if (gameStore.get().phase !== 'playing') {
@@ -1207,6 +1238,7 @@ export class Game {
     });
     document.exitPointerLock?.();
     this.stopMining();
+    this.sound.click();
     // Clear held-action state: on touch the overlay unmounts before its
     // touchend fires, which would otherwise leave use/mine latched and
     // instantly re-open the screen after closing it.
@@ -1370,6 +1402,7 @@ export class Game {
     const scale = QUALITY_SCALE[s.quality] || window.devicePixelRatio || 1;
     this.renderer.setPixelRatio(Math.min(scale === 0 ? window.devicePixelRatio : scale, 2.5));
     this.dayNight.dayLengthSec = s.dayLengthSec;
+    this.sound.setVolume(s.soundVolume);
   }
 
   toggleFullscreen(): void {

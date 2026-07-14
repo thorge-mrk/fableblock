@@ -192,6 +192,15 @@ export function PauseScreen(): React.ReactElement {
           format={(v) => `${Math.round(v * 100)}%`}
           onChange={(v) => apply({ brightness: v })}
         />
+        <SettingSlider
+          label="Sound Volume"
+          value={settings.soundVolume}
+          min={0}
+          max={1}
+          step={0.05}
+          format={(v) => `${Math.round(v * 100)}%`}
+          onChange={(v) => apply({ soundVolume: v })}
+        />
         <label className="flex w-72 mx-auto my-3 text-white text-sm justify-between items-center">
           <span>Touch Controls</span>
           <input
