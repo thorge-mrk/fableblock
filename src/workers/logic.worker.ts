@@ -22,6 +22,7 @@ import { EntityType, ENTITY_DEFS, AnimFlag, isFarmAnimal } from '../core/entitie
 import { ItemStack, makeStack, itemDef } from '../core/items';
 import { Slots, insertStack, clickSlot, cloneStack, stacksEqualType } from '../core/inventory';
 import { smeltResult, stackFuel } from '../core/recipes';
+import { runRedstone, isRedstoneComponent, isPlate, defaultCanPush } from '../core/redstone';
 import { Random, deriveSeed } from '../core/prng';
 import {
   TICK_MS, GRAVITY, TERMINAL_VELOCITY, FLUID_PUSH, WATER_TICK_INTERVAL, LAVA_TICK_INTERVAL,
@@ -72,6 +73,91 @@ function setBlockLocal(x: number, y: number, z: number, id: number): void {
   world.setRaw(x, y, z, (v & 0xff00) | (id & 0xff));
   outBlocks.push(x, y, z, id);
   scheduleFluidAround(x, y, z);
+  onBlockIdChanged(x, y, z, voxelId(v), id);
+}
+
+// ---------------------------------------------------------------------------
+// Redstone-lite (Phase 4): dirty tracking + pressure plates
+// ---------------------------------------------------------------------------
+const redstoneDirty: Array<[number, number, number]> = [];
+const redstoneDirtySet = new Set<string>();
+const plates = new Map<string, [number, number, number]>();
+const devicePrev = new Map<string, boolean>();
+
+// Fast per-id component lookup for the chunk scans.
+const RS_LUT = new Uint8Array(256);
+for (let i = 0; i < 256; i++) RS_LUT[i] = isRedstoneComponent(i) ? 1 : 0;
+
+function markRedstone(x: number, y: number, z: number): void {
+  const k = x + ',' + y + ',' + z;
+  if (redstoneDirtySet.has(k)) return;
+  redstoneDirtySet.add(k);
+  redstoneDirty.push([x, y, z]);
+}
+
+/** Track every block-ID transition (own writes + main-thread patches). */
+function onBlockIdChanged(x: number, y: number, z: number, before: number, after: number): void {
+  if (RS_LUT[before] || RS_LUT[after]) markRedstone(x, y, z);
+  else {
+    // A plain block appearing/vanishing next to wire still changes the graph.
+    for (const [dx, dy, dz] of NEIGHBORS6) {
+      if (RS_LUT[world.getBlockId(x + dx, y + dy, z + dz)]) {
+        markRedstone(x, y, z);
+        break;
+      }
+    }
+  }
+  const k = x + ',' + y + ',' + z;
+  if (isPlate(after)) plates.set(k, [x, y, z]);
+  else if (isPlate(before)) plates.delete(k);
+}
+
+function processRedstone(): void {
+  if (redstoneDirty.length === 0) return;
+  const batch = redstoneDirty.slice();
+  redstoneDirty.length = 0;
+  redstoneDirtySet.clear();
+  runRedstone(
+    world, batch, setBlockLocal, devicePrev,
+    (x, y, z, id) => defaultCanPush(id) && !blockEntities.has(beKey(x, y, z)),
+  );
+}
+
+/** Plates read entity + player weight every other tick. */
+function tickPlates(): void {
+  if (tickCount % 2 !== 0 || plates.size === 0) return;
+  for (const [k, [x, y, z]] of plates) {
+    if (!chunkLoaded(x, z)) continue;
+    const id = world.getBlockId(x, y, z);
+    if (!isPlate(id)) {
+      plates.delete(k);
+      continue;
+    }
+    let occupied = false;
+    if (
+      player.valid && player.health > 0 &&
+      player.x > x - 0.15 && player.x < x + 1.15 &&
+      player.z > z - 0.15 && player.z < z + 1.15 &&
+      player.y > y - 0.4 && player.y < y + 0.9
+    ) {
+      occupied = true;
+    }
+    if (!occupied) {
+      for (const e of queryRange(x + 0.5, y + 0.5, z + 0.5, 1.4)) {
+        if (e.dead) continue;
+        if (
+          e.x > x - 0.1 && e.x < x + 1.1 &&
+          e.z > z - 0.1 && e.z < z + 1.1 &&
+          e.y > y - 0.5 && e.y < y + 0.8
+        ) {
+          occupied = true;
+          break;
+        }
+      }
+    }
+    const want = occupied ? B.PRESSURE_PLATE_ON : B.PRESSURE_PLATE;
+    if (id !== want) setBlockLocal(x, y, z, want);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1742,6 +1828,8 @@ function tick(): void {
   processFluids();
   randomTicks();
   rebuildSpatial();
+  tickPlates();
+  processRedstone();
 
   // Block entities
   let sessionBEChanged = false;
@@ -1828,8 +1916,21 @@ function loop(): void {
 // Message handling
 // ---------------------------------------------------------------------------
 function handleChunk(cx: number, cz: number, data: ArrayBuffer, bes: BlockEntitySpawn[], mobs: { type: number; x: number; y: number; z: number }[], village: VillageDef | null): void {
-  world.addChunk(cx, cz, new Uint16Array(data));
+  const arr = new Uint16Array(data);
+  world.addChunk(cx, cz, arr);
   const ck = chunkKey(cx, cz);
+
+  // Register redstone parts (plates need ticking, circuits need an initial
+  // evaluation so journal-replayed states settle).
+  for (let i = 0; i < arr.length; i++) {
+    const id = arr[i] & 0xff;
+    if (!RS_LUT[id]) continue;
+    const x = cx * 16 + (i & 15);
+    const y = i >> 8;
+    const z = cz * 16 + ((i >> 4) & 15);
+    markRedstone(x, y, z);
+    if (isPlate(id)) plates.set(x + ',' + y + ',' + z, [x, y, z]);
+  }
 
   for (const b of bes) {
     const kind = beKindFor(b.blockId);
@@ -1910,6 +2011,7 @@ ctx.onmessage = (e: MessageEvent<ToLogicMsg>) => {
         const after = voxelId(cells[i + 3]);
         if (before !== after) {
           scheduleFluidAround(x, y, z);
+          onBlockIdChanged(x, y, z, before, after);
           // A block entity's block was replaced underneath it: clean up.
           const be = blockEntities.get(beKey(x, y, z));
           if (be && beKindFor(after) !== be.kind) {
