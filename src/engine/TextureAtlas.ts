@@ -612,9 +612,12 @@ const PAINTERS: Record<number, Painter> = {
   [TILE.GOLD_ORE]: orePainter([252, 222, 112], 'gold'),
   [TILE.DIAMOND_ORE]: orePainter([93, 236, 245], 'diamond'),
   [TILE.GLASS]: (p) => {
+    // Framed pane: steel-blue frame, corner rivets, one diagonal streak.
     p.clear();
-    p.border([205, 232, 238], 1);
-    for (const [x, y] of [[3, 3], [4, 4], [11, 10], [12, 11]] as const) p.px(x, y, 230, 245, 250, 150);
+    p.border([176, 208, 218], 1);
+    for (const [x, y] of [[1, 1], [14, 1], [1, 14], [14, 14]] as const) p.px(x, y, 132, 162, 174);
+    for (let i = 0; i < 6; i++) p.px(9 - i, 3 + i, 226, 244, 250, 170);
+    for (let i = 0; i < 4; i++) p.px(12 - i, 8 + i, 214, 236, 244, 120);
   },
   [TILE.SNOW_TOP]: (p) => p.noiseFill([240, 246, 250], 0.05),
   [TILE.SNOW_SIDE]: (p) => {
@@ -655,14 +658,22 @@ const PAINTERS: Record<number, Painter> = {
     p.px(8, 5, 180, 140, 30);
   },
   [TILE.TORCH]: (p) => {
+    // Wrapped stick with a hot coal head and a soft halo (P5-5 glow pass).
     p.clear();
     for (let y = 6; y < N; y++) {
-      p.px(7, y, 120, 90, 50);
-      p.px(8, y, 100, 75, 40);
+      p.px(7, y, 128, 96, 52);
+      p.px(8, y, 102, 76, 42);
     }
-    p.rect(7, 3, 2, 3, [255, 190, 60]);
-    p.px(7, 2, 255, 240, 160);
-    p.px(8, 2, 255, 240, 160);
+    p.px(7, 9, 84, 60, 34); // wrap band
+    p.px(8, 9, 84, 60, 34);
+    // Halo, then head, then white-hot core.
+    for (const [hx, hy] of [[6, 2], [9, 2], [6, 5], [9, 5], [7, 1], [8, 1], [7, 6], [8, 6]] as const) {
+      p.px(hx, hy, 255, 180, 60, 90);
+    }
+    p.rect(7, 2, 2, 4, [255, 170, 40]);
+    p.rect(7, 2, 2, 2, [255, 224, 120]);
+    p.px(7, 2, 255, 250, 200);
+    p.px(8, 3, 255, 240, 170);
   },
   [TILE.CRAFTING_TABLE_TOP]: (p) => {
     // Wood base with the iconic recessed 3x3 crafting grid.
@@ -731,51 +742,84 @@ const PAINTERS: Record<number, Painter> = {
     p.disc(8, 8, 1.6, [22, 22, 24]);
   },
   [TILE.CHEST_FRONT]: (p) => {
-    p.noiseFill([162, 116, 56], 0.1);
-    p.border([110, 78, 38], 1);
-    for (let x = 0; x < N; x++) p.px(x, 7, 110, 78, 38);
-    p.rect(7, 6, 2, 3, [150, 150, 150]);
+    chestBody(p);
+    // Riveted iron hasp with a keyhole.
+    p.rect(6, 5, 4, 5, [88, 92, 98]);
+    p.rect(7, 6, 2, 3, [168, 172, 180]);
+    p.px(7, 7, 40, 42, 46);
+    p.px(8, 8, 40, 42, 46);
+    p.px(6, 5, 200, 204, 210);
   },
-  [TILE.CHEST_SIDE]: (p) => {
-    p.noiseFill([162, 116, 56], 0.1);
-    p.border([110, 78, 38], 1);
-    for (let x = 0; x < N; x++) p.px(x, 7, 110, 78, 38);
-  },
+  [TILE.CHEST_SIDE]: (p) => chestBody(p),
   [TILE.CHEST_TOP]: (p) => {
-    p.noiseFill([170, 124, 62], 0.1);
-    p.border([110, 78, 38], 1);
+    p.grainV([176, 130, 66], [140, 104, 52], 3);
+    p.border([104, 74, 36], 1);
+    // Iron corner caps.
+    for (const [x, y] of [[1, 1], [13, 1], [1, 13], [13, 13]] as const) {
+      p.rect(x, y, 2, 2, [128, 132, 140]);
+    }
+    p.shade(0, 0, N, 2, 1.12);
   },
   [TILE.HOPPER_TOP]: (p) => {
-    p.noiseFill([72, 72, 72], 0.12);
-    p.border([50, 50, 50], 1);
-    p.rect(6, 6, 4, 4, [25, 25, 25]);
+    p.cellNoise([78, 78, 82], 0.1, 2);
+    p.border([48, 48, 52], 1);
+    p.rect(3, 3, 10, 10, [52, 52, 56]);
+    p.rect(5, 5, 6, 6, [30, 30, 34]);
+    p.rect(6, 6, 4, 4, [16, 16, 18]);
+    p.shade(0, 0, N, 2, 1.15);
   },
   [TILE.HOPPER_SIDE]: (p) => {
-    p.noiseFill([85, 85, 85], 0.12);
+    p.cellNoise([88, 88, 92], 0.1, 2);
     for (let y = 0; y < N; y++) {
       const inset = Math.floor(y / 3);
       for (let x = 0; x < inset; x++) {
-        p.px(x, y, 40, 40, 40);
-        p.px(N - 1 - x, y, 40, 40, 40);
+        p.px(x, y, 0, 0, 0, 0);
+        p.px(N - 1 - x, y, 0, 0, 0, 0);
+      }
+      if (inset > 0 && inset < 8) {
+        p.px(inset, y, 46, 46, 50);
+        p.px(N - 1 - inset, y, 46, 46, 50);
       }
     }
+    p.shade(0, 0, N, 3, 1.14);
   },
   [TILE.SPAWNER]: (p) => {
+    // Obsidian-dark lattice cage with ember glow burning inside.
     p.clear();
-    p.noiseFill([28, 38, 48], 0.3);
+    p.noiseFill([30, 36, 46], 0.22);
     for (let x = 0; x < N; x++) {
       for (let y = 0; y < N; y++) {
-        if (x % 3 >= 2 && y % 3 >= 2 && x > 1 && x < 14 && y > 1 && y < 14) p.px(x, y, 0, 0, 0, 0);
+        if (x % 3 === 2 && y % 3 === 2 && x > 1 && x < 14 && y > 1 && y < 14) {
+          // Window into the fire: hotter toward the center.
+          const d = Math.hypot(x - 7.5, y - 7.5);
+          if (d < 4) p.px(x, y, 255, 150 + p.rand() * 60, 40, 220);
+          else p.px(x, y, 120, 60, 30, 200);
+        }
       }
     }
+    p.border([20, 24, 32], 1);
+    p.speckle([52, 62, 76], 6, 1);
   },
   [TILE.WOOL]: (p) => {
-    p.noiseFill([228, 228, 228], 0.1);
-    for (let i = 0; i < 12; i++) p.px(Math.floor(p.rand() * N), Math.floor(p.rand() * N), 208, 208, 208);
+    // Woven fleece: soft rows of curls instead of flat noise.
+    p.noiseFill([230, 228, 224], 0.06);
+    for (let y = 1; y < N; y += 3) {
+      for (let x = 0; x < N; x++) {
+        const yy = y + ((x >> 2) % 2);
+        p.px(x, yy, 210, 206, 200);
+        if (x % 4 === 1) p.px(x, yy + 1, 244, 242, 238);
+      }
+    }
+    p.border([214, 210, 204], 1);
   },
   [TILE.GLOWSTONE]: (p) => {
-    p.cellNoise([220, 180, 90], 0.3, 2);
-    p.speckle([255, 230, 150], 8, 1);
+    // Crystalline cells: bright cores in amber webbing.
+    p.cellNoise([196, 148, 66], 0.24, 3);
+    for (const [cx, cy] of [[3, 4], [10, 3], [5, 10], [12, 11], [8, 7]] as const) {
+      p.rect(cx, cy, 3, 3, [255, 214, 110]);
+      p.px(cx + 1, cy + 1, 255, 244, 180);
+    }
+    p.speckle([140, 96, 40], 6, 1);
   },
   [TILE.WATER]: (p) => {
     for (let y = 0; y < N; y++) {
@@ -1327,6 +1371,21 @@ function leverPainter(on: boolean): Painter {
       p.px(tipX - 1, 4, 120, 50, 42);
     }
   };
+}
+
+/** Chest body: banded planks with iron edge strips (front + sides). */
+function chestBody(p: TilePainter): void {
+  p.grainV([168, 122, 60], [136, 100, 50], 3);
+  p.border([104, 74, 36], 1);
+  // Lid seam + iron bands down both edges.
+  for (let x = 0; x < N; x++) p.px(x, 6, 96, 68, 34);
+  for (let x = 0; x < N; x++) p.px(x, 7, 122, 90, 46);
+  for (let y = 1; y < 15; y++) {
+    p.px(2, y, 128, 132, 140);
+    p.px(13, y, 108, 112, 120);
+  }
+  p.px(2, 1, 188, 192, 200);
+  p.shade(0, 0, N, 3, 1.1);
 }
 
 /** Shared plank door face (panel grooves + frame). */
