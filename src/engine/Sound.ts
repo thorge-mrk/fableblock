@@ -219,6 +219,31 @@ export class SoundEngine {
     }
   }
 
+  // --- Rain loop --------------------------------------------------------------
+  private rainGain: GainNode | null = null;
+
+  /** Continuous rain hiss; call every frame with the current intensity 0..1. */
+  rain(intensity: number): void {
+    if (!this.ctx || !this.master || !this.noise) return;
+    try {
+      if (!this.rainGain && intensity > 0.02) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.noise;
+        src.loop = true;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 1400;
+        this.rainGain = this.ctx.createGain();
+        this.rainGain.gain.value = 0;
+        src.connect(filter).connect(this.rainGain).connect(this.master);
+        src.start();
+      }
+      if (this.rainGain) this.rainGain.gain.value = intensity * 0.16;
+    } catch {
+      // ignore
+    }
+  }
+
   dispose(): void {
     try {
       void this.ctx?.close();

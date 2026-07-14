@@ -22,6 +22,7 @@ import { hashSeed } from '../core/prng';
 import { chunkKeyNum, blockIndex } from '../core/coords';
 import { saveWorld, loadWorld, SaveData } from './persistence';
 import { SoundEngine } from './Sound';
+import { Weather } from './Weather';
 import {
   B, blockDef, isChest, isFurnace, isInteractive, TILE, isWater,
 } from '../core/blocks';
@@ -54,6 +55,7 @@ export class Game {
   private particles!: Particles;
   private particleColor = new THREE.Color();
   readonly sound = new SoundEngine();
+  private weather!: Weather;
   private wasInWater = false;
   private genWorker!: Worker;
   private meshWorker!: Worker;
@@ -217,6 +219,8 @@ export class Game {
     this.scene.add(this.character.group);
     this.boat = new BoatModel();
     this.scene.add(this.boat.group);
+    this.weather = new Weather();
+    this.scene.add(this.weather.group);
     this.heldView = new HeldItemView(this.atlas, this.camera);
     this.particles = new Particles(this.scene);
 
@@ -370,6 +374,21 @@ export class Game {
     this.dayNight.update(dt, this.env, this.scene, this.camera, this.chunks.renderDistance);
     this.env.uTime.value = now / 1000;
     this.env.uGamma.value = store.settings.brightness;
+
+    // Weather: rain curtain + darkened sky/fog while a shower passes.
+    const camSky =
+      this.world.getSun(Math.floor(this.player.x), Math.floor(this.player.y) + 2, Math.floor(this.player.z)) >= 8;
+    this.weather.update(dt, this.player.x, this.player.y + 2, this.player.z, camSky);
+    this.sound.rain(this.weather.intensity * (camSky ? 1 : 0.4));
+    if (this.weather.intensity > 0.01) {
+      const w = this.weather.intensity;
+      this.env.uSunLevel.value *= 1 - 0.3 * w;
+      this.env.uFogFar.value *= 1 - 0.22 * w;
+      this.env.uFogNear.value *= 1 - 0.22 * w;
+      (this.scene.background as THREE.Color).multiplyScalar(1 - 0.28 * w);
+      this.env.uFogColor.value.multiplyScalar(1 - 0.28 * w);
+    }
+
     if (this.player.headInFluid) {
       this.env.uFogNear.value = 2;
       this.env.uFogFar.value = this.player.inLava ? 6 : 24;
