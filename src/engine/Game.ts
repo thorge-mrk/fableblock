@@ -27,6 +27,7 @@ import { Sky } from './Sky';
 import {
   B, blockDef, isChest, isFurnace, isInteractive, TILE, isWater,
   isDoor, isToggleable, isPistonBase, isPistonHead, pistonDir, needsFloorSupport, isWire,
+  hitBox,
 } from '../core/blocks';
 import { ignitePortal, findPortalNear, buildReturnPortal } from '../core/portal';
 import { ITEM, itemDef, isPlaceable, makeStack, ItemStack } from '../core/items';
@@ -893,10 +894,20 @@ export class Game {
     const [dx, dy, dz] = this.player.lookDir();
     const hit = raycastBlocks(this.world, ox, oy, oz, dx, dy, dz, PLAYER_REACH);
 
-    // Selection outline
+    // Selection outline hugs the block's actual hitbox (flowers are small).
     if (hit) {
+      const box = hitBox(hit.id);
       this.outline.visible = true;
-      this.outline.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+      this.outline.position.set(
+        hit.x + (box[0] + box[3]) / 2,
+        hit.y + (box[1] + box[4]) / 2,
+        hit.z + (box[2] + box[5]) / 2,
+      );
+      this.outline.scale.set(
+        Math.max(0.05, box[3] - box[0]),
+        Math.max(0.05, box[4] - box[1]),
+        Math.max(0.05, box[5] - box[2]),
+      );
     } else {
       this.outline.visible = false;
     }
@@ -939,9 +950,19 @@ export class Game {
     gameStore.set({ breakProgress: Math.min(1, this.mineProgress) });
 
     const stage = Math.min(3, Math.floor(this.mineProgress * 4));
+    const cbox = hitBox(hit.id);
     this.crackMesh.visible = true;
     this.crackMesh.geometry = this.crackGeos[stage];
-    this.crackMesh.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+    this.crackMesh.position.set(
+      hit.x + (cbox[0] + cbox[3]) / 2,
+      hit.y + (cbox[1] + cbox[4]) / 2,
+      hit.z + (cbox[2] + cbox[5]) / 2,
+    );
+    this.crackMesh.scale.set(
+      Math.max(0.05, cbox[3] - cbox[0]),
+      Math.max(0.05, cbox[4] - cbox[1]),
+      Math.max(0.05, cbox[5] - cbox[2]),
+    );
     if (Math.random() < dt * 8) this.heldView.swing();
     // Trickle a few fragments off the block face while mining.
     if (Math.random() < dt * 14) {

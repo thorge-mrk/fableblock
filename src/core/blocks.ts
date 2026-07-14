@@ -679,3 +679,39 @@ export function needsFloorSupport(id: number): boolean {
 export function blockDef(id: number): BlockDef {
   return BLOCKS[id & 0xff];
 }
+
+// ---------------------------------------------------------------------------
+// Selection hitboxes: what the crosshair ray actually tests against.
+// Plants, torches and partial blocks get boxes matching their visual size
+// instead of the whole voxel cell.
+// ---------------------------------------------------------------------------
+export const FULL_BOX: BlockBox = [0, 0, 0, 1, 1, 1];
+
+const SELECTION_OVERRIDE: Record<number, BlockBox> = {
+  [B.TALL_GRASS]: [0.14, 0, 0.14, 0.86, 0.72, 0.86],
+  [B.FLOWER_RED]: [0.26, 0, 0.26, 0.74, 0.62, 0.74],
+  [B.FLOWER_YELLOW]: [0.26, 0, 0.26, 0.74, 0.62, 0.74],
+  [B.TORCH]: [0.34, 0, 0.34, 0.66, 0.72, 0.66],
+  [B.LEVER]: [0.26, 0, 0.26, 0.74, 0.62, 0.74],
+  [B.LEVER_ON]: [0.26, 0, 0.26, 0.74, 0.62, 0.74],
+  [B.CACTUS]: [0.06, 0, 0.06, 0.94, 1, 0.94],
+};
+
+/** Ray-selection bounds for a block id (block-local 0..1 coords). */
+export function hitBox(id: number): BlockBox {
+  const over = SELECTION_OVERRIDE[id];
+  if (over) return over;
+  const d = blockDef(id);
+  if (d.boxes && d.boxes.length > 0) {
+    if (d.boxes.length === 1) return d.boxes[0];
+    // Envelope of all partial boxes (piston head plate + arm).
+    let [x0, y0, z0, x1, y1, z1] = d.boxes[0];
+    for (let i = 1; i < d.boxes.length; i++) {
+      const b = d.boxes[i];
+      x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); z0 = Math.min(z0, b[2]);
+      x1 = Math.max(x1, b[3]); y1 = Math.max(y1, b[4]); z1 = Math.max(z1, b[5]);
+    }
+    return [x0, y0, z0, x1, y1, z1];
+  }
+  return FULL_BOX;
+}
