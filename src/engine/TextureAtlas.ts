@@ -227,19 +227,55 @@ function cobblePainter(mossy: boolean): Painter {
   };
 }
 
-function orePainter(ore: RGB): Painter {
+/**
+ * Ores get a per-material signature (P5-4) instead of generic squares:
+ * coal = matte chunks, iron = rough nuggets, gold = diagonal veins,
+ * diamond = faceted rhombs with a gleam.
+ */
+function orePainter(ore: RGB, kind: 'coal' | 'iron' | 'gold' | 'diamond' = 'iron'): Painter {
   return (p) => {
-    p.cellNoise(STONE_GRAY, 0.3, 2);
-    for (let i = 0; i < 5; i++) {
-      const x = 2 + Math.floor(p.rand() * (N - 4));
-      const y = 2 + Math.floor(p.rand() * (N - 4));
-      const s = 1 + Math.floor(p.rand() * 2);
+    p.cellNoise(STONE_GRAY, 0.16, 3);
+    if (kind === 'diamond') {
+      for (const [cx, cy] of [[4, 5], [11, 4], [7, 10], [12, 12]] as const) {
+        // Rhombus facets: left face lit, right face shaded, white sparkle.
+        for (let d = -2; d <= 2; d++) {
+          const w = 2 - Math.abs(d);
+          for (let k = -w; k <= w; k++) {
+            const shade = k < 0 ? 1.15 : 0.8;
+            p.px(cx + k, cy + d, ore[0] * shade, ore[1] * shade, ore[2] * shade);
+          }
+        }
+        p.px(cx, cy - 1, 235, 255, 253);
+      }
+      return;
+    }
+    if (kind === 'gold') {
+      for (let v = 0; v < 3; v++) {
+        let x = 1 + Math.floor(p.rand() * 6);
+        let y = 2 + Math.floor(p.rand() * 10);
+        for (let i = 0; i < 6 + Math.floor(p.rand() * 4); i++) {
+          const f = 1 + (p.rand() - 0.5) * 0.25;
+          p.px(x, y, ore[0] * f, ore[1] * f, ore[2] * f);
+          p.px(x, y + 1, ore[0] * 0.7, ore[1] * 0.7, ore[2] * 0.7);
+          x++;
+          if (p.rand() < 0.45) y += p.rand() < 0.5 ? -1 : 1;
+        }
+      }
+      return;
+    }
+    const chunks = kind === 'coal' ? 6 : 5;
+    for (let i = 0; i < chunks; i++) {
+      const x = 2 + Math.floor(p.rand() * (N - 5));
+      const y = 2 + Math.floor(p.rand() * (N - 5));
+      const s = 2 + Math.floor(p.rand() * 2);
       for (let dy = 0; dy < s; dy++) {
-        for (let dx = 0; dx < s; dx++) {
-          const f = 1 + (p.rand() - 0.5) * 0.3;
+        for (let dx = 0; dx < s - (dy === 0 ? 1 : 0); dx++) {
+          const f = 1 + (p.rand() - 0.5) * (kind === 'coal' ? 0.2 : 0.3);
           p.px(x + dx, y + dy, ore[0] * f, ore[1] * f, ore[2] * f);
         }
       }
+      // Top-left glint on metallic nuggets.
+      if (kind === 'iron') p.px(x, y, Math.min(255, ore[0] * 1.3), Math.min(255, ore[1] * 1.3), Math.min(255, ore[2] * 1.3));
     }
   };
 }
@@ -431,24 +467,54 @@ const PAINTERS: Record<number, Painter> = {
     p.noiseFill([216, 203, 155], 0.08);
     for (const y of [5, 10]) for (let x = 0; x < N; x++) p.px(x, y, 190, 176, 128);
   },
-  [TILE.OAK_LOG_SIDE]: (p) => p.grainV([104, 82, 49], [80, 62, 36], 4),
+  [TILE.OAK_LOG_SIDE]: (p) => {
+    // Bark with deep ridge grooves and a knot.
+    p.grainV([104, 82, 49], [78, 60, 35], 3);
+    for (const x of [2, 6, 11, 14]) {
+      for (let y = 0; y < N; y++) {
+        if (p.rand() < 0.85) p.px(x, y, 66, 50, 30);
+      }
+      p.shade(x + 1, 0, 1, N, 1.18);
+    }
+    const ky = 4 + Math.floor(p.rand() * 8);
+    p.disc(8, ky, 1.6, [70, 52, 30]);
+    p.px(8, ky, 52, 38, 22);
+  },
   [TILE.OAK_LOG_TOP]: (p) => {
-    p.noiseFill([104, 82, 49], 0.12);
-    for (let r = 2; r < 8; r += 2) {
-      for (let a = 0; a < 360; a += 8) {
-        p.px(7.5 + Math.cos((a * Math.PI) / 180) * r, 7.5 + Math.sin((a * Math.PI) / 180) * r, 156, 127, 78);
+    // End grain: bark rim + concentric rings around an off-center heart.
+    p.noiseFill([156, 127, 78], 0.08);
+    p.border([88, 68, 40], 2);
+    for (let r = 1.5; r < 6; r += 1.7) {
+      for (let a = 0; a < 360; a += 5) {
+        p.px(
+          8 + Math.cos((a * Math.PI) / 180) * r,
+          8 + Math.sin((a * Math.PI) / 180) * r * 0.9,
+          118, 93, 56,
+        );
       }
     }
+    p.px(8, 8, 92, 70, 42);
   },
   [TILE.OAK_LEAVES]: (p) => {
+    // Clustered foliage: shadow bed first, bright leaf clumps on top,
+    // ~25% genuine see-through holes for depth.
     p.clear();
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
-        if (p.rand() < 0.84) {
-          const f = 1 + (p.rand() - 0.5) * 0.45;
+        if (p.rand() < 0.62) {
+          const f = 0.6 + p.rand() * 0.45;
           p.px(x, y, LEAF_GREEN[0] * f, LEAF_GREEN[1] * f, LEAF_GREEN[2] * f);
         }
       }
+    }
+    for (let i = 0; i < 30; i++) {
+      const x = Math.floor(p.rand() * N);
+      const y = Math.floor(p.rand() * N);
+      const bright = p.rand() < 0.4;
+      const c: RGB = bright ? [86, 152, 60] : [70, 132, 50];
+      p.px(x, y, c[0], c[1], c[2]);
+      p.px(x + 1, y, c[0] * 0.9, c[1] * 0.9, c[2] * 0.9);
+      p.px(x, y + 1, c[0] * 0.82, c[1] * 0.82, c[2] * 0.82);
     }
   },
   [TILE.BIRCH_LOG_SIDE]: (p) => {
@@ -471,10 +537,10 @@ const PAINTERS: Record<number, Painter> = {
     }
   },
   [TILE.OAK_PLANKS]: plankPainter,
-  [TILE.COAL_ORE]: orePainter([38, 38, 38]),
-  [TILE.IRON_ORE]: orePainter([216, 175, 147]),
-  [TILE.GOLD_ORE]: orePainter([252, 222, 112]),
-  [TILE.DIAMOND_ORE]: orePainter([93, 236, 245]),
+  [TILE.COAL_ORE]: orePainter([38, 38, 38], 'coal'),
+  [TILE.IRON_ORE]: orePainter([216, 175, 147], 'iron'),
+  [TILE.GOLD_ORE]: orePainter([252, 222, 112], 'gold'),
+  [TILE.DIAMOND_ORE]: orePainter([93, 236, 245], 'diamond'),
   [TILE.GLASS]: (p) => {
     p.clear();
     p.border([205, 232, 238], 1);

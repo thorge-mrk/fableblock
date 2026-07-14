@@ -102,6 +102,17 @@ Slider verändert die Szene sichtbar; Tag sieht unverändert aus.
 
 ---
 
+## ✅ STATUS (nach Umsetzungs-Session)
+
+**Komplett erledigt:** Phase 0 (P0-1..3), Phase 1 (P1-1..3), Phase 2 (P2-1, P2-2),
+Phase 3 (P3-1 Bett, P3-2 Speicherung, P3-3 Sound, P3-4 Hunger, P3-5 Tiere+Zucht,
+P3-6 Rüstung, P3-7 Wetter, P3-8 XP+Verzauberung).
+**Phase 5 erledigt:** P5-1 (Painter-Toolkit), P5-2 (Terrain), P5-3/4 (Holz/Laub + Erz-Signaturen),
+P5-7 (Himmel: Sonne/Mond/Sterne/Wolken).
+**Phase 5 offen:** P5-5 (Funktionsblöcke), P5-6 (Item-Icons vereinheitlichen),
+P5-8 (Wasser/Effekte), P5-9 (Mob-Teiltexturen), P5-10 (HUD-Grafiken/Titel-Panorama).
+**Phase 4 offen (optional, XL):** Redstone-lite, Nether.
+
 ## Phase 1 — Mobile-UX
 
 ### P1-1 · Cursor-Stack folgt dem Finger (S)
