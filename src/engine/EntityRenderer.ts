@@ -117,12 +117,19 @@ function faceTexture(kind: string): THREE.Texture {
       break;
     case 'player':
       fill('#d8a888');
-      px(3, 6, 3, 2, '#3858c8');
-      px(10, 6, 3, 2, '#3858c8');
-      px(6, 11, 4, 2, '#a87858');
+      px(3, 6, 3, 2, '#ffffff'); // eye whites
+      px(10, 6, 3, 2, '#ffffff');
+      px(4, 6, 2, 2, '#3858c8'); // iris
+      px(11, 6, 2, 2, '#3858c8');
+      px(3, 5, 3, 1, '#8a6a4a'); // brows
+      px(10, 5, 3, 1, '#8a6a4a');
+      px(7, 9, 2, 1, '#c08868'); // nose
+      px(5, 12, 6, 1, '#a05a48'); // smile
+      px(6, 13, 4, 1, '#8a4a3c');
       px(0, 0, 16, 4, '#5a3a22'); // hair
-      px(0, 4, 2, 3, '#5a3a22');
-      px(14, 4, 2, 3, '#5a3a22');
+      px(2, 4, 2, 2, '#5a3a22');
+      px(12, 4, 2, 2, '#5a3a22');
+      px(0, 0, 16, 1, '#6c4830'); // hair sheen
       break;
     case 'piglin':
       fill('#e8a294');
@@ -720,7 +727,7 @@ const BODY_TEX_CACHE = new Map<string, THREE.Texture>();
  * Procedural 16x16 body-part textures (P5-9): torn shirts, rib cages, hide
  * patches, wool curls — wrapped around whole boxes instead of flat colour.
  */
-function bodyTexture(kind: string): THREE.Texture {
+export function bodyTexture(kind: string): THREE.Texture {
   let tex = BODY_TEX_CACHE.get(kind);
   if (tex) return tex;
   const c = document.createElement('canvas');
@@ -812,6 +819,17 @@ function bodyTexture(kind: string): THREE.Texture {
       px(11, 0, 2, 16, '#5a3a26');
       px(0, 1, 16, 1, '#e8c84a'); // gold trim
       px(7, 6, 2, 2, '#e8c84a'); // buckle
+      break;
+    case 'playerShirt':
+      // FableBlock hero jacket: teal with a zip, chest pocket and belt.
+      fill('#2ca8a8');
+      px(7, 0, 2, 13, '#1c7878'); // zipper placket
+      px(8, 2, 1, 1, '#e8e8e8'); // zip pull
+      px(2, 3, 3, 3, '#238a8a'); // pocket
+      px(2, 3, 3, 1, '#1c7878');
+      px(0, 13, 16, 3, '#7a5a3c'); // belt
+      px(7, 13, 2, 2, '#e8c84a'); // buckle
+      px(0, 0, 16, 1, '#3fc4c4'); // collar highlight
       break;
     case 'golemBody':
       fill('#bcb2a4');

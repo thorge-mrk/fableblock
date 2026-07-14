@@ -36,6 +36,8 @@ let eroNoise!: FBM2D;
 let pvNoise!: FBM2D;
 let tempNoise!: FBM2D;
 let moistNoise!: FBM2D;
+let warpXNoise!: FBM2D;
+let warpZNoise!: FBM2D;
 let caveA!: FBM3D;
 let caveB!: FBM3D;
 let cheese!: FBM3D;
@@ -48,6 +50,10 @@ function initNoise(): void {
   pvNoise = new FBM2D(deriveSeed(seed, 'peaks'), 4, 1 / 280, 0.55, 2.0);
   tempNoise = new FBM2D(deriveSeed(seed, 'temp'), 3, 1 / 1100, 0.5, 2.0);
   moistNoise = new FBM2D(deriveSeed(seed, 'moist'), 3, 1 / 800, 0.5, 2.0);
+  // Domain warp: bends every terrain lookup so coastlines, ridges and biome
+  // borders meander organically instead of following the noise lattice.
+  warpXNoise = new FBM2D(deriveSeed(seed, 'warpX'), 2, 1 / 350, 0.5, 2.0);
+  warpZNoise = new FBM2D(deriveSeed(seed, 'warpZ'), 2, 1 / 350, 0.5, 2.0);
   caveA = new FBM3D(deriveSeed(seed, 'caveA'), 2, 1 / 90, 0.5, 2.2);
   caveB = new FBM3D(deriveSeed(seed, 'caveB'), 2, 1 / 90, 0.5, 2.2);
   cheese = new FBM3D(deriveSeed(seed, 'cheese'), 2, 1 / 140, 0.5, 2.0);
@@ -91,11 +97,14 @@ const PEAK_SPLINE: ReadonlyArray<readonly [number, number]> = [
 ];
 
 function columnInfo(x: number, z: number): ColumnInfo {
-  const cont = contNoise.sample(x, z);
-  const ero = eroNoise.sample(x, z);
-  const pv = pvNoise.sample(x, z);
-  const temp = tempNoise.sample(x, z);
-  const moist = moistNoise.sample(x, z);
+  // Warped sampling coordinates (up to ~36 blocks of lateral bend).
+  const wx = x + warpXNoise.sample(x, z) * 36;
+  const wz = z + warpZNoise.sample(x, z) * 36;
+  const cont = contNoise.sample(wx, wz);
+  const ero = eroNoise.sample(wx, wz);
+  const pv = pvNoise.sample(wx, wz);
+  const temp = tempNoise.sample(wx, wz);
+  const moist = moistNoise.sample(wx, wz);
 
   const base = splineLerp(BASE_SPLINE, cont);
   // Erosion flattens peaks; only above-sea land rises into mountains.
@@ -137,8 +146,11 @@ function isCave(x: number, y: number, z: number, surface: number): boolean {
   const b = caveB.sample(x, y * yScale, z);
   const tube = a * a + b * b;
   // Wider deep down, pinch toward the surface so entrances stay small.
+  // The sum field (free — no extra samples) modulates width along the
+  // tunnel, so passages breathe between crawls and halls.
   const depth = surface - y;
-  const width = depth < 8 ? 0.011 : depth < 16 ? 0.018 : 0.024;
+  let width = depth < 8 ? 0.011 : depth < 16 ? 0.018 : 0.026;
+  width *= 0.7 + Math.abs(a + b) * 0.9;
   if (tube < width) return true;
 
   // Cheese caverns: occasional larger rooms in the deep slice. A high
@@ -279,6 +291,10 @@ function regionOf(c: number): number {
   return Math.floor(c / VILLAGE_REGION);
 }
 
+function regionOf2(c: number, size: number): number {
+  return Math.floor(c / size);
+}
+
 /**
  * Blueprint matrices: layers bottom->top, each layer rows (z) of chars (x).
  *  # wall   C cobble   L log    G glass   D doorway(air)   . interior air
@@ -308,6 +324,24 @@ const DESERT_HUT: string[][] = [
   ['##.##', '#o.b#', '#.T.#', '#...#', '##D##'],
   ['##G##', 'G...G', '#...#', 'G...G', '##.##'],
   ['#####', '#####', '#####', '#####', '#####'],
+];
+
+// Bell-towered chapel: tall log-framed nave with a glowstone beacon.
+const CHURCH: string[][] = [
+  ['CCCCC', 'CCCCC', 'CCCCC', 'CCCCC', 'CCCCC', 'CCCCC'],
+  ['L###L', '#...#', '#.T.#', '#...#', '#...#', 'L#D#L'],
+  ['L#G#L', 'G...G', '#...#', 'G...G', '#...#', 'L#.#L'],
+  ['L###L', '#o..#', '#...#', '#...#', '#...#', 'L###L'],
+  ['LLLLL', 'LRRRL', 'LRRRL', 'LRRRL', 'LRRRL', 'LLLLL'],
+  ['LL LL', 'L   L', '     ', '     ', '     ', '     '],
+  ['LGGLL', 'G   G', '     ', '     ', '     ', '     '],
+  ['LLLLL', 'LoooL', '     ', '     ', '     ', '     '],
+];
+
+// Fenced field: plank border, water channel, crop rows on dirt.
+const FARM: string[][] = [
+  ['PPPPPPP', 'PddWddP', 'PddWddP', 'PddWddP', 'PPPPPPP'],
+  ['P.....P', '.g.q.g.', '.g...g.', '.g.q.g.', 'P.....P'],
 ];
 
 // Classic well: stone ring + water, log corner posts, a roof and a torch.
@@ -347,16 +381,25 @@ function villageForRegion(rx: number, rz: number): VillagePlan | null {
         const buildings: Building[] = [];
         const paths: Array<{ x: number; z: number }> = [];
         const lamps: Array<{ x: number; z: number }> = [];
-        const count = rand.range(4, 7);
+        const count = rand.range(5, 8);
         const wellY = center.height;
         buildings.push({ x: wx - 2, y: wellY, z: wz - 2, blueprint: WELL, rot: 0, desert });
+        let churchPlaced = false;
         for (let i = 0; i < count; i++) {
           const angle = (i / count) * Math.PI * 2 + rand.float() * 0.7;
-          const dist = rand.range(10, 22);
+          const dist = rand.range(10, 24);
           const bxC = Math.round(wx + Math.cos(angle) * dist);
           const bzC = Math.round(wz + Math.sin(angle) * dist);
           const ground = columnInfo(bxC, bzC).height;
-          const bp = desert ? DESERT_HUT : rand.chance(0.35) ? HOUSE_LARGE : HOUSE_SMALL;
+          let bp: string[][];
+          if (!desert && !churchPlaced && rand.chance(0.5)) {
+            bp = CHURCH;
+            churchPlaced = true;
+          } else if (rand.chance(0.25)) {
+            bp = FARM;
+          } else {
+            bp = desert ? DESERT_HUT : rand.chance(0.35) ? HOUSE_LARGE : HOUSE_SMALL;
+          }
           const bw = bp[0][0].length;
           const bd = bp[0].length;
           buildings.push({
@@ -420,6 +463,9 @@ function blueprintChar(
     case 'o': return B.TORCH;
     case 'b': return B.BED;
     case 'W': return B.WATER_SRC;
+    case 'd': return B.DIRT;
+    case 'g': return B.TALL_GRASS;
+    case 'q': return B.FLOWER_YELLOW;
     case 'D':
     case '.': return B.AIR;
     default: return -1;
@@ -438,17 +484,21 @@ function stampVillage(
   const minX = cx * 16;
   const minZ = cz * 16;
 
-  // Paths: stamp gravel/sandstone at the terrain surface.
+  // Paths: 2 blocks wide, stamped at the terrain surface.
   for (const p of plan.paths) {
-    if (p.x < minX || p.x > minX + 15 || p.z < minZ || p.z > minZ + 15) continue;
-    const h = columnInfo(p.x, p.z).height;
-    const idx = blockIndex(p.x - minX, h, p.z - minZ);
-    const cur = voxelId(data[idx]);
-    if (cur === B.GRASS || cur === B.SAND || cur === B.DIRT || cur === B.SNOW_GRASS) {
-      data[idx] = packVoxel(plan.desert ? B.SANDSTONE : B.GRAVEL, 0, 0);
-      // Clear plants above paths.
-      const above = blockIndex(p.x - minX, h + 1, p.z - minZ);
-      if (blockDef(voxelId(data[above])).replaceable) data[above] = packVoxel(B.AIR, 0, 0);
+    for (const [ox, oz] of [[0, 0], [1, 0]] as const) {
+      const px = p.x + ox;
+      const pz = p.z + oz;
+      if (px < minX || px > minX + 15 || pz < minZ || pz > minZ + 15) continue;
+      const h = columnInfo(px, pz).height;
+      const idx = blockIndex(px - minX, h, pz - minZ);
+      const cur = voxelId(data[idx]);
+      if (cur === B.GRASS || cur === B.SAND || cur === B.DIRT || cur === B.SNOW_GRASS) {
+        data[idx] = packVoxel(plan.desert ? B.SANDSTONE : B.GRAVEL, 0, 0);
+        // Clear plants above paths.
+        const above = blockIndex(px - minX, h + 1, pz - minZ);
+        if (blockDef(voxelId(data[above])).replaceable) data[above] = packVoxel(B.AIR, 0, 0);
+      }
     }
   }
 
@@ -518,7 +568,7 @@ function stampVillage(
       }
     }
     // One villager per house interior (skip the well).
-    if (bp !== WELL) {
+    if (bp !== WELL && bp !== FARM) {
       const vx = b.x + (bw >> 1);
       const vz = b.z + (bd >> 1);
       if (vx >= minX && vx <= minX + 15 && vz >= minZ && vz <= minZ + 15 && !spawnedVillager) {
@@ -600,6 +650,180 @@ function rollDungeonLoot(rand: Random): ItemStack[] {
   if (rand.chance(0.12)) loot.push(makeStack(ITEM.DIAMOND, rand.range(1, 2)));
   if (rand.chance(0.3)) loot.push(makeStack(ITEM.ARROW, rand.range(2, 8)));
   return loot;
+}
+
+// ---------------------------------------------------------------------------
+// Surface structures (PRO-6): desert pyramids, stone ruins, forest boulders,
+// cave stalactites. Region-deterministic like villages so every intersecting
+// chunk stamps its slice.
+// ---------------------------------------------------------------------------
+const PYRAMID_REGION = 24; // chunks per pyramid cell (rare landmarks)
+
+interface PyramidPlan {
+  x: number;
+  z: number;
+  y: number;
+  size: number; // half-width of the base
+}
+
+const pyramidCache = new Map<string, PyramidPlan | null>();
+
+function pyramidForRegion(rx: number, rz: number): PyramidPlan | null {
+  const key = rx + ',' + rz;
+  const cached = pyramidCache.get(key);
+  if (cached !== undefined) return cached;
+  const rand = new Random(deriveSeed(seed, 'pyramid:' + key));
+  let plan: PyramidPlan | null = null;
+  if (rand.chance(0.5)) {
+    const ccx = rx * PYRAMID_REGION + 3 + rand.int(PYRAMID_REGION - 6);
+    const ccz = rz * PYRAMID_REGION + 3 + rand.int(PYRAMID_REGION - 6);
+    const wx = ccx * 16 + 8;
+    const wz = ccz * 16 + 8;
+    const c = columnInfo(wx, wz);
+    if (c.biome === Biome.DESERT) {
+      let minH = c.height;
+      let maxH = c.height;
+      for (const [ox, oz] of [[-9, 0], [9, 0], [0, -9], [0, 9]]) {
+        const h = columnInfo(wx + ox, wz + oz).height;
+        minH = Math.min(minH, h);
+        maxH = Math.max(maxH, h);
+      }
+      if (maxH - minH <= 5 && minH > SEA_LEVEL) {
+        plan = { x: wx, z: wz, y: minH, size: 9 };
+      }
+    }
+  }
+  pyramidCache.set(key, plan);
+  if (pyramidCache.size > 64) pyramidCache.delete(pyramidCache.keys().next().value as string);
+  return plan;
+}
+
+/** Step pyramid with a hidden treasure chamber (chests + spawner guard). */
+function stampPyramid(
+  data: Uint16Array,
+  cx: number,
+  cz: number,
+  p: PyramidPlan,
+  blockEntities: BlockEntitySpawn[],
+): void {
+  const minX = cx * 16;
+  const minZ = cz * 16;
+  if (p.x + p.size < minX || p.x - p.size > minX + 15 || p.z + p.size < minZ || p.z - p.size > minZ + 15) return;
+  const rand = new Random(deriveSeed(seed, 'pyloot:' + p.x + ',' + p.z));
+  for (let dz = -p.size; dz <= p.size; dz++) {
+    for (let dx = -p.size; dx <= p.size; dx++) {
+      const x = p.x + dx;
+      const z = p.z + dz;
+      if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15) continue;
+      const ring = Math.max(Math.abs(dx), Math.abs(dz));
+      const top = p.y + (p.size - ring); // steps rise toward the middle
+      const inChamber = Math.abs(dx) <= 2 && Math.abs(dz) <= 2;
+      for (let y = p.y - 4; y <= top; y++) {
+        if (y < 1 || y >= CHUNK_HEIGHT) continue;
+        // Hollow 5x5 chamber, 3 tall, at base level.
+        if (inChamber && y >= p.y - 3 && y <= p.y - 1) {
+          data[blockIndex(x - minX, y, z - minZ)] = packVoxel(B.AIR, 0, 0);
+          continue;
+        }
+        data[blockIndex(x - minX, y, z - minZ)] = packVoxel(B.SANDSTONE, 0, 0);
+      }
+      // Golden capstone.
+      if (ring === 0 && top < CHUNK_HEIGHT) {
+        data[blockIndex(x - minX, top, z - minZ)] = packVoxel(B.GOLD_BLOCK, 0, 0);
+      }
+    }
+  }
+  // Chamber furniture (only from the chunk owning the center).
+  const put = (x: number, y: number, z: number, id: number): boolean => {
+    if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15) return false;
+    data[blockIndex(x - minX, y, z - minZ)] = packVoxel(id, 0, 0);
+    return true;
+  };
+  if (put(p.x - 1, p.y - 3, p.z - 1, B.CHEST_S)) {
+    blockEntities.push({
+      x: p.x - 1, y: p.y - 3, z: p.z - 1, blockId: B.CHEST_S,
+      loot: [
+        makeStack(ITEM.GOLD_INGOT, rand.range(2, 6)),
+        makeStack(ITEM.DIAMOND, rand.range(0, 2)),
+        makeStack(ITEM.REDSTONE, rand.range(2, 8)),
+      ].filter((s) => s.count > 0),
+    });
+  }
+  if (put(p.x + 1, p.y - 3, p.z + 1, B.CHEST_N)) {
+    blockEntities.push({
+      x: p.x + 1, y: p.y - 3, z: p.z + 1, blockId: B.CHEST_N,
+      loot: [makeStack(ITEM.IRON_INGOT, rand.range(1, 5)), makeStack(B.TORCH, rand.range(2, 6))],
+    });
+  }
+  if (put(p.x, p.y - 3, p.z, B.SPAWNER)) {
+    blockEntities.push({ x: p.x, y: p.y - 3, z: p.z, blockId: B.SPAWNER });
+  }
+}
+
+/** Crumbled stone-brick ruins + mossy boulders scattered per chunk. */
+function genRuins(data: Uint16Array, cx: number, cz: number, rand: Random): void {
+  // Boulder cluster (forest): 30% of chunks.
+  const center = columnInfo(cx * 16 + 8, cz * 16 + 8);
+  if (center.biome === Biome.FOREST && rand.chance(0.3)) {
+    const bx = rand.int(12) + 2;
+    const bz = rand.int(12) + 2;
+    const h = columnInfo(cx * 16 + bx, cz * 16 + bz).height;
+    const r = rand.range(1, 2);
+    for (let dy = 0; dy <= r; dy++) {
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (dx * dx + dy * dy + dz * dz > r * r + 1) continue;
+          const x = bx + dx;
+          const z = bz + dz;
+          if (x < 0 || x > 15 || z < 0 || z > 15 || h + dy >= CHUNK_HEIGHT) continue;
+          data[blockIndex(x, h + dy, z)] = packVoxel(rand.chance(0.6) ? B.MOSSY_COBBLESTONE : B.COBBLESTONE, 0, 0);
+        }
+      }
+    }
+  }
+  // Ruined wall corner (plains): 8% of chunks.
+  if (center.biome === Biome.PLAINS && rand.chance(0.08)) {
+    const rx = rand.int(9) + 3;
+    const rz = rand.int(9) + 3;
+    const h = columnInfo(cx * 16 + rx, cz * 16 + rz).height;
+    const len = rand.range(3, 6);
+    for (let i = 0; i < len; i++) {
+      const wallH = 1 + Math.floor(rand.float() * 3);
+      for (let y = 1; y <= wallH; y++) {
+        if (rx + i > 15 || h + y >= CHUNK_HEIGHT) break;
+        data[blockIndex(rx + i, h + y, rz)] = packVoxel(
+          rand.chance(0.3) ? B.CRACKED_STONE_BRICKS : rand.chance(0.3) ? B.MOSSY_COBBLESTONE : B.STONE_BRICKS, 0, 0,
+        );
+      }
+      const sideH = 1 + Math.floor(rand.float() * 2);
+      for (let y = 1; y <= sideH && i < 3; y++) {
+        if (rz + i > 15 || h + y >= CHUNK_HEIGHT) break;
+        data[blockIndex(rx, h + y, rz + i)] = packVoxel(B.STONE_BRICKS, 0, 0);
+      }
+    }
+  }
+}
+
+/** Hang stalactites / raise stalagmites where caves opened up. */
+function genSpeleothems(data: Uint16Array, rand: Random): void {
+  for (let n = 0; n < 40; n++) {
+    const x = rand.int(16);
+    const z = rand.int(16);
+    const y = 6 + rand.int(50);
+    if (y + 1 >= CHUNK_HEIGHT) continue;
+    const idx = blockIndex(x, y, z);
+    if (voxelId(data[idx]) !== B.AIR) continue;
+    const above = voxelId(data[blockIndex(x, y + 1, z)]);
+    const below = y > 1 ? voxelId(data[blockIndex(x, y - 1, z)]) : B.BEDROCK;
+    if (above === B.STONE && rand.chance(0.6)) {
+      data[idx] = packVoxel(B.COBBLESTONE, 0, 0);
+      if (y > 1 && voxelId(data[blockIndex(x, y - 1, z)]) === B.AIR && rand.chance(0.4)) {
+        data[blockIndex(x, y - 1, z)] = packVoxel(B.COBBLESTONE, 0, 0);
+      }
+    } else if (below === B.STONE && rand.chance(0.4)) {
+      data[idx] = packVoxel(B.COBBLESTONE, 0, 0);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -711,6 +935,7 @@ const DZ6 = [0, 0, 0, 0, 1, -1];
 export function initGenerator(s: number): void {
   seed = s;
   villageCache.clear();
+  pyramidCache.clear();
   netherCarve = null;
   initNoise();
 }
@@ -869,6 +1094,16 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
 
   genOres(data, rand);
   genDungeon(data, cx, cz, blockEntities, rand);
+  genSpeleothems(data, rand);
+  genRuins(data, cx, cz, rand);
+
+  // Desert pyramids (region-deterministic landmarks).
+  for (let rx = regionOf2(cx, PYRAMID_REGION) - 1; rx <= regionOf2(cx, PYRAMID_REGION) + 1; rx++) {
+    for (let rz = regionOf2(cz, PYRAMID_REGION) - 1; rz <= regionOf2(cz, PYRAMID_REGION) + 1; rz++) {
+      const plan = pyramidForRegion(rx, rz);
+      if (plan) stampPyramid(data, cx, cz, plan, blockEntities);
+    }
+  }
 
   // --- Village (region-deterministic; any chunk stamps its intersection) ---
   let village: VillageDef | null = null;

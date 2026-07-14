@@ -4,7 +4,7 @@
  * first-person held-item viewmodel with swing animation.
  */
 import * as THREE from 'three';
-import { buildHumanoid } from './EntityRenderer';
+import { buildHumanoid, bodyTexture } from './EntityRenderer';
 import { blockItemGeometry, iconQuadGeometry } from './EntityRenderer';
 import { itemDef, isPlaceable } from '../core/items';
 import { rendersAsSprite } from '../core/blocks';
@@ -25,7 +25,7 @@ export class CharacterModel {
     this.atlas = atlas;
     buildHumanoid(
       { group: this.group, parts: this.parts, materials: this.materials, baseColors: this.baseColors },
-      { skin: 0xd8a888, shirt: 0x2ca8a8, pants: 0x3c4c9c, face: 'player' },
+      { skin: 0xd8a888, shirt: 0x2ca8a8, pants: 0x3c4c9c, face: 'player', bodyTex: bodyTexture('playerShirt') },
     );
   }
 
