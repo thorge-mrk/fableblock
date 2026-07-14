@@ -121,10 +121,26 @@ P3-6 Rüstung, P3-7 Wetter, P3-8 XP+Verzauberung).
   Harness: `scripts/nethermob-test.mjs`.
 - Bewusst offen gelassen (lite): Soul-Sand-Verlangsamung, Redstone-Fackel/Repeater,
   klebrige Kolben, Piglin-Tauschhandel, 8:1-Koordinaten-Skalierung (Portale mappen 1:1).
-**Phase 5 erledigt:** P5-1 (Painter-Toolkit), P5-2 (Terrain), P5-3/4 (Holz/Laub + Erz-Signaturen),
-P5-7 (Himmel: Sonne/Mond/Sterne/Wolken).
-**Phase 5 offen:** P5-5 (Funktionsblöcke), P5-6 (Item-Icons vereinheitlichen),
-P5-8 (Wasser/Effekte), P5-9 (Mob-Teiltexturen), P5-10 (HUD-Grafiken/Titel-Panorama).
+**Phase 5 komplett erledigt:**
+- P5-1 Painter-Toolkit, P5-2 Terrain, P5-3/4 Holz/Laub + Erz-Signaturen,
+  P5-7 Himmel (Sonne/Mond/Sterne/Wolken).
+- P5-5 Funktionsblöcke: Truhe (Bänder + Schloss), Spawner (Gitter + Innenglut),
+  Fackel (Glüh-Halo), Glas (Rahmen + Nieten), Wolle (Web-Muster), Glowstone (Zellkerne), Hopper.
+- P5-6 Item-Icons: zentraler 1px-Outline-Pass für ALLE Items + neu gezeichnete
+  Werkzeuge/Barren/Kohle/Diamant/Pfeil/Stock — jedes Item auf 44px erkennbar.
+- P5-8 Wasser & Effekte: Doppel-Wellen-Shimmer + Funkeln + Tiefen-Alpha,
+  aufsteigende Unterwasser-Blasen, Treffer-Funken am Einschlagpunkt.
+- P5-9 Mob-Körpertexturen: Zombie-Fetzen, Skelett-Rippen, Creeper-Muster,
+  Kuh-Flecken, Schweins-Sprenkel, Woll-Locken, Villager-Robe, Piglin-Weste, Golem-Risse.
+- P5-10 HUD & Titel: eigene Pixel-Herzen/Essens-Keulen/Rüstungsschilde
+  (voll/halb/leer als SVG-Pixel-Maps) + animiertes Voxel-Panorama hinterm Titel.
+
+**Zusätzlich (User-Wünsche):**
+- Drag&Drop-Manager: echtes Ziehen-und-Loslassen in einer Geste (Maus + Touch),
+  Teal-Highlight des Ziel-Slots, Doppelklick sammelt gleiche Items; per Smoke-Test
+  mit echten Maus-Events verifiziert (window.__fableStore-Hook).
+- Blockspezifische Hitboxen: Blumen/Gras/Fackeln/Hebel klein, Türen/Platten/Kabel
+  exakt; Fehlschüsse fliegen zum Block dahinter weiter; Outline + Crack skalieren mit.
 
 ## Phase 1 — Mobile-UX
 
