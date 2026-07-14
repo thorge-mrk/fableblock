@@ -179,6 +179,34 @@ class TilePainter {
   clear(): void {
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) this.px(x, y, 0, 0, 0, 0);
   }
+
+  alphaAt(x: number, y: number): number {
+    if (x < 0 || x >= N || y < 0 || y >= N) return 0;
+    return this.img.data[((this.oy + y) * ATLAS_SIZE + this.ox + x) * 4 + 3];
+  }
+
+  /**
+   * 1px dark contour around every opaque region (P5-6 unified icon style):
+   * transparent pixels bordering opaque ones become the outline color, so
+   * icons read crisply on light AND dark slot backgrounds.
+   */
+  outline(c: RGB = [24, 16, 14], alpha = 235): void {
+    const solid: boolean[] = new Array(N * N);
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) solid[y * N + x] = this.alphaAt(x, y) > 60;
+    }
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        if (solid[y * N + x]) continue;
+        const nb =
+          (x > 0 && solid[y * N + x - 1]) ||
+          (x < N - 1 && solid[y * N + x + 1]) ||
+          (y > 0 && solid[(y - 1) * N + x]) ||
+          (y < N - 1 && solid[(y + 1) * N + x]);
+        if (nb) this.px(x, y, c[0], c[1], c[2], alpha);
+      }
+    }
+  }
 }
 
 type Painter = (p: TilePainter) => void;
@@ -280,53 +308,87 @@ function orePainter(ore: RGB, kind: 'coal' | 'iron' | 'gold' | 'diamond' = 'iron
   };
 }
 
+/**
+ * Tool icons (P5-6 pass): 2px handles, chunky material heads with a fixed
+ * top-left gleam and darker underside so every tier reads at hotbar size.
+ */
 function toolPainter(head: RGB, kind: 'pick' | 'sword' | 'axe' | 'shovel'): Painter {
   return (p) => {
     p.clear();
-    const hd: RGB = [head[0] * 0.8, head[1] * 0.8, head[2] * 0.8];
-    const stick = () => {
-      // Diagonal wooden handle bottom-left -> upper-right.
-      for (let i = 2; i < 12; i++) {
-        p.px(i, 13 - i, HANDLE[0], HANDLE[1], HANDLE[2]);
-        p.px(i + 1, 13 - i, HANDLE[0] * 0.8, HANDLE[1] * 0.8, HANDLE[2] * 0.8);
+    const hd: RGB = [head[0] * 0.7, head[1] * 0.7, head[2] * 0.7];
+    const hi: RGB = [Math.min(255, head[0] * 1.3), Math.min(255, head[1] * 1.3), Math.min(255, head[2] * 1.3)];
+    const stick = (x0: number, y0: number, len: number) => {
+      for (let i = 0; i < len; i++) {
+        p.px(x0 + i, y0 - i, HANDLE[0], HANDLE[1], HANDLE[2]);
+        p.px(x0 + i + 1, y0 - i, HANDLE[0] * 0.76, HANDLE[1] * 0.76, HANDLE[2] * 0.76);
       }
+      // Leather grip wrap near the base.
+      p.px(x0 + 1, y0 - 1, 86, 60, 34);
+      p.px(x0 + 2, y0 - 1, 86, 60, 34);
+      p.px(x0 + 2, y0 - 2, 86, 60, 34);
     };
     if (kind === 'pick') {
-      stick();
-      p.line(3, 4, 7, 2, head);
-      p.line(7, 2, 12, 4, head);
-      p.line(3, 5, 7, 3, hd);
-      p.line(7, 3, 12, 5, hd);
-    } else if (kind === 'axe') {
-      stick();
-      // Axe head: wedge in the top-right.
-      for (let y = 2; y <= 7; y++) {
-        const w = y <= 4 ? y - 1 : 8 - y;
-        for (let k = 0; k < w + 2; k++) p.px(8 + k, y, head[0], head[1], head[2]);
-        p.px(8, y, hd[0], hd[1], hd[2]);
+      stick(2, 13, 9);
+      // Curved 2px-thick head arcing across the top, tips drooping down.
+      for (let i = 0; i <= 11; i++) {
+        const x = 2 + i;
+        const y = 5 - Math.round(Math.sin((i / 11) * Math.PI) * 3.2);
+        p.px(x, y, head[0], head[1], head[2]);
+        p.px(x, y + 1, i < 6 ? head[0] : hd[0], i < 6 ? head[1] : hd[1], i < 6 ? head[2] : hd[2]);
       }
-      p.line(10, 2, 13, 5, hd);
+      for (const [tx, ty] of [[2, 6], [2, 7], [13, 6], [13, 7]] as const) p.px(tx, ty, hd[0], hd[1], hd[2]);
+      p.px(4, 2, hi[0], hi[1], hi[2]);
+      p.px(5, 2, hi[0], hi[1], hi[2]);
+      p.px(6, 1, hi[0], hi[1], hi[2]);
+    } else if (kind === 'axe') {
+      stick(2, 13, 9);
+      // Bearded blade hanging off the top-right of the handle.
+      const widths = [
+        [8, 12], [7, 13], [7, 14], [7, 14], [8, 14], [9, 14], [10, 13],
+      ] as const;
+      for (let r = 0; r < widths.length; r++) {
+        const [x0, x1] = widths[r];
+        for (let x = x0; x <= x1; x++) p.px(x, 1 + r, head[0], head[1], head[2]);
+        p.px(x0, 1 + r, hi[0], hi[1], hi[2]); // lit leading edge
+        p.px(x1, 1 + r, hd[0], hd[1], hd[2]); // dark back
+      }
+      for (let x = 9; x <= 12; x++) p.px(x, 8, hd[0], hd[1], hd[2]); // beard underside
     } else if (kind === 'shovel') {
-      stick();
-      // Spade blade at the bottom-left tip of the handle.
-      p.rect(2, 10, 4, 4, head);
-      p.px(2, 10, hd[0], hd[1], hd[2]);
-      p.px(5, 13, hd[0], hd[1], hd[2]);
-      p.px(3, 14, hd[0], hd[1], hd[2]);
-      p.px(4, 14, hd[0], hd[1], hd[2]);
+      stick(2, 13, 8);
+      // Pointed spade blade, tip up-right (clearly not an axe).
+      const rows = [
+        [11, 11], [10, 12], [9, 13], [9, 13], [10, 12], [11, 11],
+      ] as const;
+      for (let r = 0; r < rows.length; r++) {
+        const [x0, x1] = rows[r];
+        for (let x = x0; x <= x1; x++) p.px(x, r, head[0], head[1], head[2]);
+      }
+      p.px(11, 0, hi[0], hi[1], hi[2]);
+      p.px(10, 1, hi[0], hi[1], hi[2]);
+      p.px(9, 2, hi[0], hi[1], hi[2]);
+      p.px(12, 3, hd[0], hd[1], hd[2]);
+      p.px(12, 4, hd[0], hd[1], hd[2]);
+      p.px(11, 5, hd[0], hd[1], hd[2]); // socket joint to the handle
     } else {
-      // Sword: blade diagonal.
-      for (let i = 0; i < 9; i++) {
+      // Sword: broad 2px blade with a bright edge, crossguard, pommel.
+      for (let i = 0; i < 8; i++) {
         const x = 5 + i;
         const y = 10 - i;
         p.px(x, y, head[0], head[1], head[2]);
-        p.px(x + 1, y, Math.min(255, head[0] * 1.15), Math.min(255, head[1] * 1.15), Math.min(255, head[2] * 1.15));
-        p.px(x, y - 1, hd[0], hd[1], hd[2]);
+        p.px(x + 1, y, hi[0], hi[1], hi[2]); // honed edge
+        p.px(x, y + 1, hd[0], hd[1], hd[2]); // spine shadow
       }
-      p.px(4, 11, 90, 66, 36);
-      p.px(5, 12, 90, 66, 36);
-      p.px(3, 12, 90, 66, 36);
-      for (let i = 0; i < 3; i++) p.px(4 - i, 12 + i, HANDLE[0], HANDLE[1], HANDLE[2]);
+      p.px(13, 2, hi[0], hi[1], hi[2]); // tip
+      p.px(12, 1, hi[0], hi[1], hi[2]);
+      // Crossguard perpendicular to the blade.
+      p.px(3, 10, 96, 70, 38);
+      p.px(4, 11, 96, 70, 38);
+      p.px(5, 12, 96, 70, 38);
+      p.px(6, 11, 118, 88, 48);
+      // Grip + pommel.
+      p.px(3, 12, HANDLE[0], HANDLE[1], HANDLE[2]);
+      p.px(2, 13, HANDLE[0], HANDLE[1], HANDLE[2]);
+      p.px(1, 14, 96, 70, 38);
     }
   };
 }
@@ -356,15 +418,23 @@ function crackPainter(stage: number): Painter {
 
 function ingotPainter(p: TilePainter, c: RGB): void {
   p.clear();
-  // Trapezoid ingot.
-  for (let y = 0; y < 5; y++) {
-    const inset = Math.round(y * 0.7);
-    for (let x = 0; x < 9 - y; x++) {
-      const f = 1 - y * 0.05;
-      p.px(4 + x + inset, 7 + y, c[0] * f, c[1] * f, c[2] * f);
+  const hi: RGB = [Math.min(255, c[0] * 1.25), Math.min(255, c[1] * 1.25), Math.min(255, c[2] * 1.25)];
+  const dk: RGB = [c[0] * 0.62, c[1] * 0.62, c[2] * 0.62];
+  // Cast bar in 3/4 view: lit top face, body, shaded right end.
+  for (let x = 4; x <= 12; x++) p.px(x, 5, hi[0], hi[1], hi[2]);
+  for (let x = 3; x <= 13; x++) p.px(x, 6, c[0], c[1], c[2]);
+  for (let y = 7; y <= 9; y++) {
+    for (let x = 2; x <= 13; x++) {
+      const f = 1 - (y - 7) * 0.07;
+      p.px(x, y, c[0] * f, c[1] * f, c[2] * f);
     }
   }
-  for (let x = 0; x < 9; x++) p.px(4 + x, 6, Math.min(255, c[0] * 1.1), Math.min(255, c[1] * 1.1), Math.min(255, c[2] * 1.1));
+  for (let x = 3; x <= 13; x++) p.px(x, 10, dk[0], dk[1], dk[2]);
+  for (let y = 6; y <= 10; y++) p.px(13, y, dk[0], dk[1], dk[2]);
+  // Mirror-polish diagonal gleam.
+  p.px(5, 6, 255, 255, 252);
+  p.px(4, 7, hi[0], hi[1], hi[2]);
+  p.px(6, 7, hi[0], hi[1], hi[2]);
 }
 
 function muttonPainter(p: TilePainter, meat: RGB, edge: RGB): void {
@@ -730,34 +800,63 @@ const PAINTERS: Record<number, Painter> = {
   [TILE.CRACK_3]: crackPainter(3),
   [TILE.ITEM_STICK]: (p) => {
     p.clear();
+    // 2px branch with a bark notch and a snapped twig stub.
     for (let i = 0; i < 9; i++) {
-      p.px(4 + i, 12 - i, 120, 90, 50);
-      p.px(5 + i, 12 - i, 100, 75, 40);
+      p.px(3 + i, 12 - i, 136, 102, 56);
+      p.px(4 + i, 12 - i, 104, 76, 42);
     }
+    p.px(6, 9, 86, 62, 34);
+    p.px(9, 6, 86, 62, 34);
+    p.px(8, 6, 156, 120, 68); // twig stub
+    p.px(8, 5, 156, 120, 68);
   },
   [TILE.ITEM_COAL]: (p) => {
     p.clear();
-    p.disc(8, 8, 5, [40, 40, 42], 0.5);
+    // Faceted lump with a cold blue sheen.
+    p.disc(8, 8, 4.6, [40, 40, 46], 0.3);
+    p.shade(3, 3, 6, 5, 1.5);
+    p.shade(8, 9, 5, 4, 0.7);
+    p.px(6, 5, 118, 128, 148);
+    p.px(7, 6, 90, 98, 116);
+    p.px(10, 10, 20, 20, 24);
   },
   [TILE.ITEM_CHARCOAL]: (p) => {
     p.clear();
-    p.disc(8, 8, 5, [54, 44, 38], 0.5);
+    // Burnt wood chunk with glowing ember cracks.
+    p.disc(8, 8, 4.6, [50, 40, 34], 0.3);
+    p.shade(3, 3, 6, 5, 1.35);
+    p.px(6, 8, 255, 120, 40);
+    p.px(7, 9, 220, 80, 24);
+    p.px(10, 6, 255, 150, 60);
   },
   [TILE.ITEM_RAW_IRON]: (p) => {
     p.clear();
-    p.disc(8, 8, 4.5, [216, 175, 147], 0.3);
+    // Rough ochre nugget with metallic flecks.
+    p.disc(8, 8, 4.6, [198, 152, 118], 0.22);
+    p.shade(3, 3, 6, 5, 1.2);
+    p.shade(8, 9, 5, 4, 0.82);
+    p.px(6, 6, 236, 220, 206);
+    p.px(9, 8, 226, 208, 192);
+    p.px(7, 10, 150, 104, 74);
   },
-  [TILE.ITEM_IRON_INGOT]: (p) => ingotPainter(p, [222, 222, 222]),
-  [TILE.ITEM_GOLD_INGOT]: (p) => ingotPainter(p, [250, 215, 90]),
+  [TILE.ITEM_IRON_INGOT]: (p) => ingotPainter(p, [222, 222, 226]),
+  [TILE.ITEM_GOLD_INGOT]: (p) => ingotPainter(p, [250, 210, 84]),
   [TILE.ITEM_DIAMOND]: (p) => {
     p.clear();
-    for (let dy = -4; dy <= 4; dy++) {
-      const half = 4 - Math.abs(dy);
-      for (let dx = -half; dx <= half; dx++) {
-        const f = 1 + (p.rand() - 0.5) * 0.25;
-        p.px(8 + dx, 8 + dy, 93 * f, 236 * f, 245 * f);
+    // Brilliant cut: flat crown table + tapered pavilion, split facets.
+    for (let x = 5; x <= 10; x++) p.px(x, 3, 196, 252, 252);
+    for (let x = 3; x <= 12; x++) p.px(x, 4, 130, 240, 246);
+    for (let y = 5; y <= 11; y++) {
+      const inset = y - 4;
+      for (let x = 3 + inset; x <= 12 - inset; x++) {
+        const left = x < 8;
+        const f = left ? 1.08 : 0.82;
+        p.px(x, y, 93 * f, 236 * f, 245 * f);
       }
     }
+    p.px(5, 4, 240, 255, 255); // sparkle
+    p.px(6, 5, 214, 252, 252);
+    p.px(8, 12, 40, 150, 160); // culet shadow tip
   },
   [TILE.ITEM_PICK_WOOD]: toolPainter([140, 110, 70], 'pick'),
   [TILE.ITEM_PICK_IRON]: toolPainter([216, 216, 216], 'pick'),
@@ -779,16 +878,18 @@ const PAINTERS: Record<number, Painter> = {
   [TILE.ITEM_MUTTON_COOKED]: (p) => muttonPainter(p, [160, 100, 60], [120, 70, 40]),
   [TILE.ITEM_ARROW]: (p) => {
     p.clear();
-    p.line(3, 13, 12, 4, HANDLE);
-    // Head.
-    p.px(12, 3, 200, 200, 200);
-    p.px(13, 3, 200, 200, 200);
-    p.px(12, 4, 200, 200, 200);
-    p.px(11, 3, 200, 200, 200);
-    // Fletching.
-    p.px(3, 13, 230, 230, 230);
-    p.px(2, 13, 230, 230, 230);
-    p.px(3, 12, 230, 230, 230);
+    // 2px shaft, triangular flint head, stepped feather fletching.
+    p.line(3, 13, 11, 5, HANDLE);
+    p.line(4, 13, 12, 5, [104, 76, 42]);
+    p.px(12, 3, 168, 176, 186);
+    p.px(13, 2, 208, 214, 222);
+    p.px(11, 4, 168, 176, 186);
+    p.px(12, 4, 130, 138, 148);
+    for (let s = 0; s < 3; s++) {
+      p.px(2 + s, 13 - s, 238, 238, 234);
+      p.px(2 + s, 14 - s, 210, 210, 206);
+      p.px(3 + s, 14 - s, 186, 188, 186);
+    }
   },
   [TILE.ITEM_WHEAT]: (p) => {
     p.clear();
@@ -1401,6 +1502,13 @@ export class TextureAtlas {
     const ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
     const img = ctx.createImageData(ATLAS_SIZE, ATLAS_SIZE);
 
+    // Every ITEM_* tile gets the shared 1px contour after painting (P5-6),
+    // so all icons share one readable outline style.
+    const itemTiles = new Set<number>(
+      Object.entries(TILE)
+        .filter(([name]) => name.startsWith('ITEM_'))
+        .map(([, t]) => t as number),
+    );
     for (const [tileStr, painter] of Object.entries(PAINTERS)) {
       const tile = Number(tileStr);
       // Paint the 16px art into the interior of a gutter-padded cell.
@@ -1408,6 +1516,7 @@ export class TextureAtlas {
       const iy = Math.floor(tile / 32) * CELL_PX + TILE_GUTTER;
       const p = new TilePainter(img, ix, iy, mulberry32(seed ^ (tile * 7919 + 17)));
       painter(p);
+      if (itemTiles.has(tile)) p.outline();
       extrudeCell(img, ix, iy);
     }
     ctx.putImageData(img, 0, 0);

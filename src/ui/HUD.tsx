@@ -9,22 +9,93 @@ import { itemDef } from '../core/items';
 import { PLAYER_MAX_HP, PLAYER_MAX_FOOD } from '../core/config';
 
 /**
- * FableBlock status pip: a faceted diamond (own visual identity, not the
- * Minecraft heart/drumstick). full / half (left side lit) / empty.
+ * FableBlock status icons: hand-pixelled hearts, drumsticks and a shield —
+ * own 8x8 designs (not Mojang sprites) rendered as crisp SVG pixel maps.
+ * Legend: O outline, F fill, H highlight, D dark shade, B bone/extra.
  */
-function Pip({ fill, lit, litHi }: { fill: 'full' | 'half' | 'empty'; lit: string; litHi: string }): React.ReactElement {
-  const dim = '#2c3b4e';
-  const showL = fill !== 'empty';
-  const showR = fill === 'full';
+const HEART_MAP = [
+  '.OO.OO.',
+  'OHFOFDO',
+  'OHFFFDO',
+  'OFFFFDO',
+  '.OFFDO.',
+  '..OFO..',
+  '...O...',
+];
+const DRUMSTICK_MAP = [
+  '.OOO....',
+  'OHFFO...',
+  'OFFFFO..',
+  'OFFFDO..',
+  '.OFDDO..',
+  '..OODBO.',
+  '....OBBO',
+  '.....OO.',
+];
+const SHIELD_MAP = [
+  'OOOOOOO',
+  'OHFFFDO',
+  'OHFAFDO',
+  'OFAFADO',
+  '.OFAFO.',
+  '.OFFDO.',
+  '..OFO..',
+  '...O...',
+];
+
+type PipPalette = { F: string; H: string; D: string; B?: string; A?: string };
+
+const HEART_PAL: PipPalette = { F: '#e8404e', H: '#ff97a0', D: '#a5202c' };
+const FOOD_PAL: PipPalette = { F: '#c2712e', H: '#e8a860', D: '#8a4a20', B: '#f2ead6' };
+const ARMOR_PAL: PipPalette = { F: '#aebfd2', H: '#e6f0fa', D: '#7c8ea4', A: '#2dd4bf' };
+
+const OUTLINE = '#120a0c';
+const EMPTY_FILL = '#212e3d';
+const EMPTY_OUTLINE = '#0c1218';
+
+function pipRects(map: string[], pal: PipPalette | null, key: string): React.ReactElement[] {
+  const out: React.ReactElement[] = [];
+  for (let y = 0; y < map.length; y++) {
+    for (let x = 0; x < map[y].length; x++) {
+      const ch = map[y][x];
+      if (ch === '.') continue;
+      const color = pal
+        ? ch === 'O' ? OUTLINE : (pal[ch as keyof PipPalette] ?? pal.F)
+        : ch === 'O' ? EMPTY_OUTLINE : EMPTY_FILL;
+      out.push(<rect key={`${key}${x},${y}`} x={x} y={y} width="1" height="1" fill={color} />);
+    }
+  }
+  return out;
+}
+
+/** One status pip: full / half (left side lit) / empty socket. */
+function Pip({ map, pal, fill }: { map: string[]; pal: PipPalette; fill: 'full' | 'half' | 'empty' }): React.ReactElement {
+  const w = map[0].length;
+  const h = map.length;
+  const clipId = React.useId();
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" style={{ filter: 'drop-shadow(1px 1px 0 #000000a0)' }}>
-      {/* left facet */}
-      <polygon points="8,1 8,15 1,8" fill={showL ? lit : dim} />
-      {/* right facet */}
-      <polygon points="8,1 15,8 8,15" fill={showR ? lit : dim} />
-      {/* top gleam */}
-      {showL && <polygon points="8,1 8,6 4.5,4.5" fill={litHi} />}
-      <polygon points="8,1 15,8 8,15 1,8" fill="none" stroke="#0c1218" strokeWidth="1" />
+    <svg
+      width={w * 2.2}
+      height={h * 2.2}
+      viewBox={`0 0 ${w} ${h}`}
+      shapeRendering="crispEdges"
+      style={{ filter: 'drop-shadow(1px 1px 0 #000000a0)' }}
+    >
+      {fill === 'full' ? (
+        pipRects(map, pal, 'f')
+      ) : (
+        <>
+          {pipRects(map, null, 'e')}
+          {fill === 'half' && (
+            <>
+              <clipPath id={clipId}>
+                <rect x="0" y="0" width={Math.ceil(w / 2)} height={h} />
+              </clipPath>
+              <g clipPath={`url(#${clipId})`}>{pipRects(map, pal, 'h')}</g>
+            </>
+          )}
+        </>
+      )}
     </svg>
   );
 }
@@ -74,24 +145,24 @@ export function HUD(): React.ReactElement {
         </div>
       )}
 
-      {/* Status pips: HP (red) left, hunger (amber) right, armor (steel) above */}
+      {/* Status rows: hearts left, drumsticks right, armor shields above */}
       <div className="absolute bottom-[92px] left-1/2 -translate-x-1/2 flex flex-col items-start gap-0.5">
         {armorPts > 0 && (
           <div className="flex gap-0.5">
             {Array.from({ length: 10 }, (_, i) => (
-              <Pip key={i} fill={pipFill(armorPts, i)} lit="#9fb6cc" litHi="#e2eefb" />
+              <Pip key={i} map={SHIELD_MAP} pal={ARMOR_PAL} fill={pipFill(armorPts, i)} />
             ))}
           </div>
         )}
-        <div className="flex gap-5">
+        <div className="flex gap-5 items-end">
           <div className="flex gap-0.5">
             {Array.from({ length: PLAYER_MAX_HP / 2 }, (_, i) => (
-              <Pip key={i} fill={pipFill(health, i)} lit="#ef4655" litHi="#ff8091" />
+              <Pip key={i} map={HEART_MAP} pal={HEART_PAL} fill={pipFill(health, i)} />
             ))}
           </div>
           <div className="flex gap-0.5">
             {Array.from({ length: PLAYER_MAX_FOOD / 2 }, (_, i) => (
-              <Pip key={i} fill={pipFill(food, i)} lit="#e8963c" litHi="#ffc46e" />
+              <Pip key={i} map={DRUMSTICK_MAP} pal={FOOD_PAL} fill={pipFill(food, i)} />
             ))}
           </div>
         </div>
