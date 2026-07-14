@@ -68,6 +68,8 @@ export const RECIPES: Recipe[] = [
   // Boat: U-shape of 5 planks (oak or birch both yield an oak boat).
   shaped(['P P', 'PPP'], { P: B.OAK_PLANKS }, ITEM.BOAT, 1),
   shaped(['B B', 'BBB'], { B: B.BIRCH_PLANKS }, ITEM.BOAT, 1),
+  // Bed: wool mattress over a plank frame.
+  shaped(['WWW', 'PPP'], { W: B.WOOL, P: B.OAK_PLANKS }, B.BED, 1),
   // Stone-tier pickaxe + sword.
   shaped(['CCC', ' S ', ' S '], { C: B.COBBLESTONE, S: ITEM.STICK }, ITEM.STONE_PICKAXE, 1),
   shaped(['C', 'C', 'S'], { C: B.COBBLESTONE, S: ITEM.STICK }, ITEM.STONE_SWORD, 1),

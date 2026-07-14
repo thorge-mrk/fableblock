@@ -287,7 +287,7 @@ function regionOf(c: number): number {
 //  o = torch (interior lighting), R = roof plank, L = log frame.
 const HOUSE_SMALL: string[][] = [
   ['CCCCC', 'CCCCC', 'CCCCC', 'CCCCC', 'CCCCC'], // floor
-  ['L###L', '#o..#', '#...#', '#.T.#', 'L#D#L'], // walls + torch + table + door
+  ['L###L', '#o.b#', '#...#', '#.T.#', 'L#D#L'], // walls + torch + bed + table + door
   ['L#G#L', 'G...G', 'G...G', '#...#', 'L#.#L'], // windows
   ['L###L', '#...#', '#...#', '#...#', 'L###L'], // upper wall
   ['LLLLL', 'LRRRL', 'LRRRL', 'LRRRL', 'LLLLL'], // framed eaves
@@ -296,7 +296,7 @@ const HOUSE_SMALL: string[][] = [
 
 const HOUSE_LARGE: string[][] = [
   ['CCCCCCC', 'CCCCCCC', 'CCCCCCC', 'CCCCCCC', 'CCCCCCC', 'CCCCCCC'],
-  ['L#####L', '#o...o#', '#..H..#', '#.....#', '#..F..#', 'L##D##L'],
+  ['L#####L', '#o.b.o#', '#..H..#', '#.....#', '#..F..#', 'L##D##L'],
   ['L#G#G#L', 'G.....G', '#.....#', 'G.....G', '#.....#', 'L##.##L'],
   ['L#####L', '#.....#', '#.....#', '#.....#', '#.....#', 'L#####L'],
   ['LLLLLLL', 'LRRRRRL', 'LRRRRRL', 'LRRRRRL', 'LRRRRRL', 'LLLLLLL'],
@@ -305,7 +305,7 @@ const HOUSE_LARGE: string[][] = [
 
 const DESERT_HUT: string[][] = [
   ['#####', '#####', '#####', '#####', '#####'],
-  ['##.##', '#o..#', '#.T.#', '#...#', '##D##'],
+  ['##.##', '#o.b#', '#.T.#', '#...#', '##D##'],
   ['##G##', 'G...G', '#...#', 'G...G', '##.##'],
   ['#####', '#####', '#####', '#####', '#####'],
 ];
@@ -418,6 +418,7 @@ function blueprintChar(
     case 'F': return B.FURNACE_S;
     case 'H': return B.CHEST_S;
     case 'o': return B.TORCH;
+    case 'b': return B.BED;
     case 'W': return B.WATER_SRC;
     case 'D':
     case '.': return B.AIR;

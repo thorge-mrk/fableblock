@@ -19,6 +19,8 @@ import { gameStore, useGameStore } from '../state/store';
 import { registerBridge } from '../state/bridge';
 import { World } from '../core/world';
 import { hashSeed } from '../core/prng';
+import { chunkKeyNum, blockIndex } from '../core/coords';
+import { saveWorld, loadWorld, SaveData } from './persistence';
 import {
   B, blockDef, isChest, isFurnace, isInteractive, TILE, isWater,
 } from '../core/blocks';
@@ -78,6 +80,13 @@ export class Game {
   private shake = 0;
 
   private spawn: [number, number, number] | null = null;
+  private spawnPoint: [number, number, number] | null = null; // bed respawn
+  // World persistence: journal of every block-ID change, replayed on resume.
+  private editJournal = new Map<number, Map<number, number>>();
+  private worldSeed = 0;
+  private resumeData: SaveData | null = null;
+  private resumeApplied = false;
+  private autosaveAccum = 0;
   private spawnChunkSearched = false;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
   private workerStats = { entities: 0, tickMs: 0 };
@@ -86,8 +95,15 @@ export class Game {
     this.canvas = canvas;
     registerBridge({
       startWorld: (seedText) => this.start(seedText),
+      continueWorld: () => {
+        loadWorld().then((d) => {
+          if (d) this.start(String(d.seed), d);
+        });
+      },
       respawn: () => this.respawn(),
-      quitToTitle: () => window.location.reload(),
+      quitToTitle: () => {
+        this.saveNow().finally(() => window.location.reload());
+      },
       openScreen: (s) => this.openScreen(s),
       closeScreen: () => this.closeScreen(),
       invClick: (slot, button, shift) => this.invClick(slot, button, shift),
@@ -109,10 +125,21 @@ export class Game {
   // -------------------------------------------------------------------------
   // Bootstrapping
   // -------------------------------------------------------------------------
-  start(seedText: string): void {
+  start(seedText: string, resume: SaveData | null = null): void {
     const seed = /^-?\d+$/.test(seedText.trim())
       ? Number(seedText.trim()) >>> 0
       : hashSeed(seedText.trim() === '' ? String(Date.now()) : seedText.trim());
+    this.worldSeed = seed;
+    this.resumeData = resume;
+    this.resumeApplied = false;
+    this.editJournal.clear();
+    if (resume) {
+      for (const [key, flat] of Object.entries(resume.edits)) {
+        const m = new Map<number, number>();
+        for (let i = 0; i < flat.length; i += 2) m.set(flat[i], flat[i + 1]);
+        this.editJournal.set(Number(key), m);
+      }
+    }
 
     gameStore.set({ phase: 'loading', loadProgress: 0 });
 
@@ -145,6 +172,16 @@ export class Game {
     this.world.onCellChanged = (x, y, z, v) => {
       this.patchOut.push(x, y, z, v);
     };
+    // Journal every real block change for the save file.
+    this.world.onBlockChanged = (x, y, z, id) => {
+      const ck = chunkKeyNum(x >> 4, z >> 4);
+      let m = this.editJournal.get(ck);
+      if (!m) {
+        m = new Map();
+        this.editJournal.set(ck, m);
+      }
+      m.set(blockIndex(x & 15, y, z & 15), id);
+    };
     this.chunks.onChunkReady = (msg: GenChunkMsg, copy: ArrayBuffer) => {
       this.logicWorker.postMessage(
         {
@@ -153,6 +190,7 @@ export class Game {
         } satisfies ToLogicMsg,
         [copy],
       );
+      this.replayEdits(msg.cx, msg.cz);
     };
     this.chunks.onChunkRemoved = (cx, cz) => {
       this.sendLogic({ t: 'unchunk', cx, cz });
@@ -285,6 +323,10 @@ export class Game {
       }
     });
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    window.addEventListener('pagehide', () => void this.saveNow());
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') void this.saveNow();
+    });
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
@@ -353,6 +395,15 @@ export class Game {
     }
     this.flushPatches();
 
+    // Autosave every 10 s of play.
+    if (store.phase === 'playing') {
+      this.autosaveAccum += dt;
+      if (this.autosaveAccum >= 10) {
+        this.autosaveAccum = 0;
+        void this.saveNow();
+      }
+    }
+
     // Debug stats — frame-rate-independent throttle (~5 Hz) to keep React
     // store churn off the hot path regardless of FPS.
     this.statsAccum += dt;
@@ -387,11 +438,72 @@ export class Game {
       const progress = this.chunks.spawnProgress(Math.floor(this.spawn[0]) >> 4, Math.floor(this.spawn[2]) >> 4, 2);
       gameStore.set({ loadProgress: progress });
       if (progress >= 1) {
+        this.applyResume();
         gameStore.set({ phase: 'playing', loadProgress: 1 });
       }
     } else {
       gameStore.set({ loadProgress: this.chunks.isReady(0, 0) ? 0.4 : 0.1 });
     }
+  }
+
+  /** Restore player state from a save once the spawn area is meshed. */
+  private applyResume(): void {
+    if (!this.resumeData || this.resumeApplied) return;
+    this.resumeApplied = true;
+    const d = this.resumeData;
+    this.player.teleport(d.player.x, d.player.y + 0.1, d.player.z);
+    this.player.yaw = d.player.yaw;
+    this.player.pitch = d.player.pitch;
+    this.dayNight.time = d.time;
+    this.spawnPoint = d.spawnPoint;
+    gameStore.set({
+      inventory: d.inventory.map(cloneStack),
+      hotbarIndex: d.hotbarIndex,
+      health: d.player.health,
+    });
+    this.sendLogic({ t: 'time', time: d.time });
+    this.toast('Welcome back!');
+  }
+
+  /** Replay journaled edits onto a freshly generated chunk. */
+  private replayEdits(cx: number, cz: number): void {
+    const m = this.editJournal.get(chunkKeyNum(cx, cz));
+    if (!m) return;
+    const bx = cx * 16;
+    const bz = cz * 16;
+    for (const [idx, id] of m) {
+      const x = bx + (idx & 15);
+      const z = bz + ((idx >> 4) & 15);
+      const y = idx >> 8;
+      if (this.world.getBlockId(x, y, z) !== id) this.world.setBlock(x, y, z, id);
+    }
+  }
+
+  /** Serialize the world state and write it to IndexedDB. */
+  saveNow(): Promise<void> {
+    const s = gameStore.get();
+    if (s.phase !== 'playing' && s.phase !== 'dead') return Promise.resolve();
+    const edits: Record<string, number[]> = {};
+    for (const [key, m] of this.editJournal) {
+      const flat: number[] = [];
+      for (const [idx, id] of m) flat.push(idx, id);
+      if (flat.length > 0) edits[String(key)] = flat;
+    }
+    return saveWorld({
+      version: 1,
+      seed: this.worldSeed,
+      time: this.dayNight.time,
+      player: {
+        x: this.player.x, y: this.player.y, z: this.player.z,
+        yaw: this.player.yaw, pitch: this.player.pitch,
+        health: s.health,
+      },
+      spawnPoint: this.spawnPoint,
+      inventory: s.inventory.map(cloneStack),
+      hotbarIndex: s.hotbarIndex,
+      edits,
+      savedAt: Date.now(),
+    });
   }
 
   private findSpawn(): [number, number, number] {
@@ -795,6 +907,10 @@ export class Game {
       this.openScreen('crafting');
       return;
     }
+    if (hit.id === B.BED) {
+      this.trySleep(hit);
+      return;
+    }
     // Chest / furnace / hopper: worker-owned container session.
     const s = gameStore.get();
     this.sendLogic({
@@ -1032,12 +1148,37 @@ export class Game {
   }
 
   private respawn(): void {
-    const sp = this.spawn ?? [8.5, 90, 8.5];
+    const sp = this.spawnPoint ?? this.spawn ?? [8.5, 90, 8.5];
     this.player.inBoat = false;
     this.boat.group.visible = false;
     this.player.teleport(sp[0], sp[1], sp[2]);
     this.fireTicks = 0;
     gameStore.set({ phase: 'playing', health: PLAYER_MAX_HP });
+  }
+
+  /** Bed interaction: at night, skip to dawn and set the respawn point. */
+  private trySleep(hit: RayHit): void {
+    const alt = Math.sin(this.dayNight.time * Math.PI * 2);
+    if (alt > -0.04) {
+      this.toast('You can only sleep at night');
+      return;
+    }
+    if (this.entityRenderer.hostileNear(this.player.x, this.player.z, 10)) {
+      this.toast('You may not rest now — monsters are nearby!');
+      return;
+    }
+    this.spawnPoint = [hit.x + 0.5, hit.y + 1.1, hit.z + 0.5];
+    gameStore.set({ sleeping: true });
+    window.setTimeout(() => {
+      if (gameStore.get().phase !== 'playing') {
+        gameStore.set({ sleeping: false });
+        return;
+      }
+      this.dayNight.time = 0.02; // just after dawn
+      this.sendLogic({ t: 'time', time: this.dayNight.time });
+      gameStore.set({ sleeping: false });
+      this.toast('Rise and shine!');
+    }, 900);
   }
 
   private sendLogic(msg: ToLogicMsg): void {

@@ -6,6 +6,8 @@
 
 export interface GameBridge {
   startWorld(seedText: string): void;
+  /** Resume the saved world (seed + edits + player state) from IndexedDB. */
+  continueWorld(): void;
   respawn(): void;
   quitToTitle(): void;
 

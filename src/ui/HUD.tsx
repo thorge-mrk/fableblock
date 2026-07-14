@@ -8,37 +8,25 @@ import { bridge } from '../state/bridge';
 import { itemDef } from '../core/items';
 import { PLAYER_MAX_HP } from '../core/config';
 
-/** Pixel-art heart (Minecraft-style) as inline SVG: full / half / empty. */
-function Heart({ fill }: { fill: 'full' | 'half' | 'empty' }): React.ReactElement {
-  // 9x9 pixel heart shape drawn as SVG rects for a crisp blocky look.
-  const rows = [
-    '011011110',
-    '111111111',
-    '111111111',
-    '111111111',
-    '011111110',
-    '001111100',
-    '000111000',
-    '000010000',
-  ];
-  const px = 2;
-  const red = '#e2222a';
-  const redHi = '#ff5560';
-  const empty = '#5a5a5a';
-  const cells: React.ReactElement[] = [];
-  for (let y = 0; y < rows.length; y++) {
-    for (let x = 0; x < 9; x++) {
-      if (rows[y][x] !== '1') continue;
-      let color: string;
-      if (fill === 'empty') color = empty;
-      else if (fill === 'half') color = x < 4.5 ? (y < 2 && x > 0 ? redHi : red) : empty;
-      else color = y < 2 && (x === 1 || x === 5) ? redHi : red;
-      cells.push(<rect key={`${x}-${y}`} x={x * px} y={y * px} width={px} height={px} fill={color} />);
-    }
-  }
+/**
+ * FableBlock HP pip: a faceted diamond (own visual identity, not the
+ * Minecraft heart). full / half (left side lit) / empty.
+ */
+function HpPip({ fill }: { fill: 'full' | 'half' | 'empty' }): React.ReactElement {
+  const lit = '#ef4655';
+  const litHi = '#ff8091';
+  const dim = '#2c3b4e';
+  const showL = fill !== 'empty';
+  const showR = fill === 'full';
   return (
-    <svg width="18" height="16" viewBox="0 0 18 16" style={{ filter: 'drop-shadow(1px 1px 0 #00000080)' }}>
-      {cells}
+    <svg width="16" height="16" viewBox="0 0 16 16" style={{ filter: 'drop-shadow(1px 1px 0 #000000a0)' }}>
+      {/* left facet */}
+      <polygon points="8,1 8,15 1,8" fill={showL ? lit : dim} />
+      {/* right facet */}
+      <polygon points="8,1 15,8 8,15" fill={showR ? lit : dim} />
+      {/* top gleam */}
+      {showL && <polygon points="8,1 8,6 4.5,4.5" fill={litHi} />}
+      <polygon points="8,1 15,8 8,15 1,8" fill="none" stroke="#0c1218" strokeWidth="1" />
     </svg>
   );
 }
@@ -50,6 +38,7 @@ export function HUD(): React.ReactElement {
   const breakProgress = useGameStore((s) => s.breakProgress);
   const toast = useGameStore((s) => s.toast);
   const screen = useGameStore((s) => s.screen);
+  const sleeping = useGameStore((s) => s.sleeping);
 
   const heldName = inventory[hotbarIndex] ? itemDef(inventory[hotbarIndex]!.id).name : null;
 
@@ -75,12 +64,12 @@ export function HUD(): React.ReactElement {
         </div>
       )}
 
-      {/* Hearts — real pixel-art graphic, updates reactively with health */}
+      {/* HP pips — faceted diamonds, update reactively with health */}
       <div className="absolute bottom-[76px] left-1/2 -translate-x-1/2 flex gap-0.5">
         {Array.from({ length: PLAYER_MAX_HP / 2 }, (_, i) => {
           const v = health - i * 2;
           const fill = v >= 2 ? 'full' : v >= 1 ? 'half' : 'empty';
-          return <Heart key={i} fill={fill} />;
+          return <HpPip key={i} fill={fill} />;
         })}
       </div>
 
@@ -95,12 +84,17 @@ export function HUD(): React.ReactElement {
       )}
 
       {/* Hotbar */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex pointer-events-auto bg-black/40 p-1 rounded">
+      <div
+        className="absolute bottom-3 left-1/2 -translate-x-1/2 flex pointer-events-auto bg-vc-bg/70 border border-vc-slot-edge p-1 rounded-lg"
+        style={{ backdropFilter: 'blur(4px)' }}
+      >
         {inventory.slice(0, 9).map((stack, i) => (
           <div
             key={i}
-            className={`relative w-12 h-12 m-0.5 border-2 ${
-              i === hotbarIndex ? 'border-white bg-white/20' : 'border-gray-600 bg-black/30'
+            className={`relative w-12 h-12 m-0.5 rounded-md border ${
+              i === hotbarIndex
+                ? 'border-vc-accent bg-vc-accent/20 ring-1 ring-vc-accent/60'
+                : 'border-vc-slot-edge bg-vc-slot/80'
             }`}
             style={{ touchAction: 'none' }}
             onPointerDown={(e) => {
@@ -140,6 +134,14 @@ export function HUD(): React.ReactElement {
           {toast}
         </div>
       )}
+
+      {/* Sleep fade-to-black */}
+      <div
+        className="absolute inset-0 bg-black transition-opacity duration-700 flex items-center justify-center"
+        style={{ opacity: sleeping ? 1 : 0, pointerEvents: 'none' }}
+      >
+        {sleeping && <span className="text-white/80 text-lg">Sleeping…</span>}
+      </div>
 
       {/* Low-health vignette */}
       {health <= 6 && health > 0 && (

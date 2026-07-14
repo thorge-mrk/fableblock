@@ -56,9 +56,17 @@ distant terrain stays crisp and shimmer-free.
 Craft an **oak boat** (5 planks in a U) and right-click to climb in: it floats
 to the water line, glides with momentum and paddling oars, and you sneak to
 disembark. **Villages** are lit at night — houses have framed peaked roofs,
-interior torches and glowstone lamp posts line the streets, so villagers (with
-their iconic nose and folded arms) stay visible and hostiles can't spawn
-indoors.
+interior torches, glowstone lamp posts and a **bed** in every home, so
+villagers (with their iconic nose and folded arms) stay visible and hostiles
+can't spawn indoors.
+
+Craft a **bed** (3 wool over 3 planks) and right-click it at night to sleep:
+time skips to dawn and your respawn point moves to the bed — unless monsters
+are nearby. The world **saves automatically** (IndexedDB): every placed or
+mined block, your inventory, position and the time of day survive a reload,
+and the title screen offers **Continue World**. The UI uses FableBlock's own
+dark-glass design language (teal accents, faceted HP diamonds) rather than
+imitating Minecraft's grey panels.
 
 ## Thread topology (Module 1)
 

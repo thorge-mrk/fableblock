@@ -16,7 +16,16 @@ const BTN =
 
 export function TitleScreen(): React.ReactElement {
   const seedText = useGameStore((s) => s.seedText);
+  const saveSeed = useGameStore((s) => s.saveSeed);
   const set = useGameStore((s) => s.set);
+  React.useEffect(() => {
+    // Probe IndexedDB for an existing world (enables the Continue button).
+    import('../engine/persistence').then(({ loadWorld }) =>
+      loadWorld().then((d) => {
+        if (d) set({ saveSeed: d.seed });
+      }),
+    );
+  }, [set]);
   return (
     <div className="absolute inset-0 bg-gradient-to-b from-vc-bg via-[#132030] to-[#1a3a33] flex flex-col items-center justify-center pointer-events-auto font-game">
       <h1
@@ -40,6 +49,14 @@ export function TitleScreen(): React.ReactElement {
           if (e.key === 'Enter') bridge().startWorld(seedText);
         }}
       />
+      {saveSeed !== null && (
+        <button
+          className={BTN + ' border-vc-accent text-vc-accent'}
+          onClick={() => bridge().continueWorld()}
+        >
+          Continue World (seed {saveSeed})
+        </button>
+      )}
       <button className={BTN} onClick={() => bridge().startWorld(seedText)}>
         Create World
       </button>

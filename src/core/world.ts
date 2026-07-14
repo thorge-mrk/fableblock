@@ -32,6 +32,8 @@ export class World implements VoxelSampler {
   readonly dirty = new Set<number>();
   /** Cell change sink (main thread: batches patches to the logic worker). */
   onCellChanged: CellChangeSink | null = null;
+  /** Fired once per actual block-ID change (never for light-only rewrites). */
+  onBlockChanged: ((x: number, y: number, z: number, id: number) => void) | null = null;
 
   // Reusable BFS queues (x,y,z triplets; removal queues add a 4th = old light).
   private addQ: number[] = [];
@@ -146,6 +148,7 @@ export class World implements VoxelSampler {
 
     // Write the id with cleared light; BFS rebuilds it.
     this.write(x, y, z, id);
+    if (this.onBlockChanged) this.onBlockChanged(x, y, z, id);
 
     // --- Blocklight ---
     if (oldBL > 0) this.removeLight(x, y, z, oldBL, false);

@@ -399,6 +399,17 @@ export class EntityRenderer {
     }
   }
 
+  /** Any hostile mob within r blocks (horizontal) of the point? */
+  hostileNear(x: number, z: number, r: number): boolean {
+    for (const e of this.entities.values()) {
+      if (!ENTITY_DEFS[e.type].hostile) continue;
+      const dx = e.cx - x;
+      const dz = e.cz - z;
+      if (dx * dx + dz * dz < r * r) return true;
+    }
+    return false;
+  }
+
   /** Nearest mob hit by the attack ray, or null. */
   pick(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number):
     { id: number; dist: number } | null {

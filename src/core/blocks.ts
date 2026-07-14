@@ -104,6 +104,8 @@ export const TILE = {
   ITEM_SHOVEL_IRON: 91,
   ITEM_SHOVEL_DIAMOND: 92,
   ITEM_BOAT: 93,
+  BED_TOP: 94,
+  BED_SIDE: 95,
 } as const;
 
 export const ATLAS_TILES = 32; // 32x32 grid of tiles
@@ -180,6 +182,7 @@ export const B = {
   COAL_BLOCK: 64,
   GOLD_BLOCK: 65,
   DIAMOND_BLOCK: 66,
+  BED: 67,
 } as const;
 
 export type BlockId = number;
@@ -344,6 +347,7 @@ def(B.OBSIDIAN, 'Obsidian', tile6(TILE.OBSIDIAN), { hardness: 25, tool: 'pickaxe
 def(B.COAL_BLOCK, 'Block of Coal', tile6(TILE.COAL_BLOCK), { hardness: 2.5, tool: 'pickaxe', minTier: 1 });
 def(B.GOLD_BLOCK, 'Block of Gold', tile6(TILE.GOLD_BLOCK), { hardness: 3, tool: 'pickaxe', minTier: 3 });
 def(B.DIAMOND_BLOCK, 'Block of Diamond', tile6(TILE.DIAMOND_BLOCK), { hardness: 5, tool: 'pickaxe', minTier: 3 });
+def(B.BED, 'Bed', tileTSB(TILE.BED_TOP, TILE.BED_SIDE, TILE.OAK_PLANKS), { hardness: 0.4, tool: 'axe' });
 
 const fluidDefaults = {
   solid: false,
@@ -430,7 +434,7 @@ export function isContainer(id: number): boolean {
 }
 
 export function isInteractive(id: number): boolean {
-  return isContainer(id) || id === B.CRAFTING_TABLE;
+  return isContainer(id) || id === B.CRAFTING_TABLE || id === B.BED;
 }
 
 export function blockDef(id: number): BlockDef {

@@ -70,6 +70,8 @@ interface GameStore {
   timeOfDay: number;
   toast: string | null;
   breakProgress: number; // 0..1 while mining
+  sleeping: boolean; // bed fade-to-black overlay
+  saveSeed: number | null; // seed of the stored world (Continue button)
 
   set: (partial: Partial<GameStore>) => void;
   setSettings: (partial: Partial<Settings>) => void;
@@ -117,6 +119,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   timeOfDay: 0.3,
   toast: null,
   breakProgress: 0,
+  sleeping: false,
+  saveSeed: null,
 
   set: (partial) => set(partial),
   setSettings: (partial) => {

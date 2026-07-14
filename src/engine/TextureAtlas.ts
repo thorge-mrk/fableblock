@@ -706,6 +706,42 @@ const PAINTERS: Record<number, Painter> = {
   [TILE.ITEM_WATER_BUCKET]: (p) => bucketPainter(p, [60, 110, 210]),
   [TILE.ITEM_LAVA_BUCKET]: (p) => bucketPainter(p, [220, 110, 30]),
   [TILE.ITEM_BOAT]: boatPainter,
+  [TILE.BED_TOP]: (p) => {
+    // Wood frame border, white pillow (top quarter), red blanket below.
+    p.noiseFill([150, 110, 60], 0.08);
+    for (let y = 1; y < 15; y++) {
+      for (let x = 1; x < 15; x++) {
+        if (y <= 4) {
+          const f = 1 + (p.rand() - 0.5) * 0.06;
+          p.px(x, y, 235 * f, 232 * f, 224 * f); // pillow
+        } else {
+          const f = 1 + (p.rand() - 0.5) * 0.1;
+          p.px(x, y, 178 * f, 40 * f, 46 * f); // blanket
+        }
+      }
+    }
+    // Blanket fold line + pillow shadow.
+    for (let x = 1; x < 15; x++) {
+      p.px(x, 5, 140, 28, 34);
+      p.px(x, 4, 205, 200, 190);
+    }
+    p.border([110, 78, 42]);
+  },
+  [TILE.BED_SIDE]: (p) => {
+    // Plank base with a red blanket band on the upper half.
+    p.noiseFill([150, 110, 60], 0.1);
+    for (let y = 0; y < 7; y++) {
+      for (let x = 0; x < 16; x++) {
+        const f = 1 + (p.rand() - 0.5) * 0.1;
+        p.px(x, y, 172 * f, 38 * f, 44 * f);
+      }
+    }
+    for (let x = 0; x < 16; x++) p.px(x, 7, 130, 26, 32);
+    // Frame legs.
+    p.rect(0, 12, 2, 4, [96, 66, 36]);
+    p.rect(14, 12, 2, 4, [96, 66, 36]);
+    p.border([110, 78, 42]);
+  },
 };
 
 /** Side view of a small wooden rowboat with a paddle. */
