@@ -339,32 +339,90 @@ function muttonPainter(p: TilePainter, meat: RGB, edge: RGB): void {
 
 const PAINTERS: Record<number, Painter> = {
   [TILE.GRASS_TOP]: (p) => {
-    p.noiseFill(GRASS_GREEN, 0.22);
-    p.speckle([90, 150, 50], 12, 1);
+    // Two-tone turf with blade tufts and tiny flowers — not flat noise.
+    p.noiseFill(GRASS_GREEN, 0.14);
+    for (let i = 0; i < 14; i++) {
+      const x = Math.floor(p.rand() * N);
+      const y = Math.floor(p.rand() * N);
+      p.px(x, y, 128, 188, 74);
+      p.px(x, y - 1, 142, 202, 86);
+    }
+    for (let i = 0; i < 6; i++) {
+      const x = Math.floor(p.rand() * N);
+      const y = Math.floor(p.rand() * N);
+      p.px(x, y, 84, 138, 52);
+      p.px(x + 1, y, 78, 130, 48);
+    }
+    p.bevel(0.08);
   },
   [TILE.GRASS_SIDE]: (p) => {
-    p.noiseFill(DIRT_BROWN, 0.2);
+    // Dirt body, jagged turf lip with hanging blades.
+    p.noiseFill(DIRT_BROWN, 0.18);
+    p.speckle([106, 74, 50], 6, 1);
     for (let x = 0; x < N; x++) {
-      const depth = 2 + Math.floor(p.rand() * 3);
+      const depth = 2 + Math.floor(p.rand() * 2) + (x % 5 === 0 ? 2 : 0);
       for (let y = 0; y < depth; y++) {
-        const f = 1 + (p.rand() - 0.5) * 0.2;
+        const f = 1 + (p.rand() - 0.5) * 0.16 - y * 0.05;
         p.px(x, y, GRASS_GREEN[0] * f, GRASS_GREEN[1] * f, GRASS_GREEN[2] * f);
+      }
+      if (x % 5 === 0) p.px(x, depth, 92, 148, 58);
+    }
+    for (let x = 0; x < N; x++) p.px(x, 0, 128, 188, 74);
+  },
+  [TILE.DIRT]: (p) => {
+    // Earth with embedded pebbles and root flecks.
+    p.noiseFill(DIRT_BROWN, 0.18);
+    for (let i = 0; i < 5; i++) {
+      const x = Math.floor(p.rand() * (N - 2));
+      const y = Math.floor(p.rand() * (N - 2));
+      p.rect(x, y, 2, 1, [158, 120, 88]);
+      p.px(x, y + 1, 96, 68, 46);
+    }
+    p.speckle([104, 72, 48], 8, 1);
+  },
+  [TILE.STONE]: (p) => {
+    // Fractured rock: cell base + two long hairline fissures.
+    p.cellNoise(STONE_GRAY, 0.16, 3);
+    for (let c = 0; c < 2; c++) {
+      let x = Math.floor(p.rand() * N);
+      let y = 0;
+      while (y < N) {
+        p.px(x, y, 96, 96, 100);
+        if (p.rand() < 0.4) x += p.rand() < 0.5 ? -1 : 1;
+        y++;
+      }
+    }
+    p.speckle([150, 150, 154], 5, 1);
+    p.bevel(0.06);
+  },
+  [TILE.COBBLESTONE]: cobblePainter(false),
+  [TILE.MOSSY_COBBLESTONE]: cobblePainter(true),
+  [TILE.BEDROCK]: (p) => {
+    p.cellNoise([58, 58, 62], 0.55, 3);
+    p.speckle([28, 28, 32], 14, 2);
+  },
+  [TILE.SAND]: (p) => {
+    // Wind-rippled dunes: soft horizontal waves.
+    p.noiseFill(SAND_YELLOW, 0.07);
+    for (let y = 1; y < N; y += 4) {
+      for (let x = 0; x < N; x++) {
+        const yy = y + Math.round(Math.sin((x / N) * Math.PI * 2 + y) * 1.2);
+        p.px(x, yy, 201, 188, 142);
+        p.px(x, yy + 1, 233, 222, 180);
       }
     }
   },
-  [TILE.DIRT]: (p) => {
-    p.noiseFill(DIRT_BROWN, 0.25);
-    p.speckle([110, 78, 52], 8, 1);
+  [TILE.GRAVEL]: (p) => {
+    // Distinct rounded pebbles over grit instead of pure noise.
+    p.cellNoise([116, 110, 104], 0.2, 2);
+    for (let i = 0; i < 7; i++) {
+      const x = 1 + Math.floor(p.rand() * (N - 4));
+      const y = 1 + Math.floor(p.rand() * (N - 4));
+      const shade = 0.75 + p.rand() * 0.5;
+      p.disc(x + 1, y + 1, 1.6, [122 * shade, 116 * shade, 110 * shade], 0.1);
+      p.px(x, y, 152, 148, 142);
+    }
   },
-  [TILE.STONE]: (p) => p.cellNoise(STONE_GRAY, 0.22, 2),
-  [TILE.COBBLESTONE]: cobblePainter(false),
-  [TILE.MOSSY_COBBLESTONE]: cobblePainter(true),
-  [TILE.BEDROCK]: (p) => p.cellNoise([62, 62, 62], 0.7, 2),
-  [TILE.SAND]: (p) => {
-    p.noiseFill(SAND_YELLOW, 0.12);
-    p.speckle([200, 188, 142], 10, 1);
-  },
-  [TILE.GRAVEL]: (p) => p.cellNoise([118, 110, 105], 0.42, 2),
   [TILE.SANDSTONE_TOP]: (p) => {
     p.noiseFill([216, 203, 155], 0.08);
     p.border([196, 183, 135]);
