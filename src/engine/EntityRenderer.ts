@@ -494,7 +494,7 @@ export class EntityRenderer {
     };
     switch (type) {
       case EntityType.ZOMBIE: {
-        buildHumanoid(e, { skin: 0x44a044, shirt: 0x2c6c8c, pants: 0x3c5c8c, face: 'zombie' });
+        buildHumanoid(e, { skin: 0x44a044, shirt: 0x2c6c8c, pants: 0x3c5c8c, face: 'zombie', bodyTex: bodyTexture('zombieBody') });
         // Tattered rags: darker patches hanging off the torso and one leg.
         const body = e.parts.body as THREE.Mesh;
         const rag1 = partBox(e, 0.2, 0.22, 0.06, 0x1e4a60);
@@ -510,7 +510,7 @@ export class EntityRenderer {
         break;
       }
       case EntityType.SKELETON: {
-        buildHumanoid(e, { skin: 0xbdbdbd, shirt: 0x9a9a9a, pants: 0x8a8a8a, face: 'skeleton', thin: true });
+        buildHumanoid(e, { skin: 0xbdbdbd, shirt: 0x9a9a9a, pants: 0x8a8a8a, face: 'skeleton', thin: true, bodyTex: bodyTexture('skeletonBody') });
         // Simple bow held in the right hand: an arc of three slats + string.
         const bow = new THREE.Group();
         const mid = partBox(e, 0.05, 0.3, 0.05, 0x7a5a32);
@@ -531,7 +531,7 @@ export class EntityRenderer {
         break;
       }
       case EntityType.VILLAGER: {
-        buildHumanoid(e, { skin: 0xc8a078, shirt: 0x7a5c44, pants: 0x5c4434, face: 'villager', robe: true });
+        buildHumanoid(e, { skin: 0xc8a078, shirt: 0x7a5c44, pants: 0x5c4434, face: 'villager', robe: true, bodyTex: bodyTexture('villagerRobe') });
         // Iconic protruding nose.
         const head = e.parts.head as THREE.Group;
         const nose = partBox(e, 0.14, 0.26, 0.16, 0xb78a64);
@@ -547,7 +547,7 @@ export class EntityRenderer {
         break;
       case EntityType.COW:
         buildQuadruped(e, {
-          body: 0x5a4436, legs: 0x4a3830, headColor: 0x5a4436, face: 'cow',
+          body: 0x5a4436, legs: 0x4a3830, headColor: 0x5a4436, face: 'cow', bodyTex: bodyTexture('cowHide'),
           bodyW: 0.9, bodyH: 0.75, bodyL: 1.3, legH: 0.65, headSize: 0.5,
           extras: (g, ee) => {
             // White belly patch + udder.
@@ -559,7 +559,7 @@ export class EntityRenderer {
         break;
       case EntityType.PIG:
         buildQuadruped(e, {
-          body: 0xeea4a4, legs: 0xd98f8f, headColor: 0xeea4a4, face: 'pig',
+          body: 0xeea4a4, legs: 0xd98f8f, headColor: 0xeea4a4, face: 'pig', bodyTex: bodyTexture('pigHide'),
           bodyW: 0.8, bodyH: 0.6, bodyL: 1.1, legH: 0.35, headSize: 0.45,
         });
         break;
@@ -570,7 +570,7 @@ export class EntityRenderer {
         buildGolem(e);
         break;
       case EntityType.PIGLIN: {
-        buildHumanoid(e, { skin: 0xe8a294, shirt: 0x8a5a3c, pants: 0x4a3428, face: 'piglin' });
+        buildHumanoid(e, { skin: 0xe8a294, shirt: 0x8a5a3c, pants: 0x4a3428, face: 'piglin', bodyTex: bodyTexture('piglinBody') });
         const head = e.parts.head as THREE.Group;
         const snout = partBox(e, 0.2, 0.12, 0.1, 0xd98f84);
         snout.position.set(0, 0.14, -0.3);
@@ -681,6 +681,8 @@ export interface HumanoidSkin {
   face: string;
   thin?: boolean;
   robe?: boolean;
+  /** Procedural texture wrapped around the torso (P5-9). */
+  bodyTex?: THREE.Texture;
 }
 
 function partBox(
@@ -688,10 +690,16 @@ function partBox(
   w: number, h: number, d: number,
   color: number,
   faceTex?: THREE.Texture,
+  texAll = false,
 ): THREE.Mesh {
   const geo = new THREE.BoxGeometry(w, h, d);
   let mats: THREE.MeshLambertMaterial | THREE.MeshLambertMaterial[];
-  if (faceTex) {
+  if (faceTex && texAll) {
+    // Body texture on every face (pattern colours are baked into the map).
+    mats = new THREE.MeshLambertMaterial({ map: faceTex });
+    e.materials.push(mats);
+    e.baseColors.push(new THREE.Color(1, 1, 1));
+  } else if (faceTex) {
     const side = new THREE.MeshLambertMaterial({ color });
     const front = new THREE.MeshLambertMaterial({ map: faceTex });
     // BoxGeometry order: +x,-x,+y,-y,+z,-z — model faces -Z.
@@ -706,6 +714,130 @@ function partBox(
   return new THREE.Mesh(geo, mats);
 }
 
+const BODY_TEX_CACHE = new Map<string, THREE.Texture>();
+
+/**
+ * Procedural 16x16 body-part textures (P5-9): torn shirts, rib cages, hide
+ * patches, wool curls — wrapped around whole boxes instead of flat colour.
+ */
+function bodyTexture(kind: string): THREE.Texture {
+  let tex = BODY_TEX_CACHE.get(kind);
+  if (tex) return tex;
+  const c = document.createElement('canvas');
+  c.width = 16;
+  c.height = 16;
+  const g = c.getContext('2d')!;
+  const fill = (color: string) => {
+    g.fillStyle = color;
+    g.fillRect(0, 0, 16, 16);
+  };
+  const px = (x: number, y: number, w: number, h: number, color: string) => {
+    g.fillStyle = color;
+    g.fillRect(x, y, w, h);
+  };
+  // Deterministic per-kind rng (stable across sessions).
+  let s = 0;
+  for (const ch of kind) s = (s * 31 + ch.charCodeAt(0)) >>> 0;
+  const rnd = () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0xffffffff;
+  };
+  switch (kind) {
+    case 'zombieBody':
+      fill('#2c6c8c');
+      for (let i = 0; i < 5; i++) {
+        const x = Math.floor(rnd() * 14);
+        let y = Math.floor(rnd() * 8);
+        for (let k = 0; k < 4 + rnd() * 4; k++) {
+          px(x + Math.floor(rnd() * 2), y, 1, 1, '#1c4a60');
+          y++;
+        }
+      }
+      px(3, 11, 3, 3, '#44a044'); // skin through the rips
+      px(11, 5, 2, 3, '#3c8c3c');
+      px(0, 14, 16, 2, '#224e66'); // frayed hem
+      break;
+    case 'skeletonBody':
+      fill('#6a6a6a');
+      px(7, 0, 2, 16, '#b0b0b0'); // sternum
+      for (const y of [2, 5, 8, 11]) {
+        px(1, y, 14, 2, '#c8c8c8');
+        px(1, y + 1, 14, 1, '#9a9a9a');
+      }
+      break;
+    case 'creeperBody':
+      for (let y = 0; y < 16; y += 2) {
+        for (let x = 0; x < 16; x += 2) {
+          const shades = ['#54c454', '#46a846', '#3c903c', '#62d062'];
+          px(x, y, 2, 2, shades[Math.floor(rnd() * shades.length)]);
+        }
+      }
+      break;
+    case 'cowHide':
+      fill('#5a4436');
+      for (const [bx, by, r] of [[3, 3, 3], [11, 9, 4], [6, 12, 2]] as const) {
+        for (let y = -r; y <= r; y++) {
+          for (let x = -r; x <= r; x++) {
+            if (x * x + y * y <= r * r + rnd() * 2) px(bx + x, by + y, 1, 1, '#e4d8cc');
+          }
+        }
+      }
+      break;
+    case 'pigHide':
+      fill('#eea4a4');
+      for (let i = 0; i < 10; i++) px(Math.floor(rnd() * 15), Math.floor(rnd() * 15), 2, 1, '#d98f8f');
+      px(4, 12, 2, 2, '#b97a6a'); // mud specks
+      px(11, 13, 2, 1, '#b97a6a');
+      break;
+    case 'sheepWool':
+      fill('#efece2');
+      for (let i = 0; i < 12; i++) {
+        const x = Math.floor(rnd() * 14);
+        const y = Math.floor(rnd() * 14);
+        px(x, y, 2, 1, '#ddd8c8');
+        px(x + 1, y + 1, 1, 1, '#d2ccba');
+        px(x, y - 1, 1, 1, '#fbf9f2');
+      }
+      break;
+    case 'villagerRobe':
+      fill('#7a5c44');
+      for (const x of [4, 8, 12]) px(x, 0, 1, 16, '#6a4e3a'); // folds
+      px(0, 7, 16, 2, '#4a3628'); // belt
+      px(7, 7, 2, 2, '#8a6a3c'); // buckle
+      px(0, 13, 16, 3, '#5c4434'); // hem
+      break;
+    case 'piglinBody':
+      fill('#8a5a3c');
+      px(3, 0, 2, 16, '#5a3a26'); // straps
+      px(11, 0, 2, 16, '#5a3a26');
+      px(0, 1, 16, 1, '#e8c84a'); // gold trim
+      px(7, 6, 2, 2, '#e8c84a'); // buckle
+      break;
+    case 'golemBody':
+      fill('#bcb2a4');
+      for (let i = 0; i < 3; i++) {
+        let x = Math.floor(rnd() * 14);
+        let y = Math.floor(rnd() * 6);
+        for (let k = 0; k < 8; k++) {
+          px(x, y, 1, 1, '#8a8074');
+          x += rnd() < 0.4 ? 1 : 0;
+          y++;
+          if (y > 15) break;
+        }
+      }
+      px(10, 2, 4, 3, '#7a9a5a'); // moss
+      px(9, 4, 2, 2, '#6a8a4c');
+      break;
+    default:
+      fill('#c88');
+  }
+  tex = new THREE.CanvasTexture(c);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  BODY_TEX_CACHE.set(kind, tex);
+  return tex;
+}
+
 export function buildHumanoid(e: RenderEntity | { group: THREE.Group; parts: Record<string, THREE.Object3D>; materials: THREE.MeshLambertMaterial[]; baseColors: THREE.Color[] }, skin: HumanoidSkin): void {
   const armW = skin.thin ? 0.12 : 0.25;
   const g = e.group;
@@ -716,7 +848,7 @@ export function buildHumanoid(e: RenderEntity | { group: THREE.Group; parts: Rec
   head.position.y = 1.5;
   g.add(head);
 
-  const body = partBox(e, skin.robe ? 0.56 : 0.5, 0.75, 0.3, skin.shirt);
+  const body = partBox(e, skin.robe ? 0.56 : 0.5, 0.75, 0.3, skin.shirt, skin.bodyTex, skin.bodyTex !== undefined);
   body.position.y = 1.5 - 0.375;
   g.add(body);
 
@@ -771,7 +903,7 @@ function buildCreeper(e: RenderEntity): void {
   head.add(hb);
   head.position.y = 1.2;
   g.add(head);
-  const body = partBox(e, 0.5, 0.9, 0.3, 0x46a846);
+  const body = partBox(e, 0.5, 0.9, 0.3, 0x46a846, bodyTexture('creeperBody'), true);
   body.position.y = 0.75;
   g.add(body);
   for (const [sx, sz] of [[-0.13, 0.18], [0.13, 0.18], [-0.13, -0.18], [0.13, -0.18]] as const) {
@@ -793,7 +925,7 @@ function buildSheep(e: RenderEntity): void {
   body.position.y = 0.85;
   g.add(body);
   // Fluffy wool coat (hidden while sheared; visibility follows the anim flag).
-  const wool = partBox(e, 0.95, 0.85, 1.35, 0xefece2);
+  const wool = partBox(e, 0.95, 0.85, 1.35, 0xefece2, bodyTexture('sheepWool'), true);
   wool.position.y = 0.88;
   g.add(wool);
   e.parts.extra = wool;
@@ -825,7 +957,7 @@ function buildGolem(e: RenderEntity): void {
   head.add(hb);
   head.position.y = 2.05;
   g.add(head);
-  const body = partBox(e, 1.1, 1.1, 0.65, 0xbcb2a4);
+  const body = partBox(e, 1.1, 1.1, 0.65, 0xbcb2a4, bodyTexture('golemBody'), true);
   body.position.y = 1.5;
   g.add(body);
   const mkArm = (sign: number) => {
@@ -858,6 +990,7 @@ interface QuadrupedSpec {
   legs: number;
   headColor: number;
   face: string;
+  bodyTex?: THREE.Texture;
   bodyW: number;
   bodyH: number;
   bodyL: number;
@@ -870,7 +1003,7 @@ interface QuadrupedSpec {
 function buildQuadruped(e: RenderEntity, s: QuadrupedSpec): void {
   const g = e.group;
   const bodyY = s.legH + s.bodyH / 2;
-  const body = partBox(e, s.bodyW, s.bodyH, s.bodyL, s.body);
+  const body = partBox(e, s.bodyW, s.bodyH, s.bodyL, s.body, s.bodyTex, s.bodyTex !== undefined);
   body.position.y = bodyY;
   g.add(body);
   const head = new THREE.Group();

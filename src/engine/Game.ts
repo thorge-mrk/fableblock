@@ -801,6 +801,21 @@ export class Game {
       this.prevJump = effInput.jump;
     }
 
+    // Underwater: a slow trickle of rising bubbles in front of the camera.
+    if (this.player.headInFluid && !this.player.inLava && Math.random() < dt * 5) {
+      const [lx, ly, lz] = this.player.lookDir();
+      this.particleColor.setHex(0xbfe8ff);
+      this.particles.burst(
+        this.player.x + lx * 1.2 + (Math.random() - 0.5),
+        this.player.y + 1.4 + ly * 1.2,
+        this.player.z + lz * 1.2 + (Math.random() - 0.5),
+        this.particleColor,
+        2,
+        -0.28, // buoyant
+        0.15,
+      );
+    }
+
     // Footsteps + sparse day/night ambience; splash on entering water.
     if (this.player.inWater && !this.wasInWater) this.sound.splash();
     this.wasInWater = this.player.inWater;
@@ -916,7 +931,7 @@ export class Game {
     if (input.mineHeld && !this.prevMineHeld) {
       const target = this.entityRenderer.pick(ox, oy, oz, dx, dy, dz, 3.6);
       if (target && (!hit || target.dist < hit.dist) && this.attackCooldown <= 0) {
-        this.attackEntity(target.id);
+        this.attackEntity(target.id, target.dist);
         return;
       }
     }
@@ -1084,15 +1099,21 @@ export class Game {
     }
   }
 
-  private attackEntity(id: number): void {
+  private attackEntity(id: number, dist = 2): void {
     this.attackCooldown = 0.4;
     this.exhaustion += 0.1;
     const held = this.heldStack();
     const tool = held ? itemDef(held.id).tool : undefined;
     const damage = (tool ? tool.damage : 1) + 2 * (held?.ench?.sharp ?? 0);
-    const [dx, , dz] = this.player.lookDir();
+    const [dx, dy, dz] = this.player.lookDir();
     const len = Math.hypot(dx, dz) || 1;
     this.sendLogic({ t: 'attack', entityId: id, damage, kx: (dx / len) * 7, kz: (dz / len) * 7 });
+    // Hit marker: a quick white-red spark burst at the impact point.
+    const [ex, ey, ez] = this.eyePos();
+    this.particleColor.setHex(0xfff2f0);
+    this.particles.burst(ex + dx * dist, ey + dy * dist, ez + dz * dist, this.particleColor, 3, 0.25, 0.5);
+    this.particleColor.setHex(0xe84040);
+    this.particles.burst(ex + dx * dist, ey + dy * dist, ez + dz * dist, this.particleColor, 3, 0.35, 0.5);
     if (tool?.type === 'sword') this.useTool(1);
     this.heldView.swing();
     this.character.swing();

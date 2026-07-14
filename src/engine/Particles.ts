@@ -15,6 +15,8 @@ interface Particle {
   life: number;
   maxLife: number;
   active: boolean;
+  /** Gravity multiplier: 1 falls, 0 floats, negative rises (bubbles). */
+  grav: number;
 }
 
 const MAX_PARTICLES = 160;
@@ -33,12 +35,15 @@ export class Particles {
       mesh.visible = false;
       mesh.matrixAutoUpdate = true;
       this.group.add(mesh);
-      this.pool.push({ mesh, vx: 0, vy: 0, vz: 0, life: 0, maxLife: 1, active: false });
+      this.pool.push({ mesh, vx: 0, vy: 0, vz: 0, life: 0, maxLife: 1, active: false, grav: 1 });
     }
   }
 
-  /** Burst of fragments coloured from a block's texture. */
-  burst(x: number, y: number, z: number, color: THREE.Color, count = 14): void {
+  /**
+   * Burst of fragments coloured from a block's texture. `grav` scales
+   * gravity (negative = buoyant bubbles), `spread` the initial velocity.
+   */
+  burst(x: number, y: number, z: number, color: THREE.Color, count = 14, grav = 1, spread = 1): void {
     let spawned = 0;
     for (const p of this.pool) {
       if (p.active) continue;
@@ -47,12 +52,13 @@ export class Particles {
       const s = 0.5 + Math.random() * 0.7;
       p.mesh.scale.setScalar(s);
       p.mesh.position.set(x + (Math.random() - 0.5) * 0.7, y + Math.random() * 0.6, z + (Math.random() - 0.5) * 0.7);
-      p.vx = (Math.random() - 0.5) * 4;
-      p.vy = 2 + Math.random() * 3;
-      p.vz = (Math.random() - 0.5) * 4;
+      p.vx = (Math.random() - 0.5) * 4 * spread;
+      p.vy = (2 + Math.random() * 3) * (grav < 0 ? 0.25 : spread);
+      p.vz = (Math.random() - 0.5) * 4 * spread;
       p.maxLife = 0.5 + Math.random() * 0.4;
       p.life = p.maxLife;
       p.active = true;
+      p.grav = grav;
       p.mesh.visible = true;
       if (++spawned >= count) break;
     }
@@ -67,7 +73,7 @@ export class Particles {
         p.mesh.visible = false;
         continue;
       }
-      p.vy += GRAVITY * dt;
+      p.vy += GRAVITY * p.grav * dt;
       const m = p.mesh;
       let nx = m.position.x + p.vx * dt;
       let ny = m.position.y + p.vy * dt;

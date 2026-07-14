@@ -105,7 +105,14 @@ void main() {
   // User brightness (gamma) — applied after fog so night lift is uniform.
   col = pow(col, vec3(1.0 / uGamma));
   ${water
-    ? 'float shimmer = 0.92 + 0.08 * sin(uTime * 2.2 + vUv.x * 6.2831 + vUv.y * 4.0);\n  gl_FragColor = vec4(col * shimmer, 0.72);'
+    ? `// Two crossing wave bands + a sparkle ripple (P5-8 water pass).
+  float shimmer = 0.9
+    + 0.07 * sin(uTime * 2.2 + vUv.x * 6.2831 + vUv.y * 4.0)
+    + 0.05 * sin(uTime * 3.6 - vUv.y * 9.42 + vUv.x * 2.6);
+  float sparkle = smoothstep(0.96, 1.0, sin(uTime * 5.0 + vUv.x * 21.0 + vUv.y * 13.0)) * 0.35;
+  // Glancing far water reads denser/more mirror-like than water at your feet.
+  float depthF = smoothstep(6.0, 55.0, vDist);
+  gl_FragColor = vec4(col * shimmer + vec3(sparkle), mix(0.58, 0.85, depthF));`
     : 'gl_FragColor = vec4(col, 1.0);'}
 }
 `;
