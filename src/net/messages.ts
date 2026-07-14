@@ -137,6 +137,8 @@ export interface LogicPlayerMsg {
   /** World time-of-day in [0,1). */
   time: number;
   health: number;
+  /** Creative players are not valid mob targets. */
+  creative: boolean;
 }
 
 export interface LogicAttackMsg {

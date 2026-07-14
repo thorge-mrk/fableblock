@@ -31,6 +31,8 @@ export class PlayerController {
   headInFluid = false;
   /** Riding a boat (client-side vehicle: buoyant, drifty steering). */
   inBoat = false;
+  /** Creative flight (double-tap jump toggles; landing while descending ends it). */
+  flying = false;
   /** Highest y reached since leaving ground (fall damage). */
   private fallPeak = 0;
   /** Smoothed eye height for crouch transitions. */
@@ -63,6 +65,10 @@ export class PlayerController {
   update(dt: number, world: World, inp: InputState): void {
     if (this.inBoat) {
       this.updateBoat(dt, world, inp);
+      return;
+    }
+    if (this.flying) {
+      this.updateFlight(dt, world, inp);
       return;
     }
     // --- Sneak state (can always start; can only stand up with headroom) ---
@@ -162,6 +168,50 @@ export class PlayerController {
     // --- Eye height smoothing ---
     const targetEye = this.sneaking ? PLAYER_SNEAK_EYE : PLAYER_EYE;
     this.eyeSmooth += (targetEye - this.eyeSmooth) * Math.min(1, 18 * dt);
+  }
+
+  /** Creative flight: gravity-free glide, jump = rise, sneak = sink. */
+  private updateFlight(dt: number, world: World, inp: InputState): void {
+    this.sneaking = false;
+    this.sprinting = inp.sprint;
+    this.sampleFluids(world);
+    const speed = (inp.sprint ? PLAYER_SPRINT_SPEED : PLAYER_WALK_SPEED) * 1.9;
+    const sin = Math.sin(this.yaw);
+    const cos = Math.cos(this.yaw);
+    const wishX = (-sin * inp.moveZ + cos * inp.moveX) * speed;
+    const wishZ = (-cos * inp.moveZ - sin * inp.moveX) * speed;
+    this.vx += (wishX - this.vx) * Math.min(1, 9 * dt);
+    this.vz += (wishZ - this.vz) * Math.min(1, 9 * dt);
+    const wishY = (inp.jump ? 9 : 0) + (inp.sneak ? -9 : 0);
+    this.vy += (wishY - this.vy) * Math.min(1, 9 * dt);
+
+    const steps = Math.max(1, Math.ceil((Math.hypot(this.vx, this.vy, this.vz) * dt) / 0.45));
+    let onGround = false;
+    for (let i = 0; i < steps; i++) {
+      const sdt = dt / steps;
+      const res = moveEntity(
+        world,
+        this.x, this.y, this.z,
+        PLAYER_WIDTH, this.height,
+        this.vx * sdt, this.vy * sdt, this.vz * sdt,
+        { stepHeight: 0, sneak: false },
+      );
+      if (res.hitX) this.vx = 0;
+      if (res.hitZ) this.vz = 0;
+      if (res.hitY) {
+        if (this.vy < 0) onGround = true;
+        this.vy = 0;
+      }
+      this.x = res.cx;
+      this.y = res.y;
+      this.z = res.cz;
+      if (res.onGround) onGround = true;
+    }
+    // Sinking onto solid ground drops back into normal movement.
+    if (onGround && wishY < 0) this.flying = false;
+    this.onGround = onGround;
+    this.fallPeak = this.y; // flight never charges fall damage
+    this.eyeSmooth += (PLAYER_EYE - this.eyeSmooth) * Math.min(1, 18 * dt);
   }
 
   /** Buoyant, drifty boat movement: floats to the water line, glides on top. */

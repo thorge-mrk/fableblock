@@ -46,7 +46,7 @@ const world = new World();
 let tickCount = 0;
 let dim = 0; // 0 overworld, 1 nether
 
-const player = { x: 0, y: 80, z: 0, yaw: 0, sneak: false, health: 20, valid: false };
+const player = { x: 0, y: 80, z: 0, yaw: 0, sneak: false, health: 20, valid: false, creative: false };
 let timeOfDay = 0.05;
 
 function sunFactor(): number {
@@ -1014,7 +1014,7 @@ function tickZombie(e: Ent): void {
   let found = false;
   const pd = distToPlayer(e);
   let bestD = 16;
-  if (pd < bestD && player.health > 0 && player.valid) {
+  if (pd < bestD && player.health > 0 && player.valid && !player.creative) {
     bestD = pd;
     tx = player.x; ty = player.y; tz = player.z;
     e.targetId = -1;
@@ -1077,7 +1077,7 @@ function tickSkeleton(e: Ent): void {
 
   const pd = distToPlayer(e);
   let move = { x: 0, z: 0, jump: false };
-  if (pd < 16 && player.valid && player.health > 0) {
+  if (pd < 16 && player.valid && player.health > 0 && !player.creative) {
     const eye = e.y + def.eye;
     const los = hasLOS(e.x, eye, e.z, player.x, player.y + 1.6, player.z);
     const dx = player.x - e.x;
@@ -1124,7 +1124,7 @@ function shootArrow(e: Ent, tx: number, ty: number, tz: number): void {
 function tickCreeper(e: Ent): void {
   const pd = distToPlayer(e);
   let move = { x: 0, z: 0, jump: false };
-  if (pd < 16 && player.valid && player.health > 0) {
+  if (pd < 16 && player.valid && player.health > 0 && !player.creative) {
     // Fuse only with a clear line of sight — no detonating through walls/floors.
     if (pd <= 3 && hasLOS(e.x, e.y + 1.2, e.z, player.x, player.y + 1.2, player.z)) {
       // Stop and swell (silent fuse).
@@ -1364,7 +1364,7 @@ function tickGolem(e: Ent): void {
 function tickPiglin(e: Ent): void {
   const def = ENTITY_DEFS[e.type];
   let move = { x: 0, z: 0, jump: false };
-  if (e.anger > 0 && player.valid && player.health > 0) {
+  if (e.anger > 0 && player.valid && player.health > 0 && !player.creative) {
     e.anger--;
     const pd = distToPlayer(e);
     pathTo(e, player.x, player.y, player.z);
@@ -1397,7 +1397,7 @@ function tickMagmaCube(e: Ent): void {
   e.swell = e.onGround ? Math.min(1, e.swell + 0.15) : Math.max(0, e.swell - 0.3);
   let move = { x: 0, z: 0, jump: false };
   const pd = distToPlayer(e);
-  if (pd < 16 && player.valid && player.health > 0) {
+  if (pd < 16 && player.valid && player.health > 0 && !player.creative) {
     const dx = player.x - e.x;
     const dz = player.z - e.z;
     const d = Math.hypot(dx, dz) || 1;
@@ -2136,6 +2136,7 @@ ctx.onmessage = (e: MessageEvent<ToLogicMsg>) => {
       player.yaw = msg.yaw;
       player.sneak = msg.sneak;
       player.health = msg.health;
+      player.creative = msg.creative === true;
       player.valid = true;
       timeOfDay = msg.time;
       break;

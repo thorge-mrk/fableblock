@@ -9,7 +9,7 @@ import { useGameStore } from '../state/store';
 import { bridge } from '../state/bridge';
 import { Slot, CursorStack } from './Slot';
 import { Slots } from '../core/inventory';
-import { itemDef } from '../core/items';
+import { itemDef, CREATIVE_ITEMS } from '../core/items';
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }): React.ReactElement {
   return (
@@ -128,11 +128,44 @@ function ArmorColumn(): React.ReactElement {
   );
 }
 
+/** Creative catalogue: click any entry to put a full stack on the cursor. */
+function CreativePalette(): React.ReactElement {
+  return (
+    <div className="max-h-44 overflow-y-auto mb-2 p-1 rounded-lg border border-vc-slot-edge bg-vc-bg/60">
+      <div className="grid grid-cols-9 gap-0.5">
+        {CREATIVE_ITEMS.map((id) => (
+          <div
+            key={id}
+            className="relative w-[38px] h-[38px] rounded border border-vc-slot-edge bg-vc-slot hover:border-vc-accent cursor-pointer"
+            style={{ touchAction: 'none' }}
+            title={itemDef(id).name}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              bridge().creativeTake(id);
+            }}
+          >
+            <img
+              src={bridge().iconFor(id)}
+              alt={itemDef(id).name}
+              className="absolute inset-0 m-auto w-7 h-7 pointer-events-none"
+              style={{ imageRendering: 'pixelated' }}
+              draggable={false}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function InventoryScreen(): React.ReactElement {
   const inventory = useGameStore((s) => s.inventory);
   const cursor = useGameStore((s) => s.cursor);
+  const gameMode = useGameStore((s) => s.gameMode);
   return (
-    <Panel title="Inventory">
+    <Panel title={gameMode === 'creative' ? 'Inventory — Creative' : 'Inventory'}>
+      {gameMode === 'creative' && <CreativePalette />}
       <div className="flex items-start justify-center">
         <ArmorColumn />
         <CraftArea size={2} />

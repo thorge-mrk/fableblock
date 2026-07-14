@@ -5,7 +5,7 @@
  */
 
 export interface GameBridge {
-  startWorld(seedText: string): void;
+  startWorld(seedText: string, mode?: 'survival' | 'creative'): void;
   /** Resume the saved world (seed + edits + player state) from IndexedDB. */
   continueWorld(): void;
   respawn(): void;
@@ -20,6 +20,8 @@ export interface GameBridge {
   armorClick(slot: number): void;
   /** Double-click: gather all matching stacks onto the cursor. */
   collectAll(): void;
+  /** Creative palette: put a fresh stack of the item on the cursor. */
+  creativeTake(id: number): void;
   /** Buy an enchantment level for the held tool (enchanting table UI). */
   enchantHeld(kind: 'eff' | 'unb' | 'sharp'): void;
   craftGridClick(slot: number, button: 0 | 2, shift: boolean): void;

@@ -119,6 +119,7 @@ export function HUD(): React.ReactElement {
   const toast = useGameStore((s) => s.toast);
   const screen = useGameStore((s) => s.screen);
   const sleeping = useGameStore((s) => s.sleeping);
+  const gameMode = useGameStore((s) => s.gameMode);
   const portalFade = useGameStore((s) => s.portalFade);
 
   const heldName = inventory[hotbarIndex] ? itemDef(inventory[hotbarIndex]!.id).name : null;
@@ -145,7 +146,9 @@ export function HUD(): React.ReactElement {
         </div>
       )}
 
-      {/* Status rows: hearts left, drumsticks right, armor shields above */}
+      {/* Status rows: hearts left, drumsticks right, armor shields above
+          (creative mode hides survival stats entirely) */}
+      {gameMode === 'survival' && (
       <div className="absolute bottom-[92px] left-1/2 -translate-x-1/2 flex flex-col items-start gap-0.5">
         {armorPts > 0 && (
           <div className="flex gap-0.5">
@@ -167,6 +170,7 @@ export function HUD(): React.ReactElement {
           </div>
         </div>
       </div>
+      )}
 
       {/* Held item name */}
       {heldName && screen === 'none' && (
@@ -179,6 +183,7 @@ export function HUD(): React.ReactElement {
       )}
 
       {/* XP bar with a level badge at its right end */}
+      {gameMode === 'survival' && (
       <div className="absolute bottom-[68px] left-1/2 -translate-x-1/2 w-[420px] max-w-[80vw]">
         <div className="h-1.5 bg-black/50 rounded-full overflow-hidden border border-vc-slot-edge/60">
           <div className="h-full bg-vc-accent" style={{ width: `${Math.round(xpFrac * 100)}%` }} />
@@ -192,6 +197,7 @@ export function HUD(): React.ReactElement {
           </span>
         )}
       </div>
+      )}
 
       {/* Hotbar */}
       <div

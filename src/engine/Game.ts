@@ -92,6 +92,8 @@ export class Game {
   private exhaustion = 0;
   private prevJump = false;
   private shake = 0;
+  private lastJumpPress = -1;
+  private creativeBreakCd = 0;
   // Camera feel: sprint FOV lerp, walk bob, landing dip.
   private camFov = 0;
   private bobPhase = 0;
@@ -121,7 +123,7 @@ export class Game {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     registerBridge({
-      startWorld: (seedText) => this.start(seedText),
+      startWorld: (seedText, mode) => this.start(seedText, null, mode),
       continueWorld: () => {
         loadWorld().then((d) => {
           if (d) this.start(String(d.seed), d);
@@ -136,6 +138,7 @@ export class Game {
       invClick: (slot, button, shift) => this.invClick(slot, button, shift),
       armorClick: (slot) => this.armorClick(slot),
       collectAll: () => this.collectToCursor(),
+      creativeTake: (id) => this.creativeTake(id),
       enchantHeld: (kind) => this.enchantHeld(kind),
       craftGridClick: (slot, button, shift) => this.craftGridClick(slot, button, shift),
       craftResultClick: (shift) => this.craftResultClick(shift),
@@ -155,11 +158,12 @@ export class Game {
   // -------------------------------------------------------------------------
   // Bootstrapping
   // -------------------------------------------------------------------------
-  start(seedText: string, resume: SaveData | null = null): void {
+  start(seedText: string, resume: SaveData | null = null, mode: 'survival' | 'creative' = 'survival'): void {
     const seed = /^-?\d+$/.test(seedText.trim())
       ? Number(seedText.trim()) >>> 0
       : hashSeed(seedText.trim() === '' ? String(Date.now()) : seedText.trim());
     this.worldSeed = seed;
+    gameStore.set({ gameMode: resume?.mode === 'creative' ? 'creative' : mode });
     this.resumeData = resume;
     this.resumeApplied = false;
     this.journals = [new Map(), new Map()];
@@ -475,6 +479,7 @@ export class Game {
         x: this.player.x, y: this.player.y, z: this.player.z,
         yaw: this.player.yaw, sneak: this.player.sneaking,
         time: this.dayNight.time, health: gameStore.get().health,
+        creative: this.isCreative(),
       });
     }
     this.flushPatches();
@@ -690,6 +695,7 @@ export class Game {
     return saveWorld({
       version: 2,
       dim: this.dim,
+      mode: gameStore.get().gameMode,
       editsNether: flatten(this.journals[1]),
       seed: this.worldSeed,
       time: this.dayNight.time,
@@ -745,6 +751,16 @@ export class Game {
     const effInput = uiOpen || !alive
       ? { ...input, moveX: 0, moveZ: 0, jump: false, sneak: false, sprint: false }
       : input;
+    // Creative: double-tap jump toggles flight.
+    if (this.isCreative() && alive && !uiOpen && effInput.jump && !this.prevJump) {
+      const nowMs = performance.now();
+      if (nowMs - this.lastJumpPress < 280 && !this.player.inBoat) {
+        this.player.flying = !this.player.flying;
+        this.player.vy = 0;
+        this.toast(this.player.flying ? 'Flying (double-tap jump to land)' : 'Flying off');
+      }
+      this.lastJumpPress = nowMs;
+    }
     // Sneak dismounts the boat (edge-triggered so it doesn't immediately re-fire).
     if (this.player.inBoat && alive && !uiOpen && effInput.sneak && !this.prevSneak) {
       this.dismountBoat();
@@ -874,6 +890,7 @@ export class Game {
     } else {
       this.magmaTimer = 0;
     }
+    if (this.isCreative()) return; // creative: no hunger, no starvation
     // Hunger drain: exhaustion accumulates from exertion, 4 points = 1 food.
     const s = gameStore.get();
     if (this.exhaustion >= 4) {
@@ -943,6 +960,17 @@ export class Game {
     }
 
     if (!input.mineHeld || !hit) {
+      this.stopMining();
+      return;
+    }
+
+    // Creative: instant break (bedrock included), no drops, no tool wear.
+    if (this.isCreative()) {
+      this.creativeBreakCd -= dt;
+      if (this.creativeBreakCd <= 0) {
+        this.creativeBreakCd = 0.18;
+        this.breakBlock(hit, false);
+      }
       this.stopMining();
       return;
     }
@@ -1127,6 +1155,7 @@ export class Game {
 
   /** Apply durability loss to the held tool. */
   private useTool(amount: number): void {
+    if (this.isCreative()) return;
     const s = gameStore.get();
     const inv = s.inventory.map(cloneStack);
     const held = inv[s.hotbarIndex];
@@ -1490,10 +1519,24 @@ export class Game {
   }
 
   private consumeHeld(): void {
+    if (this.isCreative()) return;
     const s = gameStore.get();
     const inv = s.inventory.map(cloneStack);
     decrementSlot(inv, s.hotbarIndex);
     gameStore.set({ inventory: inv });
+  }
+
+  private isCreative(): boolean {
+    return gameStore.get().gameMode === 'creative';
+  }
+
+  /** Creative palette click: a fresh full stack rides the cursor. */
+  private creativeTake(id: number): void {
+    if (!this.isCreative()) return;
+    const def = itemDef(id);
+    const count = def.maxStack === 1 ? 1 : def.maxStack;
+    gameStore.set({ cursor: makeStack(id, count) });
+    this.sound.click();
   }
 
   private heldStack(): ItemStack | null {
@@ -1667,7 +1710,7 @@ export class Game {
   }
 
   damagePlayer(amount: number, kx: number, kz: number, cause: string): void {
-    if (amount <= 0) return;
+    if (amount <= 0 || this.isCreative()) return;
     const s = gameStore.get();
     if (s.phase !== 'playing') return;
     // Armor absorbs physical damage (4% per point); starving/drowning bypass.

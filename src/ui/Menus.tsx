@@ -111,6 +111,7 @@ export function TitleScreen(): React.ReactElement {
   const seedText = useGameStore((s) => s.seedText);
   const saveSeed = useGameStore((s) => s.saveSeed);
   const set = useGameStore((s) => s.set);
+  const [mode, setMode] = React.useState<'survival' | 'creative'>('survival');
   React.useEffect(() => {
     // Probe IndexedDB for an existing world (enables the Continue button).
     import('../engine/persistence').then(({ loadWorld }) =>
@@ -145,6 +146,20 @@ export function TitleScreen(): React.ReactElement {
             if (e.key === 'Enter') bridge().startWorld(seedText);
           }}
         />
+        {/* Game mode picker, original-style. */}
+        <div className="flex w-72 mx-auto mb-1 rounded-lg overflow-hidden border border-vc-slot-edge">
+          {(['survival', 'creative'] as const).map((m) => (
+            <button
+              key={m}
+              className={`flex-1 py-2 text-sm font-bold capitalize transition-colors ${
+                mode === m ? 'bg-vc-accent-soft text-vc-accent' : 'bg-vc-slot text-vc-text-dim hover:text-white'
+              }`}
+              onClick={() => setMode(m)}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
         {saveSeed !== null && (
           <button
             className={BTN + ' border-vc-accent text-vc-accent'}
@@ -153,7 +168,7 @@ export function TitleScreen(): React.ReactElement {
             Continue World (seed {saveSeed})
           </button>
         )}
-        <button className={BTN} onClick={() => bridge().startWorld(seedText)}>
+        <button className={BTN} onClick={() => bridge().startWorld(seedText, mode)}>
           Create World
         </button>
         <div className="mt-8 text-gray-300 text-xs text-center leading-5 max-w-md" style={{ textShadow: '1px 1px 0 #0c1218' }}>
@@ -224,17 +239,21 @@ export function PauseScreen(): React.ReactElement {
     bridge().applySettings();
   };
   return (
-    <div className="absolute inset-0 bg-black/65 flex flex-col items-center justify-center pointer-events-auto font-game overflow-y-auto py-6">
+    <div className="absolute inset-0 bg-black/65 flex flex-col items-center justify-center pointer-events-auto font-game py-6">
       <h2 className="text-3xl text-white font-bold mb-4" style={{ textShadow: '2px 2px 0 #3f3f3f' }}>
         Game Paused
       </h2>
+      {/* Primary actions stay visible above the fold — no scrolling to exit. */}
       <button className={BTN} onClick={() => bridge().closeScreen()}>
         Back to Game
+      </button>
+      <button className={BTN + ' border-vc-amber/60 text-vc-amber'} onClick={() => bridge().quitToTitle()}>
+        Save & Quit to Title
       </button>
       <button className={BTN} onClick={() => bridge().toggleFullscreen()}>
         Toggle Fullscreen
       </button>
-      <div className="bg-vc-panel/80 rounded-xl border border-vc-slot-edge p-4 mt-4">
+      <div className="bg-vc-panel/80 rounded-xl border border-vc-slot-edge p-4 mt-4 max-h-[46vh] overflow-y-auto">
         <SettingSlider
           label="Render Distance"
           value={settings.renderDistance}
@@ -299,6 +318,15 @@ export function PauseScreen(): React.ReactElement {
           onChange={(v) => apply({ soundVolume: v })}
         />
         <label className="flex w-72 mx-auto my-3 text-white text-sm justify-between items-center">
+          <span>View Bobbing</span>
+          <input
+            type="checkbox"
+            className="w-5 h-5 accent-[#2dd4bf]"
+            checked={settings.viewBobbing}
+            onChange={(e) => apply({ viewBobbing: e.target.checked })}
+          />
+        </label>
+        <label className="flex w-72 mx-auto my-3 text-white text-sm justify-between items-center">
           <span>Touch Controls</span>
           <input
             type="checkbox"
@@ -308,9 +336,6 @@ export function PauseScreen(): React.ReactElement {
           />
         </label>
       </div>
-      <button className={BTN} onClick={() => bridge().quitToTitle()}>
-        Quit to Title
-      </button>
     </div>
   );
 }

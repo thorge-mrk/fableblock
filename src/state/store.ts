@@ -15,6 +15,7 @@ import {
 } from '../core/config';
 
 export type GamePhase = 'title' | 'loading' | 'playing' | 'dead';
+export type GameMode = 'survival' | 'creative';
 export type Screen = 'none' | 'inventory' | 'crafting' | 'container' | 'pause' | 'enchant';
 export type ContainerKind = 'chest' | 'furnace' | 'hopper';
 
@@ -55,6 +56,7 @@ export interface DebugStats {
 
 interface GameStore {
   phase: GamePhase;
+  gameMode: GameMode;
   seedText: string;
   loadProgress: number;
   screen: Screen;
@@ -111,6 +113,7 @@ function loadSettings(): Settings {
 
 export const useGameStore = create<GameStore>((set, get) => ({
   phase: 'title',
+  gameMode: 'survival',
   seedText: '',
   loadProgress: 0,
   screen: 'none',

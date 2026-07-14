@@ -23,6 +23,8 @@ export interface SaveData {
   /** Nether journal (v2); player dimension at save time. */
   editsNether?: Record<string, number[]>;
   dim?: number;
+  /** Game mode ('survival' default). */
+  mode?: string;
   savedAt: number;
 }
 
