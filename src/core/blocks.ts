@@ -697,6 +697,14 @@ const SELECTION_OVERRIDE: Record<number, BlockBox> = {
   [B.CACTUS]: [0.06, 0, 0.06, 0.94, 1, 0.94],
 };
 
+/**
+ * Cross-shaped blocks (torches, flowers, grass, levers) are 2D sprites when
+ * held, dropped or carried — never little cubes.
+ */
+export function rendersAsSprite(id: number): boolean {
+  return id > 0 && id < 256 && blockDef(id).renderType === RenderType.CROSS;
+}
+
 /** Ray-selection bounds for a block id (block-local 0..1 coords). */
 export function hitBox(id: number): BlockBox {
   const over = SELECTION_OVERRIDE[id];

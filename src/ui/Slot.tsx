@@ -157,8 +157,13 @@ export function Slot({ stack, onClickSlot, size = 44, highlight = false, route, 
  * window-level half of the drag manager: releasing the pointer over another
  * routed slot drops the cursor stack there.
  */
+// Last known pointer position (module-level so a freshly mounted cursor
+// stack seats itself instantly instead of flashing at 0,0).
+let lastPX = 0;
+let lastPY = 0;
+
 export function CursorStack({ stack }: { stack: ItemStack | null }): React.ReactElement | null {
-  const [pos, setPos] = React.useState<[number, number]>([0, 0]);
+  const boxRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     let downRoute: string | null = null;
@@ -168,11 +173,17 @@ export function CursorStack({ stack }: { stack: ItemStack | null }): React.React
       const el = document.elementFromPoint(x, y);
       return (el?.closest('[data-dnd]') as HTMLElement | null)?.dataset.dnd ?? null;
     };
-    // pointer events cover mouse AND touch; capture-phase pointerdown also
-    // seats the stack at the tap position (touch has no hover moves).
-    const onMove = (e: PointerEvent) => setPos([e.clientX, e.clientY]);
+    // The dragged icon is moved by writing the transform directly — zero
+    // React re-renders per pointermove, so it glides at full frame rate.
+    const seat = (x: number, y: number) => {
+      lastPX = x;
+      lastPY = y;
+      const el = boxRef.current;
+      if (el) el.style.transform = `translate3d(${x - 18}px, ${y - 18}px, 0)`;
+    };
+    const onMove = (e: PointerEvent) => seat(e.clientX, e.clientY);
     const onDown = (e: PointerEvent) => {
-      setPos([e.clientX, e.clientY]);
+      seat(e.clientX, e.clientY);
       downRoute = routeAt(e.clientX, e.clientY);
       downX = e.clientX;
       downY = e.clientY;
@@ -207,8 +218,9 @@ export function CursorStack({ stack }: { stack: ItemStack | null }): React.React
   if (!stack) return null;
   return (
     <div
-      className="fixed pointer-events-none z-[100]"
-      style={{ left: pos[0] - 18, top: pos[1] - 18 }}
+      ref={boxRef}
+      className="fixed left-0 top-0 pointer-events-none z-[100]"
+      style={{ transform: `translate3d(${lastPX - 18}px, ${lastPY - 18}px, 0)`, willChange: 'transform' }}
     >
       <img
         src={bridge().iconFor(stack.id)}

@@ -92,6 +92,12 @@ export class Game {
   private exhaustion = 0;
   private prevJump = false;
   private shake = 0;
+  // Camera feel: sprint FOV lerp, walk bob, landing dip.
+  private camFov = 0;
+  private bobPhase = 0;
+  private landDip = 0;
+  private prevOnGround = true;
+  private prevVy = 0;
 
   private spawn: [number, number, number] | null = null;
   private spawnPoint: [number, number, number] | null = null; // bed respawn (always overworld)
@@ -1505,8 +1511,39 @@ export class Game {
     const shakeX = this.shake > 0 ? (Math.random() - 0.5) * this.shake * 0.3 : 0;
     const shakeY = this.shake > 0 ? (Math.random() - 0.5) * this.shake * 0.3 : 0;
 
+    // Sprint widens the FOV a touch (smoothly), like the original.
+    const moving = input.moveX !== 0 || input.moveZ !== 0;
+    const sprinting = input.sprint && moving && !this.player.inBoat && store.screen === 'none';
+    const targetFov = store.settings.fov * (sprinting ? 1.12 : 1);
+    if (this.camFov === 0) this.camFov = targetFov;
+    this.camFov += (targetFov - this.camFov) * Math.min(1, dt * 9);
+    if (Math.abs(this.camera.fov - this.camFov) > 0.05) {
+      this.camera.fov = this.camFov;
+      this.camera.updateProjectionMatrix();
+    }
+
+    // Landing dip: hard falls compress the view briefly.
+    if (!this.prevOnGround && this.player.onGround && this.prevVy < -7) {
+      this.landDip = Math.min(1, -this.prevVy * 0.045);
+    }
+    this.prevOnGround = this.player.onGround;
+    this.prevVy = this.player.vy;
+    this.landDip = Math.max(0, this.landDip - dt * 3.4);
+    const dipY = -Math.sin(Math.min(1, this.landDip) * Math.PI) * 0.16 * this.landDip;
+
+    // Walk bob (toggleable): vertical bounce + slight camera roll.
+    let bobY = 0;
+    let roll = 0;
+    const speed = Math.hypot(this.player.vx, this.player.vz);
+    if (store.settings.viewBobbing && this.player.onGround && speed > 0.5 && !this.player.inBoat) {
+      this.bobPhase += dt * (5 + speed * 1.7);
+      const amp = Math.min(1, speed / 4.5);
+      bobY = Math.abs(Math.sin(this.bobPhase)) * 0.055 * amp;
+      roll = Math.sin(this.bobPhase) * 0.008 * amp;
+    }
+
     this.camera.rotation.order = 'YXZ';
-    this.camera.rotation.set(this.player.pitch + shakeY, this.player.yaw + shakeX, 0);
+    this.camera.rotation.set(this.player.pitch + shakeY, this.player.yaw + shakeX, roll);
 
     if (store.settings.thirdPerson) {
       const [lx, ly, lz] = this.player.lookDir();
@@ -1533,7 +1570,7 @@ export class Game {
       );
       this.heldView.group.visible = false;
     } else {
-      this.camera.position.set(this.player.x + shakeX, eye, this.player.z + shakeY);
+      this.camera.position.set(this.player.x + shakeX, eye + bobY + dipY, this.player.z + shakeY);
       this.character.group.visible = false;
       this.heldView.group.visible = true;
       const v = this.world.getVoxel(Math.floor(this.player.x), Math.floor(eye), Math.floor(this.player.z));

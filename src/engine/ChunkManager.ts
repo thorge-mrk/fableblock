@@ -38,6 +38,8 @@ export class ChunkManager {
   private genInFlight = new Set<number>();
   private meshQueue = new Set<number>();
   private meshInFlight = 0;
+  /** Finished mesh results waiting for a budgeted GPU upload. */
+  private pendingUploads: FromMeshMsg[] = [];
   private scene: THREE.Scene;
   private opaqueMaterial: THREE.Material;
   private waterMaterial: THREE.Material;
@@ -98,6 +100,11 @@ export class ChunkManager {
   update(centerX: number, centerZ: number): void {
     this.centerX = centerX;
     this.centerZ = centerZ;
+    // Upload at most a few freshly meshed chunks per frame: geometry upload
+    // is the main-thread cost that made bursts of arrivals hitch the camera.
+    for (let n = 0; n < 3 && this.pendingUploads.length > 0; n++) {
+      this.applyMesh(this.pendingUploads.shift()!);
+    }
     const pcx = centerX >> 4;
     const pcz = centerZ >> 4;
     const rd = this.renderDistance;
@@ -213,6 +220,10 @@ export class ChunkManager {
 
   private handleMesh(msg: FromMeshMsg): void {
     this.meshInFlight--;
+    this.pendingUploads.push(msg);
+  }
+
+  private applyMesh(msg: FromMeshMsg): void {
     const key = chunkKeyNum(msg.cx, msg.cz);
     const rec = this.records.get(key);
     if (!rec || msg.rev < rec.appliedRev) return;
@@ -306,6 +317,7 @@ export class ChunkManager {
     this.genQueue.length = 0;
     this.genInFlight.clear();
     this.meshQueue.clear();
+    this.pendingUploads.length = 0;
     // meshInFlight results for vanished records are ignored in handleMesh.
   }
 

@@ -8,7 +8,7 @@ import { SNAP_STRIDE } from '../net/messages';
 import { EntityType, ENTITY_DEFS, AnimFlag } from '../core/entities';
 import { World } from '../core/world';
 import { itemDef, isPlaceable } from '../core/items';
-import { blockDef, TILE_PX, CELL_PX, TILE_GUTTER, ATLAS_SIZE } from '../core/blocks';
+import { blockDef, rendersAsSprite, TILE_PX, CELL_PX, TILE_GUTTER, ATLAS_SIZE } from '../core/blocks';
 import { TextureAtlas } from './TextureAtlas';
 
 interface RenderEntity {
@@ -607,7 +607,7 @@ export class EntityRenderer {
 
   private buildItem(e: RenderEntity, itemId: number): void {
     const def = itemDef(itemId);
-    if (isPlaceable(itemId)) {
+    if (isPlaceable(itemId) && !rendersAsSprite(itemId)) {
       let geo = this.blockGeoCache.get(itemId);
       if (!geo) {
         geo = blockItemGeometry(itemId);

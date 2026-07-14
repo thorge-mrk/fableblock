@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { buildHumanoid } from './EntityRenderer';
 import { blockItemGeometry, iconQuadGeometry } from './EntityRenderer';
 import { itemDef, isPlaceable } from '../core/items';
+import { rendersAsSprite } from '../core/blocks';
 import { TextureAtlas } from './TextureAtlas';
 
 export class CharacterModel {
@@ -73,7 +74,8 @@ export class CharacterModel {
     }
     if (itemId <= 0) return;
     const mat = new THREE.MeshLambertMaterial({ map: this.atlas.texture, alphaTest: 0.3, side: THREE.DoubleSide });
-    const geo = isPlaceable(itemId) ? blockItemGeometry(itemId) : iconQuadGeometry(itemDef(itemId).icon);
+    const asCube = isPlaceable(itemId) && !rendersAsSprite(itemId);
+    const geo = asCube ? blockItemGeometry(itemId) : iconQuadGeometry(itemDef(itemId).icon);
     this.heldMesh = new THREE.Mesh(geo, mat);
     this.heldMesh.position.set(0, -0.65, -0.15);
     (this.parts.armR as THREE.Group).add(this.heldMesh);
@@ -116,9 +118,10 @@ export class HeldItemView {
       }
       if (itemId > 0) {
         const mat = new THREE.MeshLambertMaterial({ map: this.atlas.texture, alphaTest: 0.3, side: THREE.DoubleSide });
-        const geo = isPlaceable(itemId) ? blockItemGeometry(itemId) : iconQuadGeometry(itemDef(itemId).icon);
+        const asCube = isPlaceable(itemId) && !rendersAsSprite(itemId);
+        const geo = asCube ? blockItemGeometry(itemId) : iconQuadGeometry(itemDef(itemId).icon);
         this.mesh = new THREE.Mesh(geo, mat);
-        if (isPlaceable(itemId)) {
+        if (asCube) {
           this.mesh.scale.setScalar(1.4);
           this.mesh.rotation.y = Math.PI / 5;
         } else {
