@@ -107,11 +107,24 @@ Slider verändert die Szene sichtbar; Tag sieht unverändert aus.
 **Komplett erledigt:** Phase 0 (P0-1..3), Phase 1 (P1-1..3), Phase 2 (P2-1, P2-2),
 Phase 3 (P3-1 Bett, P3-2 Speicherung, P3-3 Sound, P3-4 Hunger, P3-5 Tiere+Zucht,
 P3-6 Rüstung, P3-7 Wetter, P3-8 XP+Verzauberung).
+**Phase 4 komplett erledigt:**
+- P4-1 Redstone-Blöcke: BOX-Mesher (Teilquader), Redstone-Erz/-Kabel/-Block, Hebel,
+  Druckplatte, Lampe, Türen (2 Blöcke, manuell + Signal), Falltüren, Kolben (4 Richtungen).
+- P4-2 Redstone-Sim: `src/core/redstone.ts` (Power-BFS 15er-Decay, Treppen-Slopes),
+  flankengetriggerte Türen, Kolben schieben bis 8 Blöcke; Platten lesen Entity-Gewicht.
+  Harness: `scripts/redstone-test.mjs`.
+- P4-3 Nether: Portal (Obsidianrahmen + Feuerzeug aus Flint(Kies-Drop)+Eisen), 1,2s-Reise
+  mit Rückportal-Bau, Höllen-Generator (Kavernen/Lava-Ozean/Glowstone/Seelensand/Magma),
+  rote Atmosphäre, Persistenz v2 (Journal je Dimension). Harness: `scripts/nether-test.mjs`.
+- P4-4 Nether-Mobs: Piglin (neutral, Gruppen-Aggro, Gold-Drops) + Magma Cube (hüpfend,
+  Kontaktschaden, Squash&Stretch), beide lavafest; eigene Spawn-Tabelle.
+  Harness: `scripts/nethermob-test.mjs`.
+- Bewusst offen gelassen (lite): Soul-Sand-Verlangsamung, Redstone-Fackel/Repeater,
+  klebrige Kolben, Piglin-Tauschhandel, 8:1-Koordinaten-Skalierung (Portale mappen 1:1).
 **Phase 5 erledigt:** P5-1 (Painter-Toolkit), P5-2 (Terrain), P5-3/4 (Holz/Laub + Erz-Signaturen),
 P5-7 (Himmel: Sonne/Mond/Sterne/Wolken).
 **Phase 5 offen:** P5-5 (Funktionsblöcke), P5-6 (Item-Icons vereinheitlichen),
 P5-8 (Wasser/Effekte), P5-9 (Mob-Teiltexturen), P5-10 (HUD-Grafiken/Titel-Panorama).
-**Phase 4 offen (optional, XL):** Redstone-lite, Nether.
 
 ## Phase 1 — Mobile-UX
 
