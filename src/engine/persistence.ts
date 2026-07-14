@@ -14,6 +14,7 @@ export interface SaveData {
   player: { x: number; y: number; z: number; yaw: number; pitch: number; health: number; food?: number };
   spawnPoint: [number, number, number] | null;
   inventory: (ItemStack | null)[];
+  armor?: (ItemStack | null)[];
   hotbarIndex: number;
   /** chunkKeyNum (as string) -> flat [blockIndex, blockId, ...] pairs. */
   edits: Record<string, number[]>;

@@ -39,6 +39,8 @@ export function HUD(): React.ReactElement {
   const hotbarIndex = useGameStore((s) => s.hotbarIndex);
   const health = useGameStore((s) => s.health);
   const food = useGameStore((s) => s.food);
+  const armor = useGameStore((s) => s.armor);
+  const armorPts = armor.reduce((acc, p) => acc + (p ? (itemDef(p.id).armor?.points ?? 0) : 0), 0);
   const breakProgress = useGameStore((s) => s.breakProgress);
   const toast = useGameStore((s) => s.toast);
   const screen = useGameStore((s) => s.screen);
@@ -68,17 +70,26 @@ export function HUD(): React.ReactElement {
         </div>
       )}
 
-      {/* Status pips: HP (red) left, hunger (amber) right */}
-      <div className="absolute bottom-[76px] left-1/2 -translate-x-1/2 flex gap-5">
-        <div className="flex gap-0.5">
-          {Array.from({ length: PLAYER_MAX_HP / 2 }, (_, i) => (
-            <Pip key={i} fill={pipFill(health, i)} lit="#ef4655" litHi="#ff8091" />
-          ))}
-        </div>
-        <div className="flex gap-0.5">
-          {Array.from({ length: PLAYER_MAX_FOOD / 2 }, (_, i) => (
-            <Pip key={i} fill={pipFill(food, i)} lit="#e8963c" litHi="#ffc46e" />
-          ))}
+      {/* Status pips: HP (red) left, hunger (amber) right, armor (steel) above */}
+      <div className="absolute bottom-[76px] left-1/2 -translate-x-1/2 flex flex-col items-start gap-0.5">
+        {armorPts > 0 && (
+          <div className="flex gap-0.5">
+            {Array.from({ length: 10 }, (_, i) => (
+              <Pip key={i} fill={pipFill(armorPts, i)} lit="#9fb6cc" litHi="#e2eefb" />
+            ))}
+          </div>
+        )}
+        <div className="flex gap-5">
+          <div className="flex gap-0.5">
+            {Array.from({ length: PLAYER_MAX_HP / 2 }, (_, i) => (
+              <Pip key={i} fill={pipFill(health, i)} lit="#ef4655" litHi="#ff8091" />
+            ))}
+          </div>
+          <div className="flex gap-0.5">
+            {Array.from({ length: PLAYER_MAX_FOOD / 2 }, (_, i) => (
+              <Pip key={i} fill={pipFill(food, i)} lit="#e8963c" litHi="#ffc46e" />
+            ))}
+          </div>
         </div>
       </div>
 

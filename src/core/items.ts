@@ -43,6 +43,18 @@ export const ITEM = {
   COOKED_CHICKEN: 291,
   LEATHER: 292,
   FEATHER: 293,
+  LEATHER_HELMET: 294,
+  LEATHER_CHESTPLATE: 295,
+  LEATHER_LEGGINGS: 296,
+  LEATHER_BOOTS: 297,
+  IRON_HELMET: 298,
+  IRON_CHESTPLATE: 299,
+  IRON_LEGGINGS: 300,
+  IRON_BOOTS: 301,
+  DIAMOND_HELMET: 302,
+  DIAMOND_CHESTPLATE: 303,
+  DIAMOND_LEGGINGS: 304,
+  DIAMOND_BOOTS: 305,
 } as const;
 
 export interface ItemDef {
@@ -64,6 +76,8 @@ export interface ItemDef {
   food?: number;
   /** Furnace fuel burn duration in game ticks. */
   fuelTicks?: number;
+  /** Wearable armor: slot 0 head, 1 chest, 2 legs, 3 feet. */
+  armor?: { slot: 0 | 1 | 2 | 3; points: number };
 }
 
 const REGISTRY = new Map<number, ItemDef>();
@@ -114,6 +128,30 @@ defItem({ id: ITEM.RAW_CHICKEN, name: 'Raw Chicken', maxStack: 64, icon: TILE.IT
 defItem({ id: ITEM.COOKED_CHICKEN, name: 'Cooked Chicken', maxStack: 64, icon: TILE.ITEM_CHICKEN_COOKED, food: 10 });
 defItem({ id: ITEM.LEATHER, name: 'Leather', maxStack: 64, icon: TILE.ITEM_LEATHER });
 defItem({ id: ITEM.FEATHER, name: 'Feather', maxStack: 64, icon: TILE.ITEM_FEATHER });
+
+// --- Armor sets: leather < iron < diamond ------------------------------------
+{
+  const SETS = [
+    ['Leather', [ITEM.LEATHER_HELMET, ITEM.LEATHER_CHESTPLATE, ITEM.LEATHER_LEGGINGS, ITEM.LEATHER_BOOTS],
+      [TILE.ITEM_HELMET_LEATHER, TILE.ITEM_CHEST_LEATHER, TILE.ITEM_LEGS_LEATHER, TILE.ITEM_BOOTS_LEATHER], [1, 3, 2, 1]],
+    ['Iron', [ITEM.IRON_HELMET, ITEM.IRON_CHESTPLATE, ITEM.IRON_LEGGINGS, ITEM.IRON_BOOTS],
+      [TILE.ITEM_HELMET_IRON, TILE.ITEM_CHEST_IRON, TILE.ITEM_LEGS_IRON, TILE.ITEM_BOOTS_IRON], [2, 6, 5, 2]],
+    ['Diamond', [ITEM.DIAMOND_HELMET, ITEM.DIAMOND_CHESTPLATE, ITEM.DIAMOND_LEGGINGS, ITEM.DIAMOND_BOOTS],
+      [TILE.ITEM_HELMET_DIAMOND, TILE.ITEM_CHEST_DIAMOND, TILE.ITEM_LEGS_DIAMOND, TILE.ITEM_BOOTS_DIAMOND], [3, 8, 6, 3]],
+  ] as const;
+  const PIECE = ['Helmet', 'Chestplate', 'Leggings', 'Boots'] as const;
+  for (const [tier, ids, icons, points] of SETS) {
+    for (let i = 0; i < 4; i++) {
+      defItem({
+        id: ids[i],
+        name: `${tier} ${PIECE[i]}`,
+        maxStack: 1,
+        icon: icons[i],
+        armor: { slot: i as 0 | 1 | 2 | 3, points: points[i] },
+      });
+    }
+  }
+}
 defItem({ id: ITEM.ARROW, name: 'Arrow', maxStack: 64, icon: TILE.ITEM_ARROW });
 defItem({ id: ITEM.BUCKET, name: 'Bucket', maxStack: 16, icon: TILE.ITEM_BUCKET });
 defItem({ id: ITEM.BOAT, name: 'Oak Boat', maxStack: 1, icon: TILE.ITEM_BOAT, fuelTicks: 400 });

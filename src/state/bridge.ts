@@ -16,6 +16,8 @@ export interface GameBridge {
 
   /** Click on player inventory slot / crafting grid slot (main-thread owned). */
   invClick(slot: number, button: 0 | 2, shift: boolean): void;
+  /** Click one of the 4 armor slots (equip/unequip via cursor). */
+  armorClick(slot: number): void;
   craftGridClick(slot: number, button: 0 | 2, shift: boolean): void;
   craftResultClick(shift: boolean): void;
   /** Click while a worker-owned container (chest/furnace/hopper) is open. */

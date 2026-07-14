@@ -114,6 +114,7 @@ export class Game {
       openScreen: (s) => this.openScreen(s),
       closeScreen: () => this.closeScreen(),
       invClick: (slot, button, shift) => this.invClick(slot, button, shift),
+      armorClick: (slot) => this.armorClick(slot),
       craftGridClick: (slot, button, shift) => this.craftGridClick(slot, button, shift),
       craftResultClick: (shift) => this.craftResultClick(shift),
       containerClick: (area, slot, button, shift) => this.sendLogic({ t: 'click', area, slot, button, shift }),
@@ -469,6 +470,7 @@ export class Game {
     this.spawnPoint = d.spawnPoint;
     gameStore.set({
       inventory: d.inventory.map(cloneStack),
+      armor: (d.armor ?? new Array(4).fill(null)).map(cloneStack),
       hotbarIndex: d.hotbarIndex,
       health: d.player.health,
       food: d.player.food ?? PLAYER_MAX_FOOD,
@@ -512,6 +514,7 @@ export class Game {
       },
       spawnPoint: this.spawnPoint,
       inventory: s.inventory.map(cloneStack),
+      armor: s.armor.map(cloneStack),
       hotbarIndex: s.hotbarIndex,
       edits,
       savedAt: Date.now(),
@@ -1188,10 +1191,23 @@ export class Game {
     }
   }
 
+  /** Total protection points from worn armor (0..20). */
+  private armorPoints(): number {
+    let pts = 0;
+    for (const piece of gameStore.get().armor) {
+      if (piece) pts += itemDef(piece.id).armor?.points ?? 0;
+    }
+    return Math.min(20, pts);
+  }
+
   damagePlayer(amount: number, kx: number, kz: number, cause: string): void {
     if (amount <= 0) return;
     const s = gameStore.get();
     if (s.phase !== 'playing') return;
+    // Armor absorbs physical damage (4% per point); starving/drowning bypass.
+    if (cause !== 'starve' && cause !== 'drown') {
+      amount = Math.max(1, Math.round(amount * (1 - this.armorPoints() * 0.04)));
+    }
     const hp = Math.max(0, s.health - amount);
     gameStore.set({ health: hp });
     this.sound.hurt();
@@ -1337,6 +1353,25 @@ export class Game {
     else this.closeScreen();
   }
 
+  /** Armor slot click: swap with the cursor when the piece fits the slot. */
+  private armorClick(slot: number): void {
+    const s = gameStore.get();
+    if (slot < 0 || slot > 3) return;
+    const armor = s.armor.map(cloneStack);
+    const cur = cloneStack(s.cursor);
+    const worn = armor[slot];
+    if (cur) {
+      const def = itemDef(cur.id);
+      if (def.armor?.slot !== slot) return; // wrong piece for this slot
+      armor[slot] = cur;
+      gameStore.set({ armor, cursor: worn ?? null });
+    } else if (worn) {
+      armor[slot] = null;
+      gameStore.set({ armor, cursor: worn });
+    }
+    this.sound.click();
+  }
+
   private invClick(slot: number, button: 0 | 2, shift: boolean): void {
     const s = gameStore.get();
     if (s.screen === 'container') {
@@ -1346,8 +1381,17 @@ export class Game {
     const inv = s.inventory.map(cloneStack);
     let cursor = cloneStack(s.cursor);
     if (shift && inv[slot]) {
-      // Shift-click: hotbar <-> main storage
       const stack = inv[slot]!;
+      // Shift-click armor: equip straight into its slot when free.
+      const armorDef = itemDef(stack.id).armor;
+      if (armorDef && !s.armor[armorDef.slot]) {
+        const armor = s.armor.map(cloneStack);
+        armor[armorDef.slot] = stack;
+        inv[slot] = null;
+        gameStore.set({ inventory: inv, armor });
+        return;
+      }
+      // Shift-click: hotbar <-> main storage
       inv[slot] = null;
       const rest = slot < 9 ? insertStack(inv, stack, 9, 36) : insertStack(inv, stack, 0, 9);
       if (rest) inv[slot] = rest;

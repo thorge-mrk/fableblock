@@ -706,6 +706,18 @@ const PAINTERS: Record<number, Painter> = {
   [TILE.ITEM_WATER_BUCKET]: (p) => bucketPainter(p, [60, 110, 210]),
   [TILE.ITEM_LAVA_BUCKET]: (p) => bucketPainter(p, [220, 110, 30]),
   [TILE.ITEM_BOAT]: boatPainter,
+  [TILE.ITEM_HELMET_LEATHER]: (p) => armorPainter(p, 'helm', LEATHER_PAL),
+  [TILE.ITEM_CHEST_LEATHER]: (p) => armorPainter(p, 'chest', LEATHER_PAL),
+  [TILE.ITEM_LEGS_LEATHER]: (p) => armorPainter(p, 'legs', LEATHER_PAL),
+  [TILE.ITEM_BOOTS_LEATHER]: (p) => armorPainter(p, 'boots', LEATHER_PAL),
+  [TILE.ITEM_HELMET_IRON]: (p) => armorPainter(p, 'helm', IRON_PAL),
+  [TILE.ITEM_CHEST_IRON]: (p) => armorPainter(p, 'chest', IRON_PAL),
+  [TILE.ITEM_LEGS_IRON]: (p) => armorPainter(p, 'legs', IRON_PAL),
+  [TILE.ITEM_BOOTS_IRON]: (p) => armorPainter(p, 'boots', IRON_PAL),
+  [TILE.ITEM_HELMET_DIAMOND]: (p) => armorPainter(p, 'helm', DIAMOND_PAL),
+  [TILE.ITEM_CHEST_DIAMOND]: (p) => armorPainter(p, 'chest', DIAMOND_PAL),
+  [TILE.ITEM_LEGS_DIAMOND]: (p) => armorPainter(p, 'legs', DIAMOND_PAL),
+  [TILE.ITEM_BOOTS_DIAMOND]: (p) => armorPainter(p, 'boots', DIAMOND_PAL),
   [TILE.BED_TOP]: (p) => {
     // Wood frame border, white pillow (top quarter), red blanket below.
     p.noiseFill([150, 110, 60], 0.08);
@@ -769,6 +781,46 @@ const PAINTERS: Record<number, Painter> = {
     p.border([110, 78, 42]);
   },
 };
+
+const LEATHER_PAL: [RGB, RGB] = [[168, 108, 62], [204, 146, 92]];
+const IRON_PAL: [RGB, RGB] = [[198, 202, 212], [240, 242, 248]];
+const DIAMOND_PAL: [RGB, RGB] = [[70, 200, 190], [140, 244, 232]];
+
+/** Armor piece icons sharing one silhouette set per slot. */
+function armorPainter(p: TilePainter, kind: 'helm' | 'chest' | 'legs' | 'boots', pal: [RGB, RGB]): void {
+  p.clear();
+  const [base, hi] = pal;
+  const fill = (x: number, y: number, w: number, h: number, c: RGB = base) => {
+    for (let yy = y; yy < y + h; yy++)
+      for (let xx = x; xx < x + w; xx++) {
+        const f = 1 + (p.rand() - 0.5) * 0.1;
+        p.px(xx, yy, c[0] * f, c[1] * f, c[2] * f);
+      }
+  };
+  if (kind === 'helm') {
+    fill(3, 4, 10, 4);
+    fill(3, 8, 2, 3);
+    fill(11, 8, 2, 3);
+    fill(4, 3, 8, 1, hi);
+  } else if (kind === 'chest') {
+    fill(3, 3, 3, 3); // shoulders
+    fill(10, 3, 3, 3);
+    fill(4, 5, 8, 8);
+    fill(4, 5, 8, 1, hi);
+  } else if (kind === 'legs') {
+    fill(4, 3, 8, 3);
+    fill(4, 6, 3, 8);
+    fill(9, 6, 3, 8);
+    fill(4, 3, 8, 1, hi);
+  } else {
+    fill(3, 8, 3, 4);
+    fill(10, 8, 3, 4);
+    fill(2, 11, 5, 2);
+    fill(9, 11, 5, 2);
+    fill(3, 8, 3, 1, hi);
+    fill(10, 8, 3, 1, hi);
+  }
+}
 
 /** Meat slab icon: rounded steak/chop with fat marbling, optional bone. */
 function meatPainter(p: TilePainter, meat: RGB, fat: RGB, bone: boolean): void {

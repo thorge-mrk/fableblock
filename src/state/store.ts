@@ -62,6 +62,7 @@ interface GameStore {
   breathe: number;
   hotbarIndex: number;
   inventory: Slots;
+  armor: Slots; // 4 slots: head, chest, legs, feet
   cursor: ItemStack | null;
   craftGrid: Slots;
   craftSize: 2 | 3;
@@ -113,6 +114,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   breathe: 10,
   hotbarIndex: 0,
   inventory: new Array<ItemStack | null>(36).fill(null),
+  armor: new Array<ItemStack | null>(4).fill(null),
   cursor: null,
   craftGrid: new Array<ItemStack | null>(9).fill(null),
   craftSize: 2,

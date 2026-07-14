@@ -104,12 +104,35 @@ function CraftArea({ size }: { size: 2 | 3 }): React.ReactElement {
   );
 }
 
+const ARMOR_LABELS = ['⛑', '🛡', '👖', '🥾'];
+
+function ArmorColumn(): React.ReactElement {
+  const armor = useGameStore((s) => s.armor);
+  return (
+    <div className="flex flex-col gap-0.5 mr-3">
+      {armor.map((piece, i) => (
+        <div key={i} className="relative">
+          <Slot stack={piece} onClickSlot={() => bridge().armorClick(i)} />
+          {!piece && (
+            <span className="absolute inset-0 flex items-center justify-center text-vc-text-dim/50 text-lg pointer-events-none">
+              {ARMOR_LABELS[i]}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function InventoryScreen(): React.ReactElement {
   const inventory = useGameStore((s) => s.inventory);
   const cursor = useGameStore((s) => s.cursor);
   return (
     <Panel title="Inventory">
-      <CraftArea size={2} />
+      <div className="flex items-start justify-center">
+        <ArmorColumn />
+        <CraftArea size={2} />
+      </div>
       <InventoryGrid slots={inventory} area={1} container={false} />
       <CursorStack stack={cursor} />
     </Panel>

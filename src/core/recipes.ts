@@ -70,6 +70,17 @@ export const RECIPES: Recipe[] = [
   shaped(['B B', 'BBB'], { B: B.BIRCH_PLANKS }, ITEM.BOAT, 1),
   // Bed: wool mattress over a plank frame.
   shaped(['WWW', 'PPP'], { W: B.WOOL, P: B.OAK_PLANKS }, B.BED, 1),
+  // Armor sets (leather / iron / diamond).
+  ...([
+    [ITEM.LEATHER, [ITEM.LEATHER_HELMET, ITEM.LEATHER_CHESTPLATE, ITEM.LEATHER_LEGGINGS, ITEM.LEATHER_BOOTS]],
+    [ITEM.IRON_INGOT, [ITEM.IRON_HELMET, ITEM.IRON_CHESTPLATE, ITEM.IRON_LEGGINGS, ITEM.IRON_BOOTS]],
+    [ITEM.DIAMOND, [ITEM.DIAMOND_HELMET, ITEM.DIAMOND_CHESTPLATE, ITEM.DIAMOND_LEGGINGS, ITEM.DIAMOND_BOOTS]],
+  ] as const).flatMap(([mat, [helm, chest, legs, boots]]) => [
+    shaped(['MMM', 'M M'], { M: mat }, helm, 1),
+    shaped(['M M', 'MMM', 'MMM'], { M: mat }, chest, 1),
+    shaped(['MMM', 'M M', 'M M'], { M: mat }, legs, 1),
+    shaped(['M M', 'M M'], { M: mat }, boots, 1),
+  ]),
   // Stone-tier pickaxe + sword.
   shaped(['CCC', ' S ', ' S '], { C: B.COBBLESTONE, S: ITEM.STICK }, ITEM.STONE_PICKAXE, 1),
   shaped(['C', 'C', 'S'], { C: B.COBBLESTONE, S: ITEM.STICK }, ITEM.STONE_SWORD, 1),
