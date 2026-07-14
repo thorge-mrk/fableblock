@@ -1635,8 +1635,14 @@ function closeSession(): void {
 function postSnapshot(): void {
   const list: Ent[] = [];
   for (const e of entities.values()) {
-    if (e.dead) entities.delete(e.id);
-    else list.push(e);
+    if (e.dead) {
+      entities.delete(e.id);
+      // Announce the death once (hp <= 0 -> client plays a fall-over anim);
+      // despawns/pickups keep hp > 0 and just disappear.
+      if (e.type !== EntityType.ITEM && e.type !== EntityType.ARROW) list.push(e);
+    } else {
+      list.push(e);
+    }
   }
   const buf = new Float32Array(list.length * SNAP_STRIDE);
   let o = 0;

@@ -149,6 +149,9 @@ function fireTexture(): THREE.Texture {
 export class EntityRenderer {
   readonly group = new THREE.Group();
   private entities = new Map<number, RenderEntity>();
+  private dying: Array<{ e: RenderEntity; t: number }> = [];
+  private camX = 0;
+  private camZ = 0;
   private lastSnapAt = 0;
   private atlas: TextureAtlas;
   private blockGeoCache = new Map<number, THREE.BufferGeometry>();
@@ -169,6 +172,15 @@ export class EntityRenderer {
       const o = i * SNAP_STRIDE;
       const id = buf[o];
       const type = buf[o + 1] as EntityType;
+      // Final death frame (hp <= 0): hand the model to the fall-over anim.
+      if (buf[o + 7] <= 0 && type !== EntityType.ITEM && type !== EntityType.ARROW) {
+        const victim = this.entities.get(id);
+        if (victim) {
+          this.entities.delete(id);
+          this.startDying(victim);
+        }
+        continue;
+      }
       let e = this.entities.get(id);
       if (!e || e.type !== type) {
         if (e) this.remove(e);
@@ -211,6 +223,23 @@ export class EntityRenderer {
     const alpha = Math.min(1.2, (performance.now() - this.lastSnapAt) / 50);
     const cullDist = fogFar + 8;
     const cullSq = cullDist * cullDist;
+    this.camX = camX;
+    this.camZ = camZ;
+
+    // Fall-over + fade for freshly killed mobs, then dispose.
+    for (let i = this.dying.length - 1; i >= 0; i--) {
+      const d = this.dying[i];
+      d.t += dt;
+      const f = Math.min(1, d.t / 0.45);
+      d.e.group.rotation.z = f * Math.PI * 0.5;
+      d.e.group.position.y += dt * -0.2;
+      for (const m of d.e.materials) m.opacity = 1 - f * 0.9;
+      if (d.t >= 0.5) {
+        this.remove(d.e);
+        this.dying.splice(i, 1);
+      }
+    }
+
     for (const e of this.entities.values()) {
       const x = e.px + (e.cx - e.px) * alpha;
       const y = e.py + (e.cy - e.py) * alpha;
@@ -299,15 +328,26 @@ export class EntityRenderer {
     void alpha;
     const speed = Math.hypot(e.cx - e.px, e.cz - e.pz) / 0.05; // blocks/sec
     e.limbPhase += speed * dt * 2.2;
-    const swing = Math.sin(e.limbPhase) * Math.min(1, speed / 3) * 0.7;
+    const speedF = Math.min(1, speed / 3);
+    const swing = Math.sin(e.limbPhase) * speedF * 0.7;
     const p = e.parts;
+    const isWalker = e.type !== EntityType.ITEM && e.type !== EntityType.ARROW;
+    if (isWalker) {
+      // Gait bob + subtle torso roll instead of gliding rigidly.
+      e.group.position.y += Math.abs(Math.sin(e.limbPhase)) * speedF * 0.045;
+      e.group.rotation.z = Math.sin(e.limbPhase) * speedF * 0.03;
+    }
     if (p.legL) p.legL.rotation.x = swing;
     if (p.legR) p.legR.rotation.x = -swing;
     if (e.type === EntityType.ZOMBIE) {
       if (p.armL) p.armL.rotation.x = -Math.PI / 2 + Math.sin(e.limbPhase * 0.7) * 0.1;
       if (p.armR) p.armR.rotation.x = -Math.PI / 2 - Math.sin(e.limbPhase * 0.7) * 0.1;
+    } else if (e.type === EntityType.SKELETON) {
+      // Bow drawn: both arms raised toward the look direction.
+      if (p.armL) p.armL.rotation.x = -1.25 + Math.sin(e.limbPhase * 0.5) * 0.05;
+      if (p.armR) p.armR.rotation.x = -1.35;
     } else if (e.type === EntityType.VILLAGER) {
-      // Hands folded across the belly (Minecraft villager pose).
+      // Hands folded across the belly.
       if (p.armL) p.armL.rotation.x = -1.35;
       if (p.armR) p.armR.rotation.x = -1.35;
     } else if (e.type === EntityType.IRON_GOLEM && (e.anim & AnimFlag.ATTACKING) !== 0) {
@@ -317,10 +357,35 @@ export class EntityRenderer {
       if (p.armL) p.armL.rotation.x = -swing;
       if (p.armR) p.armR.rotation.x = swing;
     }
+
+    // Sheep wool coat follows the sheared flag.
+    if (e.type === EntityType.SHEEP && p.extra) {
+      p.extra.visible = (e.anim & AnimFlag.SHEARED) === 0;
+    }
+
+    // Creeper: swelling pulse while the fuse burns.
+    if (e.type === EntityType.CREEPER) {
+      const s = e.a > 0 ? 1 + e.a * 0.1 * (0.5 + 0.5 * Math.sin(performance.now() / 45)) : 1;
+      e.group.scale.setScalar(s);
+    }
+
     if (e.type === EntityType.SHEEP && (e.anim & AnimFlag.ATTACKING) !== 0 && p.head) {
       p.head.rotation.x = 0.9; // grazing
     } else if (p.head) {
-      p.head.rotation.x = e.pitch * 0.6;
+      p.head.rotation.x = e.pitch * 0.6 + (e.type === EntityType.ZOMBIE ? 0.2 : 0);
+      // Villagers turn their head toward a nearby player.
+      if (e.type === EntityType.VILLAGER) {
+        const dx = this.camX - x;
+        const dz = this.camZ - z;
+        let target = 0;
+        if (dx * dx + dz * dz < 36) {
+          let rel = Math.atan2(-dx, -dz) - yaw;
+          while (rel > Math.PI) rel -= Math.PI * 2;
+          while (rel < -Math.PI) rel += Math.PI * 2;
+          target = Math.max(-0.8, Math.min(0.8, rel));
+        }
+        p.head.rotation.y += (target - p.head.rotation.y) * Math.min(1, dt * 8);
+      }
     }
     if (e.type === EntityType.ITEM) {
       // Bob + spin; billboard icons toward the camera.
@@ -332,8 +397,6 @@ export class EntityRenderer {
       e.group.rotation.y = yaw;
       e.group.rotation.x = e.pitch;
     }
-    void x;
-    void z;
   }
 
   /** Nearest mob hit by the attack ray, or null. */
@@ -369,12 +432,43 @@ export class EntityRenderer {
       itemId: a,
     };
     switch (type) {
-      case EntityType.ZOMBIE:
+      case EntityType.ZOMBIE: {
         buildHumanoid(e, { skin: 0x44a044, shirt: 0x2c6c8c, pants: 0x3c5c8c, face: 'zombie' });
+        // Tattered rags: darker patches hanging off the torso and one leg.
+        const body = e.parts.body as THREE.Mesh;
+        const rag1 = partBox(e, 0.2, 0.22, 0.06, 0x1e4a60);
+        rag1.position.set(-0.14, -0.46, -0.14);
+        body.add(rag1);
+        const rag2 = partBox(e, 0.16, 0.3, 0.06, 0x24384a);
+        rag2.position.set(0.16, -0.5, 0.14);
+        body.add(rag2);
+        const legR = e.parts.legR as THREE.Group;
+        const rag3 = partBox(e, 0.24, 0.14, 0.24, 0x2c4468);
+        rag3.position.set(0, -0.68, 0);
+        legR.add(rag3);
         break;
-      case EntityType.SKELETON:
+      }
+      case EntityType.SKELETON: {
         buildHumanoid(e, { skin: 0xbdbdbd, shirt: 0x9a9a9a, pants: 0x8a8a8a, face: 'skeleton', thin: true });
+        // Simple bow held in the right hand: an arc of three slats + string.
+        const bow = new THREE.Group();
+        const mid = partBox(e, 0.05, 0.3, 0.05, 0x7a5a32);
+        bow.add(mid);
+        const top = partBox(e, 0.05, 0.18, 0.05, 0x6a4c28);
+        top.position.set(0, 0.21, 0.06);
+        top.rotation.x = 0.6;
+        bow.add(top);
+        const bottom = partBox(e, 0.05, 0.18, 0.05, 0x6a4c28);
+        bottom.position.set(0, -0.21, 0.06);
+        bottom.rotation.x = -0.6;
+        bow.add(bottom);
+        const string = partBox(e, 0.015, 0.52, 0.015, 0xe8e8e0);
+        string.position.z = 0.1;
+        bow.add(string);
+        bow.position.set(0, -0.62, -0.06);
+        (e.parts.armR as THREE.Group).add(bow);
         break;
+      }
       case EntityType.VILLAGER: {
         buildHumanoid(e, { skin: 0xc8a078, shirt: 0x7a5c44, pants: 0x5c4434, face: 'villager', robe: true });
         // Iconic protruding nose.
@@ -436,6 +530,16 @@ export class EntityRenderer {
     }
   }
 
+  private startDying(e: RenderEntity): void {
+    if (e.fire) e.fire.visible = false;
+    for (const m of e.materials) {
+      m.transparent = true;
+      m.depthWrite = false;
+      m.emissive.setRGB(0.35, 0, 0);
+    }
+    this.dying.push({ e, t: 0 });
+  }
+
   private remove(e: RenderEntity): void {
     this.group.remove(e.group);
     for (const m of e.materials) m.dispose();
@@ -454,6 +558,8 @@ export class EntityRenderer {
   dispose(): void {
     for (const e of [...this.entities.values()]) this.remove(e);
     this.entities.clear();
+    for (const d of this.dying) this.remove(d.e);
+    this.dying.length = 0;
     for (const g of this.blockGeoCache.values()) g.dispose();
     for (const g of this.iconGeoCache.values()) g.dispose();
   }
@@ -560,10 +666,14 @@ function buildCreeper(e: RenderEntity): void {
 
 function buildSheep(e: RenderEntity): void {
   const g = e.group;
-  const sheared = (e.anim & AnimFlag.SHEARED) !== 0;
-  const body = partBox(e, 0.8, 0.7, 1.2, sheared ? 0xd8b8a0 : 0xe8e8e8);
+  const body = partBox(e, 0.8, 0.7, 1.2, 0xd8b8a0);
   body.position.y = 0.85;
   g.add(body);
+  // Fluffy wool coat (hidden while sheared; visibility follows the anim flag).
+  const wool = partBox(e, 0.95, 0.85, 1.35, 0xefece2);
+  wool.position.y = 0.88;
+  g.add(wool);
+  e.parts.extra = wool;
   const head = new THREE.Group();
   const hb = partBox(e, 0.4, 0.4, 0.45, 0xd8c8c0, faceTexture('sheep'));
   hb.position.set(0, 0, -0.2);
