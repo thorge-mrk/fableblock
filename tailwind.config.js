@@ -8,11 +8,18 @@ export default {
         game: ['"Segoe UI"', 'Verdana', 'sans-serif'],
       },
       colors: {
-        'mc-dark': '#1d1d21',
-        'mc-slot': '#8b8b8b',
-        'mc-slot-dark': '#373737',
-        'mc-slot-light': '#ffffff',
-        'mc-panel': '#c6c6c6',
+        // FableBlock "dark glass" design tokens — deliberately NOT the
+        // Mojang inventory grey; teal accent + warm amber highlights.
+        'mc-dark': '#10161e',
+        'mc-slot-dark': '#0c1218',
+        'vc-bg': '#101720',
+        'vc-panel': '#151e29',
+        'vc-slot': '#1a2432',
+        'vc-slot-edge': '#2c3b4e',
+        'vc-accent': '#2dd4bf',
+        'vc-accent-soft': '#1b4f4a',
+        'vc-amber': '#f5b942',
+        'vc-text-dim': '#8fa3b8',
       },
       keyframes: {
         'pulse-fast': {

@@ -65,12 +65,12 @@ export function Slot({ stack, onClickSlot, size = 44, highlight = false }: SlotP
       : null;
   return (
     <div
-      className={`relative border-2 select-none ${
+      className={`relative rounded-md border select-none ${
         flash
-          ? 'bg-white/70 border-white'
+          ? 'bg-vc-accent/60 border-vc-accent'
           : highlight
-            ? 'bg-white/40 border-white/70'
-            : 'bg-black/25 border-t-mc-slot-dark border-l-mc-slot-dark border-b-white/60 border-r-white/60'
+            ? 'bg-vc-accent/25 border-vc-accent ring-1 ring-vc-accent/60'
+            : 'bg-vc-slot border-vc-slot-edge hover:border-vc-accent/50'
       }`}
       style={{ width: size, height: size, touchAction: 'none' }}
       onPointerDown={handlePointerDown}

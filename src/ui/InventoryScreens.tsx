@@ -23,11 +23,14 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
         if (e.target === e.currentTarget) bridge().closeScreen();
       }}
     >
-      <div className="bg-mc-panel border-4 border-t-white border-l-white border-b-mc-slot-dark border-r-mc-slot-dark p-4 rounded-sm shadow-2xl max-h-[92vh] overflow-y-auto">
+      <div
+        className="bg-vc-panel/90 border border-vc-accent/40 p-4 rounded-xl shadow-2xl max-h-[92vh] overflow-y-auto"
+        style={{ backdropFilter: 'blur(6px)', boxShadow: '0 0 0 1px #00000066, 0 18px 50px #000000aa' }}
+      >
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-mc-slot-dark font-bold">{title}</h2>
+          <h2 className="text-vc-accent font-bold tracking-wide uppercase text-sm">{title}</h2>
           <button
-            className="text-mc-slot-dark font-bold text-xl w-11 h-11 -my-2 -mr-2 flex items-center justify-center hover:text-red-700"
+            className="text-vc-text-dim font-bold text-xl w-11 h-11 -my-2 -mr-2 flex items-center justify-center hover:text-vc-amber"
             style={{ touchAction: 'none' }}
             onPointerDown={(e) => {
               e.preventDefault();
@@ -90,7 +93,7 @@ function CraftArea({ size }: { size: 2 | 3 }): React.ReactElement {
           />
         ))}
       </div>
-      <span className="text-2xl text-mc-slot-dark font-bold">→</span>
+      <span className="text-2xl text-vc-accent font-bold">→</span>
       <Slot
         stack={craftResult}
         highlight={craftResult !== null}
@@ -171,7 +174,7 @@ export function ContainerScreen(): React.ReactElement | null {
               className="h-full bg-white/80 rounded"
               style={{ width: `${Math.round(container.cook * 100)}%` }}
             />
-            <span className="absolute inset-0 text-center text-mc-slot-dark text-sm leading-5 pointer-events-none">
+            <span className="absolute inset-0 text-center text-vc-amber text-sm leading-5 pointer-events-none">
               ▶▶
             </span>
           </div>

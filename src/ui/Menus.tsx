@@ -10,26 +10,29 @@ import {
 } from '../core/config';
 
 const BTN =
-  'block w-72 mx-auto my-2 py-2.5 px-4 bg-[#6f6f6f] hover:bg-[#7f8fb0] text-white font-bold ' +
-  'border-2 border-t-[#a8a8a8] border-l-[#a8a8a8] border-b-[#3f3f3f] border-r-[#3f3f3f] ' +
-  'active:border-t-[#3f3f3f] active:border-b-[#a8a8a8] select-none';
+  'block w-72 mx-auto my-2 py-2.5 px-4 bg-vc-slot hover:bg-vc-accent-soft text-white font-bold ' +
+  'rounded-lg border border-vc-slot-edge hover:border-vc-accent ' +
+  'active:translate-y-px transition-colors select-none';
 
 export function TitleScreen(): React.ReactElement {
   const seedText = useGameStore((s) => s.seedText);
   const set = useGameStore((s) => s.set);
   return (
-    <div className="absolute inset-0 bg-gradient-to-b from-[#10131f] to-[#2c3a26] flex flex-col items-center justify-center pointer-events-auto font-game">
+    <div className="absolute inset-0 bg-gradient-to-b from-vc-bg via-[#132030] to-[#1a3a33] flex flex-col items-center justify-center pointer-events-auto font-game">
       <h1
-        className="text-6xl font-extrabold text-white mb-1 tracking-wider"
-        style={{ textShadow: '4px 4px 0 #3f3f3f' }}
+        className="text-6xl font-extrabold mb-1 tracking-wider"
+        style={{
+          color: '#eafffa',
+          textShadow: '0 0 24px #2dd4bf88, 3px 3px 0 #0c1218',
+        }}
       >
         FableBlock
       </h1>
-      <p className="text-yellow-300 mb-10 italic" style={{ textShadow: '2px 2px 0 #3f3f3f' }}>
+      <p className="text-vc-amber mb-10 italic" style={{ textShadow: '2px 2px 0 #0c1218' }}>
         100% browser-native voxel engine
       </p>
       <input
-        className="w-72 px-3 py-2 mb-2 bg-black/60 text-white border-2 border-[#a8a8a8] outline-none text-center"
+        className="w-72 px-3 py-2 mb-2 bg-vc-slot/90 text-white rounded-lg border border-vc-slot-edge focus:border-vc-accent outline-none text-center"
         placeholder="World seed (blank = random)"
         value={seedText}
         onChange={(e) => set({ seedText: e.target.value })}
@@ -56,9 +59,9 @@ export function LoadingScreen(): React.ReactElement {
       <h2 className="text-2xl text-white mb-6" style={{ textShadow: '2px 2px 0 #3f3f3f' }}>
         Generating world…
       </h2>
-      <div className="w-80 h-4 bg-black/70 border-2 border-[#a8a8a8]">
+      <div className="w-80 h-4 bg-vc-slot rounded-full border border-vc-slot-edge overflow-hidden">
         <div
-          className="h-full bg-green-500 transition-all duration-200"
+          className="h-full bg-vc-accent transition-all duration-200"
           style={{ width: `${Math.round(progress * 100)}%` }}
         />
       </div>
@@ -84,11 +87,11 @@ function SettingSlider({
     <label className="block w-72 mx-auto my-3 text-white text-sm">
       <span className="flex justify-between mb-1">
         <span>{label}</span>
-        <span className="text-yellow-300">{format(value)}</span>
+        <span className="text-vc-amber">{format(value)}</span>
       </span>
       <input
         type="range"
-        className="w-full accent-green-500"
+        className="w-full accent-[#2dd4bf]"
         min={min}
         max={max}
         step={step}
@@ -117,7 +120,7 @@ export function PauseScreen(): React.ReactElement {
       <button className={BTN} onClick={() => bridge().toggleFullscreen()}>
         Toggle Fullscreen
       </button>
-      <div className="bg-black/40 rounded p-4 mt-4">
+      <div className="bg-vc-panel/80 rounded-xl border border-vc-slot-edge p-4 mt-4">
         <SettingSlider
           label="Render Distance"
           value={settings.renderDistance}
@@ -176,7 +179,7 @@ export function PauseScreen(): React.ReactElement {
           <span>Touch Controls</span>
           <input
             type="checkbox"
-            className="w-5 h-5 accent-green-500"
+            className="w-5 h-5 accent-[#2dd4bf]"
             checked={settings.touchMode}
             onChange={(e) => apply({ touchMode: e.target.checked })}
           />
