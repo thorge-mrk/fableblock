@@ -6,7 +6,7 @@ import React from 'react';
 import { createGame, Game } from './engine/Game';
 import { useGameStore } from './state/store';
 import { HUD, DebugOverlay } from './ui/HUD';
-import { InventoryScreen, CraftingScreen, ContainerScreen } from './ui/InventoryScreens';
+import { InventoryScreen, CraftingScreen, ContainerScreen, EnchantScreen } from './ui/InventoryScreens';
 import { TitleScreen, LoadingScreen, PauseScreen, DeathScreen } from './ui/Menus';
 import { TouchControls } from './ui/TouchControls';
 
@@ -46,6 +46,7 @@ export default function App(): React.ReactElement {
               {screen === 'inventory' && <InventoryScreen />}
               {screen === 'crafting' && <CraftingScreen />}
               {screen === 'container' && <ContainerScreen />}
+              {screen === 'enchant' && <EnchantScreen />}
               {screen === 'pause' && <PauseScreen />}
               {phase === 'dead' && <DeathScreen />}
             </>

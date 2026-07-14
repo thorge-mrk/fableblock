@@ -41,6 +41,9 @@ export function HUD(): React.ReactElement {
   const food = useGameStore((s) => s.food);
   const armor = useGameStore((s) => s.armor);
   const armorPts = armor.reduce((acc, p) => acc + (p ? (itemDef(p.id).armor?.points ?? 0) : 0), 0);
+  const xpLevel = useGameStore((s) => s.xpLevel);
+  const xpPoints = useGameStore((s) => s.xpPoints);
+  const xpFrac = Math.min(1, xpPoints / (12 + xpLevel * 6));
   const breakProgress = useGameStore((s) => s.breakProgress);
   const toast = useGameStore((s) => s.toast);
   const screen = useGameStore((s) => s.screen);
@@ -71,7 +74,7 @@ export function HUD(): React.ReactElement {
       )}
 
       {/* Status pips: HP (red) left, hunger (amber) right, armor (steel) above */}
-      <div className="absolute bottom-[76px] left-1/2 -translate-x-1/2 flex flex-col items-start gap-0.5">
+      <div className="absolute bottom-[92px] left-1/2 -translate-x-1/2 flex flex-col items-start gap-0.5">
         {armorPts > 0 && (
           <div className="flex gap-0.5">
             {Array.from({ length: 10 }, (_, i) => (
@@ -102,6 +105,21 @@ export function HUD(): React.ReactElement {
           {heldName}
         </div>
       )}
+
+      {/* XP bar with a level badge at its right end */}
+      <div className="absolute bottom-[68px] left-1/2 -translate-x-1/2 w-[420px] max-w-[80vw]">
+        <div className="h-1.5 bg-black/50 rounded-full overflow-hidden border border-vc-slot-edge/60">
+          <div className="h-full bg-vc-accent" style={{ width: `${Math.round(xpFrac * 100)}%` }} />
+        </div>
+        {xpLevel > 0 && (
+          <span
+            className="absolute -right-7 -top-2 text-vc-accent font-bold text-sm"
+            style={{ textShadow: '1px 1px 0 #000' }}
+          >
+            {xpLevel}
+          </span>
+        )}
+      </div>
 
       {/* Hotbar */}
       <div

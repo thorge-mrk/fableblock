@@ -196,6 +196,12 @@ export interface LogicSetTimeMsg {
   time: number;
 }
 
+/** XP grant for a player-attributed kill. */
+export interface XpMsg {
+  t: 'xp';
+  amount: number;
+}
+
 /** Player right-clicked an entity while holding an item (feeding/breeding). */
 export interface LogicInteractEntityMsg {
   t: 'interactEntity';
@@ -292,4 +298,5 @@ export type FromLogicMsg =
   | ContainerSyncMsg
   | ContainerClosedMsg
   | ExplosionMsg
+  | XpMsg
   | LogicStatsMsg;

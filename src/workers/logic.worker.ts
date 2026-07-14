@@ -869,18 +869,21 @@ function hasLOS(x0: number, y0: number, z0: number, x1: number, y1: number, z1: 
   return true;
 }
 
-function damageEntity(e: Ent, amount: number, kx: number, kz: number): void {
+function damageEntity(e: Ent, amount: number, kx: number, kz: number, byPlayer = false): void {
   if (e.dead || e.hurt > 3) return;
   e.hp -= amount;
   e.hurt = 10;
   e.vx += kx;
   e.vz += kz;
   if (kx !== 0 || kz !== 0) e.vy += 4;
-  if (e.hp <= 0) killEntity(e);
+  if (e.hp <= 0) killEntity(e, byPlayer);
 }
 
-function killEntity(e: Ent): void {
+function killEntity(e: Ent, byPlayer = false): void {
   e.dead = true;
+  if (byPlayer && e.type !== EntityType.ITEM && e.type !== EntityType.ARROW) {
+    post({ t: 'xp', amount: ENTITY_DEFS[e.type].hostile ? 5 : 2 });
+  }
   const def = ENTITY_DEFS[e.type];
   for (const [itemId, min, max] of def.drops) {
     if (e.type === EntityType.SHEEP && itemId === B.WOOL && e.sheared) continue;
@@ -1930,7 +1933,7 @@ ctx.onmessage = (e: MessageEvent<ToLogicMsg>) => {
     case 'attack': {
       const target = entities.get(msg.entityId);
       if (target && !target.dead) {
-        damageEntity(target, msg.damage, msg.kx, msg.kz);
+        damageEntity(target, msg.damage, msg.kx, msg.kz, true);
       }
       break;
     }

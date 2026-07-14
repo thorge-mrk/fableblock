@@ -718,6 +718,24 @@ const PAINTERS: Record<number, Painter> = {
   [TILE.ITEM_CHEST_DIAMOND]: (p) => armorPainter(p, 'chest', DIAMOND_PAL),
   [TILE.ITEM_LEGS_DIAMOND]: (p) => armorPainter(p, 'legs', DIAMOND_PAL),
   [TILE.ITEM_BOOTS_DIAMOND]: (p) => armorPainter(p, 'boots', DIAMOND_PAL),
+  [TILE.ENCHANT_TOP]: (p) => {
+    // Obsidian slab with a glowing teal rune ring.
+    p.noiseFill([24, 18, 34], 0.18);
+    p.border([46, 36, 62]);
+    for (const [x, y] of [[8, 3], [12, 8], [8, 13], [3, 8], [5, 5], [11, 5], [11, 11], [5, 11]] as const) {
+      p.px(x, y, 64, 226, 210);
+      p.px(x - 1, y, 34, 140, 132);
+      p.px(x + 1, y, 34, 140, 132);
+    }
+    p.disc(8, 8, 1.8, [110, 250, 236]);
+  },
+  [TILE.ENCHANT_SIDE]: (p) => {
+    // Obsidian body with a diamond band.
+    p.noiseFill([28, 22, 40], 0.16);
+    for (let x = 0; x < 16; x++) p.px(x, 3, 70, 210, 196);
+    p.rect(6, 7, 4, 4, [50, 168, 158]);
+    p.border([46, 36, 62]);
+  },
   [TILE.BED_TOP]: (p) => {
     // Wood frame border, white pillow (top quarter), red blanket below.
     p.noiseFill([150, 110, 60], 0.08);

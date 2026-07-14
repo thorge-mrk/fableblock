@@ -15,6 +15,7 @@ export interface SaveData {
   spawnPoint: [number, number, number] | null;
   inventory: (ItemStack | null)[];
   armor?: (ItemStack | null)[];
+  xp?: { level: number; points: number };
   hotbarIndex: number;
   /** chunkKeyNum (as string) -> flat [blockIndex, blockId, ...] pairs. */
   edits: Record<string, number[]>;

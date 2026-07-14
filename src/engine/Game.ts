@@ -117,6 +117,7 @@ export class Game {
       closeScreen: () => this.closeScreen(),
       invClick: (slot, button, shift) => this.invClick(slot, button, shift),
       armorClick: (slot) => this.armorClick(slot),
+      enchantHeld: (kind) => this.enchantHeld(kind),
       craftGridClick: (slot, button, shift) => this.craftGridClick(slot, button, shift),
       craftResultClick: (shift) => this.craftResultClick(shift),
       containerClick: (area, slot, button, shift) => this.sendLogic({ t: 'click', area, slot, button, shift }),
@@ -493,6 +494,8 @@ export class Game {
       hotbarIndex: d.hotbarIndex,
       health: d.player.health,
       food: d.player.food ?? PLAYER_MAX_FOOD,
+      xpLevel: d.xp?.level ?? 0,
+      xpPoints: d.xp?.points ?? 0,
     });
     this.sendLogic({ t: 'time', time: d.time });
     this.toast('Welcome back!');
@@ -534,6 +537,7 @@ export class Game {
       spawnPoint: this.spawnPoint,
       inventory: s.inventory.map(cloneStack),
       armor: s.armor.map(cloneStack),
+      xp: { level: s.xpLevel, points: s.xpPoints },
       hotbarIndex: s.hotbarIndex,
       edits,
       savedAt: Date.now(),
@@ -738,7 +742,7 @@ export class Game {
     const toolMatches = tool && def.tool === tool.type;
     const canHarvest = def.minTier === 0 || (tool?.type === 'pickaxe' && tool.tier >= def.minTier);
     let breakTime = def.hardness * 1.5;
-    if (toolMatches) breakTime /= tool.speed;
+    if (toolMatches) breakTime /= tool.speed * (1 + 0.3 * (held?.ench?.eff ?? 0));
     if (!canHarvest) breakTime *= 3.3;
     breakTime = Math.max(0.05, breakTime);
 
@@ -791,6 +795,14 @@ export class Game {
     this.world.setBlock(hit.x, hit.y, hit.z, B.AIR);
     this.sound.breakBlock();
     this.exhaustion += 0.03;
+    // Mining XP from ores.
+    if (canHarvest) {
+      const ORE_XP: Record<number, number> = {
+        [B.COAL_ORE]: 1, [B.IRON_ORE]: 2, [B.GOLD_ORE]: 3, [B.DIAMOND_ORE]: 6,
+      };
+      const xp = ORE_XP[hit.id];
+      if (xp) this.gainXp(xp);
+    }
     if (canHarvest && def.drop !== -1) {
       const dropId = def.drop ?? hit.id;
       this.sendLogic({
@@ -810,7 +822,7 @@ export class Game {
     this.exhaustion += 0.1;
     const held = this.heldStack();
     const tool = held ? itemDef(held.id).tool : undefined;
-    const damage = tool ? tool.damage : 1;
+    const damage = (tool ? tool.damage : 1) + 2 * (held?.ench?.sharp ?? 0);
     const [dx, , dz] = this.player.lookDir();
     const len = Math.hypot(dx, dz) || 1;
     this.sendLogic({ t: 'attack', entityId: id, damage, kx: (dx / len) * 7, kz: (dz / len) * 7 });
@@ -825,6 +837,9 @@ export class Game {
     const inv = s.inventory.map(cloneStack);
     const held = inv[s.hotbarIndex];
     if (!held || held.dur === undefined) return;
+    // Unbreaking: level N skips wear N/(N+1) of the time.
+    const unb = held.ench?.unb ?? 0;
+    if (unb > 0 && Math.random() < unb / (unb + 1)) return;
     held.dur -= amount;
     if (held.dur <= 0) {
       inv[s.hotbarIndex] = null;
@@ -1005,6 +1020,10 @@ export class Game {
     }
     if (hit.id === B.BED) {
       this.trySleep(hit);
+      return;
+    }
+    if (hit.id === B.ENCHANTING_TABLE) {
+      this.openScreen('enchant');
       return;
     }
     // Chest / furnace / hopper: worker-owned container session.
@@ -1204,6 +1223,9 @@ export class Game {
         this.sound.explosion();
         break;
       }
+      case 'xp':
+        this.gainXp(msg.amount);
+        break;
       case 'stats':
         this.workerStats = { entities: msg.entities, tickMs: msg.tickMs };
         break;
@@ -1309,7 +1331,7 @@ export class Game {
   // -------------------------------------------------------------------------
   // Screens / inventory state machines (main-thread owned)
   // -------------------------------------------------------------------------
-  private openScreen(screen: 'inventory' | 'pause' | 'crafting'): void {
+  private openScreen(screen: 'inventory' | 'pause' | 'crafting' | 'enchant'): void {
     const s = gameStore.get();
     if (s.phase !== 'playing') return;
     const size = screen === 'crafting' ? 3 : 2;
@@ -1370,6 +1392,51 @@ export class Game {
   private setPaused(paused: boolean): void {
     if (paused) this.openScreen('pause');
     else this.closeScreen();
+  }
+
+  /** XP needed to move past the given level. */
+  private static xpNeed(level: number): number {
+    return 12 + level * 6;
+  }
+
+  gainXp(amount: number): void {
+    const s = gameStore.get();
+    let level = s.xpLevel;
+    let pts = s.xpPoints + amount;
+    let leveled = false;
+    while (pts >= Game.xpNeed(level)) {
+      pts -= Game.xpNeed(level);
+      level++;
+      leveled = true;
+    }
+    gameStore.set({ xpLevel: level, xpPoints: pts });
+    if (leveled) this.sound.levelup();
+  }
+
+  /** Spend levels to raise one enchantment on the held tool. */
+  private enchantHeld(kind: 'eff' | 'unb' | 'sharp'): void {
+    const s = gameStore.get();
+    const inv = s.inventory.map(cloneStack);
+    const held = inv[s.hotbarIndex];
+    if (!held || !itemDef(held.id).tool) {
+      this.toast('Hold a tool to enchant it');
+      return;
+    }
+    const ench = held.ench ?? { eff: 0, unb: 0, sharp: 0 };
+    const current = ench[kind];
+    if (current >= 3) {
+      this.toast('Already at maximum');
+      return;
+    }
+    const cost = 2 + current * 2;
+    if (s.xpLevel < cost) {
+      this.toast(`Needs ${cost} levels`);
+      return;
+    }
+    ench[kind] = current + 1;
+    held.ench = ench;
+    gameStore.set({ inventory: inv, xpLevel: s.xpLevel - cost });
+    this.sound.levelup();
   }
 
   /** Armor slot click: swap with the cursor when the piece fits the slot. */

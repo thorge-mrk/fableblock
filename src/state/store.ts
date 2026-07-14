@@ -15,7 +15,7 @@ import {
 } from '../core/config';
 
 export type GamePhase = 'title' | 'loading' | 'playing' | 'dead';
-export type Screen = 'none' | 'inventory' | 'crafting' | 'container' | 'pause';
+export type Screen = 'none' | 'inventory' | 'crafting' | 'container' | 'pause' | 'enchant';
 export type ContainerKind = 'chest' | 'furnace' | 'hopper';
 
 export interface ContainerView {
@@ -59,6 +59,8 @@ interface GameStore {
   screen: Screen;
   health: number;
   food: number;
+  xpLevel: number;
+  xpPoints: number; // progress into the current level
   breathe: number;
   hotbarIndex: number;
   inventory: Slots;
@@ -111,6 +113,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   screen: 'none',
   health: PLAYER_MAX_HP,
   food: 20,
+  xpLevel: 0,
+  xpPoints: 0,
   breathe: 10,
   hotbarIndex: 0,
   inventory: new Array<ItemStack | null>(36).fill(null),

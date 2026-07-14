@@ -238,6 +238,8 @@ export interface ItemStack {
   id: number;
   count: number;
   dur?: number;
+  /** Enchantments: efficiency / unbreaking / sharpness levels (tools only). */
+  ench?: { eff: number; unb: number; sharp: number };
 }
 
 export function makeStack(id: number, count: number): ItemStack {

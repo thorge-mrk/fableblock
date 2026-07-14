@@ -70,6 +70,8 @@ export const RECIPES: Recipe[] = [
   shaped(['B B', 'BBB'], { B: B.BIRCH_PLANKS }, ITEM.BOAT, 1),
   // Bed: wool mattress over a plank frame.
   shaped(['WWW', 'PPP'], { W: B.WOOL, P: B.OAK_PLANKS }, B.BED, 1),
+  // Enchanting table: diamond focus on an obsidian base.
+  shaped([' D ', 'DOD', 'OOO'], { D: ITEM.DIAMOND, O: B.OBSIDIAN }, B.ENCHANTING_TABLE, 1),
   // Armor sets (leather / iron / diamond).
   ...([
     [ITEM.LEATHER, [ITEM.LEATHER_HELMET, ITEM.LEATHER_CHESTPLATE, ITEM.LEATHER_LEGGINGS, ITEM.LEATHER_BOOTS]],

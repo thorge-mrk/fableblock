@@ -18,6 +18,8 @@ export interface GameBridge {
   invClick(slot: number, button: 0 | 2, shift: boolean): void;
   /** Click one of the 4 armor slots (equip/unequip via cursor). */
   armorClick(slot: number): void;
+  /** Buy an enchantment level for the held tool (enchanting table UI). */
+  enchantHeld(kind: 'eff' | 'unb' | 'sharp'): void;
   craftGridClick(slot: number, button: 0 | 2, shift: boolean): void;
   craftResultClick(shift: boolean): void;
   /** Click while a worker-owned container (chest/furnace/hopper) is open. */

@@ -9,6 +9,7 @@ import { useGameStore } from '../state/store';
 import { bridge } from '../state/bridge';
 import { Slot, CursorStack } from './Slot';
 import { Slots } from '../core/inventory';
+import { itemDef } from '../core/items';
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }): React.ReactElement {
   return (
@@ -147,6 +148,60 @@ export function CraftingScreen(): React.ReactElement {
       <CraftArea size={3} />
       <InventoryGrid slots={inventory} area={1} container={false} />
       <CursorStack stack={cursor} />
+    </Panel>
+  );
+}
+
+const ENCH_INFO = [
+  { kind: 'eff' as const, name: 'Efficiency', desc: '+30% mining speed per level' },
+  { kind: 'unb' as const, name: 'Unbreaking', desc: 'tool wears far slower' },
+  { kind: 'sharp' as const, name: 'Sharpness', desc: '+2 damage per level' },
+];
+
+export function EnchantScreen(): React.ReactElement {
+  const inventory = useGameStore((s) => s.inventory);
+  const hotbarIndex = useGameStore((s) => s.hotbarIndex);
+  const xpLevel = useGameStore((s) => s.xpLevel);
+  const held = inventory[hotbarIndex];
+  const ench = held?.ench ?? { eff: 0, unb: 0, sharp: 0 };
+  return (
+    <Panel title="Enchanting Table">
+      <div className="text-white text-sm mb-3 text-center">
+        {held ? (
+          <>
+            Held: <span className="text-vc-amber">{itemDef(held.id).name}</span> · Your level:{' '}
+            <span className="text-vc-accent font-bold">{xpLevel}</span>
+          </>
+        ) : (
+          'Hold a tool in your hotbar to enchant it.'
+        )}
+      </div>
+      <div className="flex flex-col gap-2">
+        {ENCH_INFO.map(({ kind, name, desc }) => {
+          const lvl = ench[kind];
+          const cost = 2 + lvl * 2;
+          const maxed = lvl >= 3;
+          return (
+            <button
+              key={kind}
+              className={`w-72 text-left px-3 py-2 rounded-lg border ${
+                maxed
+                  ? 'border-vc-slot-edge bg-vc-slot/50 text-vc-text-dim'
+                  : 'border-vc-accent/50 bg-vc-slot hover:bg-vc-accent-soft text-white'
+              }`}
+              onClick={() => bridge().enchantHeld(kind)}
+            >
+              <div className="flex justify-between font-bold">
+                <span>
+                  {name} {lvl > 0 && ['I', 'II', 'III'][lvl - 1]}
+                </span>
+                <span className="text-vc-accent">{maxed ? 'MAX' : `${cost} lvl`}</span>
+              </div>
+              <div className="text-xs text-vc-text-dim">{desc}</div>
+            </button>
+          );
+        })}
+      </div>
     </Panel>
   );
 }
