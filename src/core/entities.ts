@@ -17,6 +17,8 @@ export const enum EntityType {
   COW = 8,
   PIG = 9,
   CHICKEN = 10,
+  PIGLIN = 11,
+  MAGMA_CUBE = 12,
 }
 
 /** Passive farm animals that wander, can be fed and bred. */
@@ -92,6 +94,18 @@ export const ENTITY_DEFS: Record<EntityType, EntityDef> = {
     width: 0.4, height: 0.7, maxHp: 4, speed: 1.4, hostile: false,
     attackDamage: 0, attackRange: 0,
     drops: [[ITEM.FEATHER, 0, 2], [ITEM.RAW_CHICKEN, 1, 1]], eye: 0.55,
+  },
+  // Neutral nether dweller: attacks only when a group member is struck.
+  [EntityType.PIGLIN]: {
+    width: 0.6, height: 1.95, maxHp: 16, speed: 2.9, hostile: false,
+    attackDamage: 5, attackRange: 1.6,
+    drops: [[ITEM.RAW_PORKCHOP, 1, 2], [ITEM.GOLD_INGOT, 0, 1]], eye: 1.74,
+  },
+  // Bouncing lava slime; immune to fire, hits on contact.
+  [EntityType.MAGMA_CUBE]: {
+    width: 1.0, height: 1.0, maxHp: 16, speed: 1.8, hostile: true,
+    attackDamage: 4, attackRange: 1.4,
+    drops: [[B.MAGMA, 0, 1]], eye: 0.6,
   },
 };
 

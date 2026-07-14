@@ -124,6 +124,24 @@ function faceTexture(kind: string): THREE.Texture {
       px(0, 4, 2, 3, '#5a3a22');
       px(14, 4, 2, 3, '#5a3a22');
       break;
+    case 'piglin':
+      fill('#e8a294');
+      px(3, 5, 3, 2, '#5a1c1c');
+      px(10, 5, 3, 2, '#5a1c1c');
+      px(4, 9, 8, 5, '#d98f84'); // broad snout
+      px(5, 11, 2, 2, '#8a4a44');
+      px(9, 11, 2, 2, '#8a4a44');
+      px(3, 12, 1, 3, '#f4e8d8'); // tusks
+      px(12, 12, 1, 3, '#f4e8d8');
+      break;
+    case 'magma':
+      fill('#30160e');
+      px(1, 5, 5, 2, '#ffcc44'); // blazing eye slits
+      px(10, 5, 5, 2, '#ffcc44');
+      px(2, 6, 3, 1, '#ff6a1a');
+      px(11, 6, 3, 1, '#ff6a1a');
+      px(5, 11, 6, 2, '#7a2a12'); // mouth seam
+      break;
     default:
       fill('#c88');
   }
@@ -392,6 +410,10 @@ export class EntityRenderer {
     if (e.type === EntityType.CREEPER) {
       const s = e.a > 0 ? 1 + e.a * 0.1 * (0.5 + 0.5 * Math.sin(performance.now() / 45)) : 1;
       e.group.scale.setScalar(s);
+    } else if (e.type === EntityType.MAGMA_CUBE) {
+      // Squash on landing (a = 1), stretch mid-air (a = 0).
+      const sq = e.a;
+      e.group.scale.set(1 + sq * 0.16, 1.22 - sq * 0.32, 1 + sq * 0.16);
     } else {
       // Babies render at ~half size.
       e.group.scale.setScalar((e.anim & AnimFlag.BABY) !== 0 ? 0.55 : 1);
@@ -547,6 +569,30 @@ export class EntityRenderer {
       case EntityType.IRON_GOLEM:
         buildGolem(e);
         break;
+      case EntityType.PIGLIN: {
+        buildHumanoid(e, { skin: 0xe8a294, shirt: 0x8a5a3c, pants: 0x4a3428, face: 'piglin' });
+        const head = e.parts.head as THREE.Group;
+        const snout = partBox(e, 0.2, 0.12, 0.1, 0xd98f84);
+        snout.position.set(0, 0.14, -0.3);
+        head.add(snout);
+        for (const side of [-1, 1]) {
+          const ear = partBox(e, 0.06, 0.18, 0.12, 0xd98f84);
+          ear.position.set(side * 0.29, 0.12, 0.04);
+          ear.rotation.z = side * 0.25;
+          head.add(ear);
+        }
+        // Golden sword at the ready.
+        const blade = partBox(e, 0.07, 0.5, 0.07, 0xe8c84a);
+        blade.position.set(0, -0.78, -0.12);
+        (e.parts.armR as THREE.Group).add(blade);
+        const guard = partBox(e, 0.16, 0.05, 0.08, 0xc8a02a);
+        guard.position.set(0, -0.56, -0.12);
+        (e.parts.armR as THREE.Group).add(guard);
+        break;
+      }
+      case EntityType.MAGMA_CUBE:
+        buildMagmaCube(e);
+        break;
       case EntityType.ARROW:
         buildArrow(e);
         break;
@@ -698,6 +744,23 @@ export function buildHumanoid(e: RenderEntity | { group: THREE.Group; parts: Rec
   (e.parts as Record<string, THREE.Object3D>).armR = mkArm(1);
   (e.parts as Record<string, THREE.Object3D>).legL = mkLeg(-1);
   (e.parts as Record<string, THREE.Object3D>).legR = mkLeg(1);
+}
+
+/** Magma cube: dark crusted shell around a glowing core (squished in animate). */
+function buildMagmaCube(e: RenderEntity): void {
+  const shell = partBox(e, 0.9, 0.9, 0.9, 0x30160e, faceTexture('magma'));
+  shell.position.y = 0.45;
+  e.group.add(shell);
+  e.parts.body = shell;
+  // The core stays out of e.materials so voxel-light dimming never darkens
+  // it — it should glow in the dark.
+  const core = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.5, 0.5),
+    new THREE.MeshLambertMaterial({ color: 0xff7a22, emissive: new THREE.Color(0xff5500), emissiveIntensity: 0.9 }),
+  );
+  core.position.y = 0.45;
+  e.group.add(core);
+  e.parts.extra = core;
 }
 
 function buildCreeper(e: RenderEntity): void {

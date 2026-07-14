@@ -556,6 +556,7 @@ interface Ent {
   stuck: boolean; // arrows
   love: number; // breeding: ticks of love-mode remaining
   growTicks: number; // > 0 while a baby
+  anger: number; // piglins: ticks of group aggro remaining
 }
 
 const entities = new Map<number, Ent>();
@@ -597,6 +598,7 @@ function makeEntity(type: EntityType, x: number, y: number, z: number): Ent {
     stuck: false,
     love: 0,
     growTicks: 0,
+    anger: 0,
   };
   entities.set(e.id, e);
   return e;
@@ -859,8 +861,11 @@ function stepEntity(e: Ent, walkX: number, walkZ: number, wantJump: boolean): vo
       e.dead = true; // dropped items burn up in lava
       return;
     }
-    damageEntity(e, 4, 0, 0);
-    e.burning = true;
+    // Nether natives shrug lava off.
+    if (e.type !== EntityType.MAGMA_CUBE && e.type !== EntityType.PIGLIN) {
+      damageEntity(e, 4, 0, 0);
+      e.burning = true;
+    }
   }
 
   // Horizontal steering toward desired velocity.
@@ -1355,6 +1360,78 @@ function tickGolem(e: Ent): void {
   stepEntity(e, move.x, move.z, move.jump);
 }
 
+/** Piglin: wanders peacefully; striking one angers the whole group. */
+function tickPiglin(e: Ent): void {
+  const def = ENTITY_DEFS[e.type];
+  let move = { x: 0, z: 0, jump: false };
+  if (e.anger > 0 && player.valid && player.health > 0) {
+    e.anger--;
+    const pd = distToPlayer(e);
+    pathTo(e, player.x, player.y, player.z);
+    move = followPath(e);
+    if (!e.path) {
+      const dx = player.x - e.x;
+      const dz = player.z - e.z;
+      const d = Math.hypot(dx, dz) || 1;
+      move = { x: dx / d, z: dz / d, jump: false };
+      e.yaw = Math.atan2(-dx, -dz);
+    }
+    if (pd < def.attackRange && e.attackCooldown <= 0) {
+      e.attackCooldown = 22;
+      const dx = player.x - e.x;
+      const dz = player.z - e.z;
+      const d = Math.hypot(dx, dz) || 1;
+      post({ t: 'damage', amount: def.attackDamage, kx: (dx / d) * 6, kz: (dz / d) * 6, cause: 'mob' });
+    }
+  } else {
+    e.anger = 0;
+    move = wander(e);
+  }
+  stepEntity(e, move.x, move.z, move.jump);
+}
+
+/** Magma cube: springy hops toward the player, contact damage on touch. */
+function tickMagmaCube(e: Ent): void {
+  const def = ENTITY_DEFS[e.type];
+  // Squish factor rides in `swell` for the renderer: 1 grounded, 0 airborne.
+  e.swell = e.onGround ? Math.min(1, e.swell + 0.15) : Math.max(0, e.swell - 0.3);
+  let move = { x: 0, z: 0, jump: false };
+  const pd = distToPlayer(e);
+  if (pd < 16 && player.valid && player.health > 0) {
+    const dx = player.x - e.x;
+    const dz = player.z - e.z;
+    const d = Math.hypot(dx, dz) || 1;
+    e.yaw = Math.atan2(-dx, -dz);
+    if (e.onGround) {
+      e.stateTimer--;
+      if (e.stateTimer <= 0) {
+        e.stateTimer = rand.range(16, 40);
+        e.vy = 7.5;
+        e.onGround = false;
+      }
+    } else {
+      move = { x: dx / d, z: dz / d, jump: false }; // steer mid-air
+    }
+    if (pd < def.attackRange && e.attackCooldown <= 0) {
+      e.attackCooldown = 24;
+      post({ t: 'damage', amount: def.attackDamage, kx: (dx / d) * 6, kz: (dz / d) * 6, cause: 'mob' });
+    }
+  } else {
+    // Idle bounces in a random direction.
+    e.stateTimer--;
+    if (e.onGround && e.stateTimer <= 0) {
+      e.stateTimer = rand.range(60, 180);
+      e.vy = 6;
+      const ang = rand.float() * Math.PI * 2;
+      e.wanderX = Math.cos(ang);
+      e.wanderZ = Math.sin(ang);
+      e.yaw = Math.atan2(-e.wanderX, -e.wanderZ);
+    }
+    if (!e.onGround) move = { x: e.wanderX * 0.7, z: e.wanderZ * 0.7, jump: false };
+  }
+  stepEntity(e, move.x, move.z, move.jump);
+}
+
 function tickItem(e: Ent): void {
   e.age++;
   if (e.age > ITEM_DESPAWN_TICKS) {
@@ -1482,7 +1559,7 @@ const villages: VillageDef[] = [];
 const consumedChunks = new Set<string>();
 let golemCooldown = 0;
 
-function trySpawnAt(type: EntityType, x: number, y: number, z: number, maxScan: number): boolean {
+function trySpawnAt(type: EntityType, x: number, y: number, z: number, maxScan: number, ignoreLight = false): boolean {
   // Scan downward for ground.
   const def = ENTITY_DEFS[type];
   const ix = Math.floor(x);
@@ -1499,7 +1576,7 @@ function trySpawnAt(type: EntityType, x: number, y: number, z: number, maxScan: 
     if (boxIntersectsSolid(world, x - def.width / 2, yy + 0.01, z - def.width / 2, def.width, def.height, def.width)) {
       continue;
     }
-    if (ENTITY_DEFS[type].hostile) {
+    if (ENTITY_DEFS[type].hostile && !ignoreLight) {
       // Hostiles spawn only in darkness: no block light, AND either it is
       // night (low sun) or the spot has no sky access (a cave). This makes
       // surface zombies/skeletons strictly night-time while caves still spawn.
@@ -1522,7 +1599,33 @@ function naturalSpawning(): void {
     if (ENTITY_DEFS[e.type].hostile) hostiles++;
     else if (isFarmAnimal(e.type)) passives++;
   }
-  if (dim === 1) return; // nether spawn table arrives with its own mobs (P4-4)
+  if (dim === 1) {
+    // Nether table: magma cubes (hostile) + neutral piglin bands.
+    let piglins = 0;
+    for (const e of entities.values()) {
+      if (!e.dead && e.type === EntityType.PIGLIN) piglins++;
+    }
+    for (let i = 0; i < 4; i++) {
+      const wantPiglin = rand.chance(0.45);
+      if (wantPiglin ? piglins >= 8 : hostiles >= HOSTILE_CAP) continue;
+      const ang = rand.float() * Math.PI * 2;
+      const dist = SPAWN_MIN_RADIUS + rand.float() * (SPAWN_MAX_RADIUS - SPAWN_MIN_RADIUS);
+      const x = player.x + Math.cos(ang) * dist;
+      const z = player.z + Math.sin(ang) * dist;
+      if (!chunkLoaded(x, z)) continue;
+      const y = Math.min(120, Math.max(20, player.y + rand.range(-12, 12) + 8));
+      // Lava light is everywhere down there: skip the darkness rule.
+      if (trySpawnAt(wantPiglin ? EntityType.PIGLIN : EntityType.MAGMA_CUBE, x, y, z, 24, true)) break;
+    }
+    for (const e of entities.values()) {
+      if (e.dead) continue;
+      const d = Math.hypot(e.x - player.x, e.z - player.z);
+      if (d > DESPAWN_RADIUS && (ENTITY_DEFS[e.type].hostile || e.type === EntityType.PIGLIN || e.type === EntityType.ARROW)) {
+        e.dead = true;
+      }
+    }
+    return;
+  }
   if (hostiles < HOSTILE_CAP) {
     for (let i = 0; i < 4; i++) {
       const ang = rand.float() * Math.PI * 2;
@@ -1875,6 +1978,8 @@ function tick(): void {
       case EntityType.CHICKEN:
         tickAnimal(e);
         break;
+      case EntityType.PIGLIN: tickPiglin(e); break;
+      case EntityType.MAGMA_CUBE: tickMagmaCube(e); break;
     }
     if (e.growTicks > 0) e.growTicks--;
   }
@@ -2038,6 +2143,13 @@ ctx.onmessage = (e: MessageEvent<ToLogicMsg>) => {
       const target = entities.get(msg.entityId);
       if (target && !target.dead) {
         damageEntity(target, msg.damage, msg.kx, msg.kz, true);
+        // Piglins hold a grudge as a group.
+        if (target.type === EntityType.PIGLIN) {
+          target.anger = 600;
+          for (const p of queryRange(target.x, target.y, target.z, 16)) {
+            if (p.type === EntityType.PIGLIN && !p.dead) p.anger = 600;
+          }
+        }
       }
       break;
     }
