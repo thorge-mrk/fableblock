@@ -40,36 +40,57 @@ function discTexture(kind: 'sun' | 'moon'): THREE.Texture {
   return tex;
 }
 
-function cloudTexture(seed: number): THREE.Texture {
-  const c = document.createElement('canvas');
-  c.width = 256;
-  c.height = 256;
-  const g = c.getContext('2d')!;
+/**
+ * Volumetric block-cloud field: a grid of extruded cloud cells with shared
+ * faces culled (so cells fuse into masses and you see the cloud's SIDES, giving
+ * real height), per-face shading baked into vertex colors, and a radial alpha
+ * fade so the field has no visible edge. The occupancy pattern is periodic over
+ * TILE cells so the drift in update() can wrap seamlessly.
+ */
+const CLOUD_CELL = 20;
+const CLOUD_TILE = 13; // periodic tile (cells) — drift wraps by CLOUD_TILE*CELL
+function buildCloudField(seed: number): THREE.BufferGeometry {
+  const SPAN = 16; // cells each way; distance fog swallows the rim (no hard edge)
+  const H = 6; // cloud thickness in blocks
   const rand = mulberry32(seed ^ 0xc10d);
-  g.clearRect(0, 0, 256, 256);
-  // Blobby cumulus patches out of overlapping soft discs.
-  for (let i = 0; i < 26; i++) {
-    const cx = rand() * 256;
-    const cy = rand() * 256;
-    const puffs = 4 + Math.floor(rand() * 5);
-    for (let p = 0; p < puffs; p++) {
-      const r = 10 + rand() * 16;
-      const grad = g.createRadialGradient(0, 0, 1, 0, 0, r);
-      grad.addColorStop(0, 'rgba(255,255,255,0.55)');
-      grad.addColorStop(1, 'rgba(255,255,255,0)');
-      g.save();
-      g.translate(cx + (rand() - 0.5) * 34, cy + (rand() - 0.5) * 18);
-      g.fillStyle = grad;
-      g.beginPath();
-      g.arc(0, 0, r, 0, Math.PI * 2);
-      g.fill();
-      g.restore();
+  const pat: boolean[] = [];
+  for (let i = 0; i < CLOUD_TILE * CLOUD_TILE; i++) pat.push(rand() < 0.34);
+  const cell = (cx: number, cz: number): boolean => {
+    const px = ((cx % CLOUD_TILE) + CLOUD_TILE) % CLOUD_TILE;
+    const pz = ((cz % CLOUD_TILE) + CLOUD_TILE) % CLOUD_TILE;
+    return pat[pz * CLOUD_TILE + px];
+  };
+  const pos: number[] = [];
+  const col: number[] = [];
+  const quad = (v: number[][], shade: number): void => {
+    for (const i of [0, 1, 2, 0, 2, 3]) {
+      pos.push(v[i][0], v[i][1], v[i][2]);
+      col.push(shade, shade, shade, 1);
+    }
+  };
+  for (let cz = -SPAN; cz <= SPAN; cz++) {
+    for (let cx = -SPAN; cx <= SPAN; cx++) {
+      if (!cell(cx, cz)) continue;
+      const x0 = cx * CLOUD_CELL;
+      const x1 = x0 + CLOUD_CELL;
+      const z0 = cz * CLOUD_CELL;
+      const z1 = z0 + CLOUD_CELL;
+      const y0 = 0;
+      const y1 = H;
+      // Top (bright) + bottom (dark) always; sides only at cloud edges so the
+      // cells fuse into masses and you see the cloud's height at the edges.
+      quad([[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]], 1.0);
+      quad([[x0, y0, z1], [x0, y0, z0], [x1, y0, z0], [x1, y0, z1]], 0.72);
+      if (!cell(cx + 1, cz)) quad([[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]], 0.86);
+      if (!cell(cx - 1, cz)) quad([[x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [x0, y0, z0]], 0.86);
+      if (!cell(cx, cz + 1)) quad([[x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [x0, y0, z1]], 0.80);
+      if (!cell(cx, cz - 1)) quad([[x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0]], 0.80);
     }
   }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  return tex;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 4));
+  return geo;
 }
 
 export class Sky {
@@ -168,35 +189,19 @@ export class Sky {
     this.stars.frustumCulled = false;
     this.group.add(this.stars);
 
-    // Drifting cloud sheet high above the world. Its rim fades to alpha 0 via
-    // per-vertex color well inside the far plane, so no hard edge or repeat
-    // boundary is ever visible (the old 1400px plane's corners were clipped).
-    const CR = 900; // full width; visible clouds live within ~450 radius
-    const seg = 24;
-    const cg = new THREE.PlaneGeometry(CR, CR, seg, seg);
-    const cpos = cg.attributes.position;
-    const ccol = new Float32Array(cpos.count * 4);
-    for (let i = 0; i < cpos.count; i++) {
-      const d = Math.hypot(cpos.getX(i), cpos.getY(i)) / (CR * 0.5); // 0 center .. 1 edge
-      const a = 1 - THREE.MathUtils.smoothstep(d, 0.6, 1.0); // fade the outer 40%
-      ccol[i * 4] = 1;
-      ccol[i * 4 + 1] = 1;
-      ccol[i * 4 + 2] = 1;
-      ccol[i * 4 + 3] = a;
-    }
-    cg.setAttribute('color', new THREE.BufferAttribute(ccol, 4));
+    // Volumetric block clouds: a grid of extruded cloud cells (you see their
+    // sides → real height, not a flat sheet). Shared faces are culled so cells
+    // fuse into rounded masses; the rim fades to alpha 0 so there is no edge.
     this.cloudMat = new THREE.MeshBasicMaterial({
-      map: cloudTexture(seed),
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.85,
       depthWrite: false,
-      fog: false,
+      fog: true, // distance fog swallows the rim → no visible edge, seamless drift
       side: THREE.DoubleSide,
       vertexColors: true,
     });
-    this.cloudMat.map!.repeat.set(2, 2);
-    this.clouds = new THREE.Mesh(cg, this.cloudMat);
-    this.clouds.rotation.x = -Math.PI / 2;
+    this.clouds = new THREE.Mesh(buildCloudField(seed), this.cloudMat);
+    this.clouds.frustumCulled = false;
     this.clouds.renderOrder = 5;
     this.group.add(this.clouds);
   }
@@ -220,13 +225,12 @@ export class Sky {
     // Stars: fade in at night, wheel slowly around the sky axis.
     this.starMat.opacity = THREE.MathUtils.clamp(-alt * 2.2, 0, 0.9);
     this.stars.rotation.z = ang * 0.5;
-    // Clouds sit at an absolute height and drift with time; dimmer at night.
-    this.clouds.position.y = 150 - camY;
-    if (this.cloudMat.map) {
-      this.cloudMat.map.offset.x = (t * 40) % 1;
-      this.cloudMat.map.offset.y = (t * 12) % 1;
-    }
-    this.cloudMat.opacity = 0.22 + 0.3 * THREE.MathUtils.clamp(alt + 0.3, 0, 1);
+    // Block clouds sit at an absolute height and drift. The occupancy pattern
+    // is periodic over CLOUD_TILE cells, so wrapping the x-offset by one tile is
+    // seamless (no jump); distance fog fades the rim. Dimmer at night.
+    const period = CLOUD_TILE * CLOUD_CELL;
+    this.clouds.position.set(((t * 4) % 1) * period, 118 - camY, 0);
+    this.cloudMat.opacity = 0.4 + 0.5 * THREE.MathUtils.clamp(alt + 0.3, 0, 1);
   }
 
   dispose(): void {
