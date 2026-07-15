@@ -157,6 +157,32 @@ P3-6 Rüstung, P3-7 Wetter, P3-8 XP+Verzauberung).
   mit Spawner-Wache), Steinbrick-Ruinen, Moos-Findlinge; Dörfer mit Kapelle
   (Glowstone-Glockenturm), Farm-Parzellen mit Wasserkanal, 2 breiten Wegen, 5–8 Gebäuden.
 
+**V2-Pass (Profi v2 — geplant per /agent-Workflow, adversarisch geprüft):**
+- **WebGPU abgeklärt**: three@0.170 `WebGPURenderer` unterstützt KEIN rohes GLSL
+  `ShaderMaterial` — ein Umstieg hieße Terrain- & Wasser-Shader komplett in TSL neu
+  schreiben + Engine-Upgrade (großes Regressionsrisiko). Das Ruckeln ist CPU-seitig,
+  darum stattdessen den WebGL-/CPU-Pfad optimiert.
+- **Performance**: Chunk-Upload zeit-budgetiert (~2.5 ms/Frame statt fix 3) mit
+  Mindest-1; **adaptive Auflösung** (pixelRatio folgt dem FPS-EMA mit Hysterese,
+  0.6–1.0) → schwache Geräte laufen flüssig; enge Bounding-Spheres pro Mesh
+  (echtes vertikales Frustum-Culling statt 256-hoher Voll-Säule).
+- **3D-Himmel**: echte Gradient-Kuppel (Horizont→Zenit, Tag/Nacht/Wetter getönt)
+  statt flacher Wand; Wolken mit Rand-Alpha-Fade → keine sichtbare Kante/Wiederholung;
+  unter Wasser & im Nether korrekt ausgeblendet.
+- **Fluid ohne Lücken**: Seitenflächen füllen jetzt die Stufe zwischen gleichem
+  Fluid unterschiedlicher Höhe (fließendes Wasser/Lava zeigt keinen Spalt mehr).
+- **Physik-Bugs**: Wasser-Oberflächenhöhe wird respektiert (kein Schwimm-/Fall-
+  schaden-Flackern an der Wasserlinie), Strömung erfasst Boote/Oberflächenschwimmer,
+  Wasserfall zieht runter; **box-genaue Kollision** — Türen/Falltüren/Kolben
+  blockieren nur ihren Teilkörper (man steht in der Türöffnung, nicht an Luft).
+- **Drag&Drop**: gezogenes Item saß ~konstant versetzt (backdrop-filter-Vorfahr
+  machte `position:fixed` am Panel statt Viewport fest) → per Portal an `<body>`,
+  jetzt exakt unter dem Zeiger (Smoke misst dx/dy=0).
+- **Inventar**: mobil scrollbar (`touch-action: pan-y`, Tap-statt-Drag-Close),
+  echte prozedurale Armor-Slot-Icons (Helm/Brust/Hose/Stiefel) statt Emojis.
+- **Texturen/Titel**: Cobblestone mit 3D-bevelten Steinen + Mörtelfugen;
+  Titel-Panorama in nativer Auflösung, stufenlos gescrollt (kein 4px-Ruckeln).
+
 ## Phase 1 — Mobile-UX
 
 ### P1-1 · Cursor-Stack folgt dem Finger (S)
