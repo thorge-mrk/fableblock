@@ -100,6 +100,12 @@ export class Game {
   private landDip = 0;
   private prevOnGround = true;
   private prevVy = 0;
+  // Adaptive resolution: quality-derived base scale × a dynamic multiplier that
+  // backs off when the FPS EMA sags on weak GPUs and recovers when it's healthy.
+  private baseScale = 1;
+  private resScale = 1;
+  private lastAppliedPR = -1;
+  private resCheckAccum = 0;
 
   private spawn: [number, number, number] | null = null;
   private spawnPoint: [number, number, number] | null = null; // bed respawn (always overworld)
@@ -425,9 +431,9 @@ export class Game {
       this.dayNight.sun.color.setHex(0xff9a70);
       this.dayNight.ambient.intensity = 0.55;
     }
-    this.sky.group.visible = this.dim === 0;
 
-    // Celestial bodies track the camera and the time of day.
+    // Celestial bodies track the camera and the time of day (visibility of the
+    // whole sky group is decided below, after the weather/underwater overrides).
     this.sky.update(this.dayNight.time, this.player.x, this.player.y, this.player.z);
 
     // Weather: rain curtain + darkened sky/fog while a shower passes.
@@ -444,17 +450,30 @@ export class Game {
       this.env.uFogNear.value *= 1 - 0.22 * w;
       (this.scene.background as THREE.Color).multiplyScalar(1 - 0.28 * w);
       this.env.uFogColor.value.multiplyScalar(1 - 0.28 * w);
+      this.dayNight.zenithColor.multiplyScalar(1 - 0.28 * w);
     }
 
     if (this.player.headInFluid) {
       this.env.uFogNear.value = 2;
       this.env.uFogFar.value = this.player.inLava ? 6 : 24;
       this.env.uFogColor.value.setHex(this.player.inLava ? 0xc04808 : 0x1840a0);
+      // Submerged: the background clear matches the murk so the fog:false sky
+      // dome/sprites don't punch a bright hole in the water.
+      (this.scene.background as THREE.Color).setHex(this.player.inLava ? 0xc04808 : 0x1840a0);
     }
     if (this.scene.fog instanceof THREE.Fog) {
       this.scene.fog.color.copy(this.env.uFogColor.value);
       this.scene.fog.near = this.env.uFogNear.value;
       this.scene.fog.far = this.env.uFogFar.value;
+    }
+
+    // Feed the final horizon (= background/fog) and zenith into the sky dome.
+    // Overworld and above water only; the nether and underwater hide the group
+    // and paint their own background instead.
+    const skyVisible = this.dim === 0 && !this.player.headInFluid;
+    this.sky.group.visible = skyVisible;
+    if (skyVisible) {
+      this.sky.setColors(this.scene.background as THREE.Color, this.dayNight.zenithColor);
     }
 
     // Entities
@@ -495,6 +514,14 @@ export class Game {
 
     // Debug stats — frame-rate-independent throttle (~5 Hz) to keep React
     // store churn off the hot path regardless of FPS.
+    // Adaptive resolution: re-evaluate the render scale ~once a second so it
+    // settles rather than chasing per-frame noise.
+    this.resCheckAccum += dt;
+    if (this.resCheckAccum >= 1) {
+      this.resCheckAccum = 0;
+      this.updateAdaptiveRes();
+    }
+
     this.statsAccum += dt;
     if (this.statsAccum >= 0.2) {
       this.statsAccum = 0;
@@ -2083,9 +2110,34 @@ export class Game {
     this.camera.fov = s.fov;
     this.camera.updateProjectionMatrix();
     const scale = QUALITY_SCALE[s.quality] || window.devicePixelRatio || 1;
-    this.renderer.setPixelRatio(Math.min(scale === 0 ? window.devicePixelRatio : scale, 2.5));
+    this.baseScale = Math.min(scale === 0 ? window.devicePixelRatio : scale, 2.5);
+    this.applyPixelRatio();
     this.dayNight.dayLengthSec = s.dayLengthSec;
     this.sound.setVolume(s.soundVolume);
+  }
+
+  /** Apply base × adaptive scale, but only when it actually changed —
+   *  setPixelRatio reallocates the drawing buffer, so per-frame calls hitch. */
+  private applyPixelRatio(): void {
+    const pr = this.baseScale * this.resScale;
+    if (Math.abs(pr - this.lastAppliedPR) > 0.01) {
+      this.renderer.setPixelRatio(pr);
+      this.lastAppliedPR = pr;
+    }
+  }
+
+  /** Nudge the adaptive resolution multiplier from the smoothed frame rate,
+   *  with a wide deadband and discrete steps so it settles instead of pulsing. */
+  private updateAdaptiveRes(): void {
+    let changed = false;
+    if (this.fpsEMA < 45 && this.resScale > 0.6) {
+      this.resScale = Math.max(0.6, this.resScale - 0.15);
+      changed = true;
+    } else if (this.fpsEMA > 58 && this.resScale < 1) {
+      this.resScale = Math.min(1, this.resScale + 0.15);
+      changed = true;
+    }
+    if (changed) this.applyPixelRatio();
   }
 
   toggleFullscreen(): void {

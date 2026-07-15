@@ -80,8 +80,46 @@ export class Sky {
   private starMat: THREE.PointsMaterial;
   private clouds: THREE.Mesh;
   private cloudMat: THREE.MeshBasicMaterial;
+  private dome: THREE.Mesh;
+  private domeMat: THREE.ShaderMaterial;
 
   constructor(seed: number) {
+    // Gradient sky dome: an inward-facing sphere painted horizon->zenith so the
+    // sky reads as a 3D vault. Drawn first (renderOrder -1, no depth) as a pure
+    // backdrop; radius sits behind sun/moon/stars but well inside the far plane.
+    this.domeMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uHorizon: { value: new THREE.Color(0x8ec2ee) },
+        uZenith: { value: new THREE.Color(0x3a7bd5) },
+      },
+      vertexShader: /* glsl */ `
+        varying vec3 vDir;
+        void main() {
+          vDir = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        precision mediump float;
+        uniform vec3 uHorizon;
+        uniform vec3 uZenith;
+        varying vec3 vDir;
+        void main() {
+          float h = clamp(normalize(vDir).y, 0.0, 1.0);
+          float t = pow(h, 0.55); // compress the gradient toward the horizon band
+          gl_FragColor = vec4(mix(uHorizon, uZenith, t), 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      depthWrite: false,
+      depthTest: false,
+      fog: false,
+    });
+    this.dome = new THREE.Mesh(new THREE.SphereGeometry(480, 32, 16), this.domeMat);
+    this.dome.renderOrder = -1; // draws first; nothing else uses a negative order
+    this.dome.frustumCulled = false;
+    this.group.add(this.dome);
+
     const sunMat = new THREE.SpriteMaterial({
       map: discTexture('sun'),
       transparent: true,
@@ -130,7 +168,23 @@ export class Sky {
     this.stars.frustumCulled = false;
     this.group.add(this.stars);
 
-    // Drifting cloud sheet high above the world (absolute height).
+    // Drifting cloud sheet high above the world. Its rim fades to alpha 0 via
+    // per-vertex color well inside the far plane, so no hard edge or repeat
+    // boundary is ever visible (the old 1400px plane's corners were clipped).
+    const CR = 900; // full width; visible clouds live within ~450 radius
+    const seg = 24;
+    const cg = new THREE.PlaneGeometry(CR, CR, seg, seg);
+    const cpos = cg.attributes.position;
+    const ccol = new Float32Array(cpos.count * 4);
+    for (let i = 0; i < cpos.count; i++) {
+      const d = Math.hypot(cpos.getX(i), cpos.getY(i)) / (CR * 0.5); // 0 center .. 1 edge
+      const a = 1 - THREE.MathUtils.smoothstep(d, 0.6, 1.0); // fade the outer 40%
+      ccol[i * 4] = 1;
+      ccol[i * 4 + 1] = 1;
+      ccol[i * 4 + 2] = 1;
+      ccol[i * 4 + 3] = a;
+    }
+    cg.setAttribute('color', new THREE.BufferAttribute(ccol, 4));
     this.cloudMat = new THREE.MeshBasicMaterial({
       map: cloudTexture(seed),
       transparent: true,
@@ -138,12 +192,19 @@ export class Sky {
       depthWrite: false,
       fog: false,
       side: THREE.DoubleSide,
+      vertexColors: true,
     });
-    this.cloudMat.map!.repeat.set(3, 3);
-    this.clouds = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), this.cloudMat);
+    this.cloudMat.map!.repeat.set(2, 2);
+    this.clouds = new THREE.Mesh(cg, this.cloudMat);
     this.clouds.rotation.x = -Math.PI / 2;
     this.clouds.renderOrder = 5;
     this.group.add(this.clouds);
+  }
+
+  /** Push the current horizon/zenith colors into the dome gradient. */
+  setColors(horizon: THREE.Color, zenith: THREE.Color): void {
+    (this.domeMat.uniforms.uHorizon.value as THREE.Color).copy(horizon);
+    (this.domeMat.uniforms.uZenith.value as THREE.Color).copy(zenith);
   }
 
   /** Follow the camera and place sun/moon/stars for time t in [0,1). */
@@ -173,5 +234,10 @@ export class Sky {
     (this.moon.material as THREE.SpriteMaterial).map?.dispose();
     this.stars.geometry.dispose();
     this.starMat.dispose();
+    this.dome.geometry.dispose();
+    this.domeMat.dispose();
+    this.clouds.geometry.dispose();
+    this.cloudMat.map?.dispose();
+    this.cloudMat.dispose();
   }
 }

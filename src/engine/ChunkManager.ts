@@ -100,10 +100,15 @@ export class ChunkManager {
   update(centerX: number, centerZ: number): void {
     this.centerX = centerX;
     this.centerZ = centerZ;
-    // Upload at most a few freshly meshed chunks per frame: geometry upload
-    // is the main-thread cost that made bursts of arrivals hitch the camera.
-    for (let n = 0; n < 3 && this.pendingUploads.length > 0; n++) {
-      this.applyMesh(this.pendingUploads.shift()!);
+    // Upload freshly meshed chunks under a small wall-clock budget rather than
+    // a fixed count: mesh sizes vary wildly, so a fixed 3/frame either hitches
+    // on big meshes or starves on small ones. Always drain at least one so a
+    // heavy arrival burst can't stall progress.
+    if (this.pendingUploads.length > 0) {
+      const start = performance.now();
+      do {
+        this.applyMesh(this.pendingUploads.shift()!);
+      } while (this.pendingUploads.length > 0 && performance.now() - start < 2.5);
     }
     const pcx = centerX >> 4;
     const pcz = centerZ >> 4;
@@ -243,7 +248,8 @@ export class ChunkManager {
   ): THREE.Mesh | null {
     if (buffers.count === 0) return null;
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(buffers.pos), 3));
+    const pos = new Float32Array(buffers.pos);
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('aUv', new THREE.BufferAttribute(new Float32Array(buffers.uv), 2));
     geo.setAttribute('aTile', new THREE.BufferAttribute(new Uint16Array(buffers.tile), 1));
     const shade = new THREE.BufferAttribute(new Uint8Array(buffers.shade), 1);
@@ -251,9 +257,21 @@ export class ChunkManager {
     geo.setAttribute('aShade', shade);
     geo.setAttribute('aLight', new THREE.BufferAttribute(new Uint8Array(buffers.light), 2));
     geo.setIndex(new THREE.BufferAttribute(new Uint32Array(buffers.index), 1));
+    // Tight bounding sphere from the mesh's actual vertical extent. The old
+    // fixed full-column sphere (radius ~128) spanned the whole 256-tall chunk,
+    // so a chunk was almost never frustum-culled vertically (flying high, deep
+    // underground). x/z stay chunk-local [0..16] → center 8.
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (let i = 1; i < pos.length; i += 3) {
+      const y = pos[i];
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    const halfY = (maxY - minY) / 2;
     geo.boundingSphere = new THREE.Sphere(
-      new THREE.Vector3(8, CHUNK_HEIGHT / 2, 8),
-      Math.sqrt(8 * 8 + (CHUNK_HEIGHT / 2) * (CHUNK_HEIGHT / 2) + 8 * 8),
+      new THREE.Vector3(8, (minY + maxY) / 2, 8),
+      Math.sqrt(8 * 8 + halfY * halfY + 8 * 8),
     );
     const mesh = new THREE.Mesh(geo, material);
     mesh.position.set(cx * 16, 0, cz * 16);

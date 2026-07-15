@@ -13,13 +13,19 @@ const DUSK_SKY = new THREE.Color(0xe2884e);
 const DAY_TINT = new THREE.Color(1, 1, 1);
 const DUSK_TINT = new THREE.Color(1.0, 0.78, 0.62);
 const NIGHT_TINT = new THREE.Color(0.66, 0.72, 1.0);
+// Zenith (straight-up) colors for the gradient sky dome — deeper than the
+// horizon so the sky reads as a 3D vault instead of a flat wall.
+const DAY_ZENITH = new THREE.Color(0x3a7bd5);
+const NIGHT_ZENITH = new THREE.Color(0x03040c);
+const DUSK_ZENITH = new THREE.Color(0x2a3f74);
 
 export class DayNightCycle {
   time: number; // 0..1
   dayLengthSec: number;
   readonly sun: THREE.DirectionalLight;
   readonly ambient: THREE.AmbientLight;
-  readonly skyColor = new THREE.Color();
+  readonly skyColor = new THREE.Color(); // horizon color
+  readonly zenithColor = new THREE.Color(); // straight-up color for the dome
   sunLevel = 1;
 
   private tmp = new THREE.Color();
@@ -48,6 +54,10 @@ export class DayNightCycle {
     this.skyColor.copy(this.tmp);
     (scene.background as THREE.Color).copy(this.skyColor);
     env.uFogColor.value.copy(this.skyColor);
+
+    // Zenith color for the sky dome (horizon stays == background == fog).
+    this.zenithColor.copy(NIGHT_ZENITH).lerp(DAY_ZENITH, dayF);
+    this.zenithColor.lerp(DUSK_ZENITH, duskBand * 0.4);
 
     // Sky tint for sunlight color in the terrain shader.
     env.uSkyTint.value.copy(NIGHT_TINT).lerp(DAY_TINT, dayF).lerp(DUSK_TINT, duskBand * 0.6);
