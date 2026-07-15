@@ -38,6 +38,8 @@ let tempNoise!: FBM2D;
 let moistNoise!: FBM2D;
 let warpXNoise!: FBM2D;
 let warpZNoise!: FBM2D;
+let detailNoise!: FBM2D; // high-freq roll so plains aren't dead flat
+let forestDensity!: FBM2D; // clumps trees into groves + clearings
 let caveA!: FBM3D;
 let caveB!: FBM3D;
 let cheese!: FBM3D;
@@ -54,6 +56,8 @@ function initNoise(): void {
   // borders meander organically instead of following the noise lattice.
   warpXNoise = new FBM2D(deriveSeed(seed, 'warpX'), 2, 1 / 350, 0.5, 2.0);
   warpZNoise = new FBM2D(deriveSeed(seed, 'warpZ'), 2, 1 / 350, 0.5, 2.0);
+  detailNoise = new FBM2D(deriveSeed(seed, 'detail'), 3, 1 / 55, 0.5, 2.0);
+  forestDensity = new FBM2D(deriveSeed(seed, 'forest'), 3, 1 / 120, 0.5, 2.0);
   caveA = new FBM3D(deriveSeed(seed, 'caveA'), 2, 1 / 90, 0.5, 2.2);
   caveB = new FBM3D(deriveSeed(seed, 'caveB'), 2, 1 / 90, 0.5, 2.2);
   cheese = new FBM3D(deriveSeed(seed, 'cheese'), 2, 1 / 140, 0.5, 2.0);
@@ -70,6 +74,10 @@ export const enum Biome {
   FOREST = 2,
   DESERT = 3,
   MOUNTAINS = 4,
+  SWAMP = 5,
+  CHERRY = 6,
+  JUNGLE = 7,
+  SNOWY = 8,
 }
 
 interface ColumnInfo {
@@ -120,12 +128,23 @@ function columnInfo(x: number, z: number): ColumnInfo {
   if (cont > -0.05) {
     height += splineLerp(PEAK_SPLINE, pv) * eroFactor;
   }
+  // Gentle rolling detail so plains stop reading as a dead-flat plane; more on
+  // higher ground. Only above sea so ocean floors stay smooth.
+  if (cont > -0.1) height += detailNoise.sample(wx, wz) * (cont > 0.35 ? 5 : 2.5);
   height = Math.max(8, Math.min(CHUNK_HEIGHT - 24, Math.floor(height)));
 
+  // Biome classification (first match wins). Cold/hot gates are mirror images
+  // (temp<-0.32 vs >0.32) so SNOWY and DESERT can never collide; JUNGLE takes
+  // hot+wet after DESERT took hot+dry; SWAMP the wet lowland flats; CHERRY a
+  // narrow mild band on hills; FOREST/PLAINS keep the remainder.
   let biome: Biome;
   if (height < SEA_LEVEL - 1) biome = Biome.OCEAN;
   else if (height > 92) biome = Biome.MOUNTAINS;
+  else if (temp < -0.32) biome = Biome.SNOWY;
   else if (temp > 0.32 && moist < 0.1) biome = Biome.DESERT;
+  else if (temp > 0.28 && moist > 0.3) biome = Biome.JUNGLE;
+  else if (moist > 0.26 && height <= SEA_LEVEL + 3) biome = Biome.SWAMP;
+  else if (temp > 0.02 && temp < 0.24 && moist > 0.06 && moist < 0.28 && height > SEA_LEVEL + 3) biome = Biome.CHERRY;
   else if (moist > 0.08) biome = Biome.FOREST;
   else biome = Biome.PLAINS;
   return { height, biome };
@@ -180,65 +199,137 @@ function ravineAt(x: number, z: number): RavineInfo | null {
 // ---------------------------------------------------------------------------
 // Trees (with cross-chunk canopy support)
 // ---------------------------------------------------------------------------
+type TreeType = 'oak' | 'birch' | 'cherry' | 'jungle' | 'spruce';
+
 interface TreePlan {
   x: number;
   z: number;
   y: number;
   height: number;
-  birch: boolean;
+  type: TreeType;
 }
+
+const TREE_LOG: Record<TreeType, number> = {
+  oak: B.OAK_LOG, birch: B.BIRCH_LOG, cherry: B.CHERRY_LOG, jungle: B.JUNGLE_LOG, spruce: B.SPRUCE_LOG,
+};
+const TREE_LEAF: Record<TreeType, number> = {
+  oak: B.OAK_LEAVES, birch: B.BIRCH_LEAVES, cherry: B.CHERRY_LEAVES, jungle: B.JUNGLE_LEAVES, spruce: B.SPRUCE_LEAVES,
+};
 
 function treesForChunk(cx: number, cz: number): TreePlan[] {
   const rand = new Random(deriveSeed(seed, 'trees:' + cx + ',' + cz));
   const trees: TreePlan[] = [];
   const centerInfo = columnInfo(cx * 16 + 8, cz * 16 + 8);
+  // Density noise clumps trees into groves and leaves open clearings.
+  const dens = Math.max(0, forestDensity.sample(cx * 16 + 8, cz * 16 + 8));
   let count: number;
+  let type: TreeType = 'oak';
   switch (centerInfo.biome) {
     case Biome.FOREST: count = rand.range(6, 10); break;
+    case Biome.JUNGLE: count = rand.range(6, 11); type = 'jungle'; break;
+    case Biome.CHERRY: count = rand.range(2, 4); type = 'cherry'; break;
+    case Biome.SNOWY: count = rand.range(2, 5); type = 'spruce'; break;
+    case Biome.SWAMP: count = rand.range(0, 2); break;
     case Biome.PLAINS: count = rand.chance(0.4) ? 1 : 0; break;
     case Biome.MOUNTAINS: count = rand.chance(0.5) ? rand.range(1, 2) : 0; break;
     default: count = 0;
   }
+  count = Math.round(count * (0.4 + dens * 1.2));
+  const placed: Array<[number, number]> = [];
   for (let i = 0; i < count; i++) {
     const x = cx * 16 + rand.int(16);
     const z = cz * 16 + rand.int(16);
+    // Minimum trunk spacing so canopies don't fuse into a wall.
+    let tooClose = false;
+    for (const [px, pz] of placed) {
+      if ((px - x) * (px - x) + (pz - z) * (pz - z) < 4) { tooClose = true; break; }
+    }
+    if (tooClose) continue;
     const info = columnInfo(x, z);
     if (info.biome === Biome.OCEAN || info.biome === Biome.DESERT) continue;
-    if (info.height <= SEA_LEVEL || info.height > 140) continue;
+    if (info.height < SEA_LEVEL || info.height > 140) continue;
     // Skip trees inside villages so houses stay clear.
     const vil = villageForRegion(regionOf(x >> 4), regionOf(z >> 4));
     if (vil && (x - vil.x) * (x - vil.x) + (z - vil.z) * (z - vil.z) < vil.radius * vil.radius) continue;
-    trees.push({
-      x,
-      z,
-      y: info.height + 1,
-      height: rand.range(4, 6),
-      birch: centerInfo.biome === Biome.FOREST && rand.chance(0.3),
-    });
+    placed.push([x, z]);
+    let th: number;
+    if (type === 'jungle') th = rand.range(8, 14);
+    else if (type === 'spruce') th = rand.range(6, 10);
+    else th = rand.range(4, 6);
+    // Forests keep their birch mix; every other biome uses its signature tree.
+    const treeType: TreeType = centerInfo.biome === Biome.FOREST && rand.chance(0.3) ? 'birch' : type;
+    trees.push({ x, z, y: info.height + 1, height: th, type: treeType });
   }
   return trees;
 }
 
 function stampTree(data: Uint16Array, cx: number, cz: number, tree: TreePlan): void {
-  const logId = tree.birch ? B.BIRCH_LOG : B.OAK_LOG;
-  const leafId = tree.birch ? B.BIRCH_LEAVES : B.OAK_LEAVES;
+  const logId = TREE_LOG[tree.type];
+  const leafId = TREE_LEAF[tree.type];
   const topY = tree.y + tree.height - 1;
-  // Leaves: two 5x5 layers below top, two 3x3/cross layers on top.
+
+  // Trunk.
+  for (let i = 0; i < tree.height; i++) {
+    setIfInside(data, cx, cz, tree.x, tree.y + i, tree.z, logId, false);
+  }
+
+  if (tree.type === 'spruce') {
+    // Conical layered crown: shrinking square rings up the trunk with the
+    // topmost tiers narrowing to a single-leaf tip — a pointed spruce.
+    let r = 2;
+    for (let ly = tree.y + Math.max(2, tree.height - 6); ly <= topY + 1; ly++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (dx === 0 && dz === 0 && ly <= topY) continue;
+          if (r > 1 && Math.abs(dx) === r && Math.abs(dz) === r) continue; // trim corners
+          setIfInside(data, cx, cz, tree.x + dx, ly, tree.z + dz, leafId, true);
+        }
+      }
+      if (r > 0 && (ly - tree.y) % 2 === 1) r -= 1; // shrink every other tier
+    }
+    setIfInside(data, cx, cz, tree.x, topY + 2, tree.z, leafId, true); // tip
+    return;
+  }
+
+  if (tree.type === 'jungle') {
+    // Tall trunk, canopy concentrated in a big crown.
+    for (let ly = topY - 1; ly <= topY + 1; ly++) {
+      const r = ly >= topY + 1 ? 1 : 2;
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (dx === 0 && dz === 0 && ly <= topY) continue;
+          if (Math.abs(dx) === r && Math.abs(dz) === r && hash2D(seed, tree.x * 31 + dx + ly * 7, tree.z * 17 + dz) < 0.5) continue;
+          setIfInside(data, cx, cz, tree.x + dx, ly, tree.z + dz, leafId, true);
+        }
+      }
+    }
+    // Sparse leaf tufts down the upper trunk.
+    for (const off of [3, 5]) {
+      const ly = topY - off;
+      if (ly <= tree.y) continue;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        if (hash2D(seed, tree.x + dx * 13, tree.z + dz * 7 + ly) < 0.4) {
+          setIfInside(data, cx, cz, tree.x + dx, ly, tree.z + dz, leafId, true);
+        }
+      }
+    }
+    return;
+  }
+
+  // Broadleaf crown (oak / birch / swamp-oak / cherry). Cherry gets a bigger,
+  // rounder pink ball.
+  const rBase = tree.type === 'cherry' ? 3 : 2;
   for (let ly = topY - 2; ly <= topY + 1; ly++) {
-    const r = ly >= topY ? 1 : 2;
+    const r = ly >= topY ? (tree.type === 'cherry' ? 2 : 1) : rBase;
     for (let dx = -r; dx <= r; dx++) {
       for (let dz = -r; dz <= r; dz++) {
-        if (dx === 0 && dz === 0 && ly <= topY) continue; // trunk space
+        if (dx === 0 && dz === 0 && ly <= topY) continue;
         if (Math.abs(dx) === r && Math.abs(dz) === r) {
-          // Trim corners pseudo-randomly for organic shape.
           if (hash2D(seed, tree.x * 31 + dx + ly * 7, tree.z * 17 + dz) < 0.5) continue;
         }
         setIfInside(data, cx, cz, tree.x + dx, ly, tree.z + dz, leafId, true);
       }
     }
-  }
-  for (let i = 0; i < tree.height; i++) {
-    setIfInside(data, cx, cz, tree.x, tree.y + i, tree.z, logId, false);
   }
 }
 
@@ -1038,7 +1129,7 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
       heights[z * 16 + x] = info.height;
       biomes[z * 16 + x] = info.biome;
       const h = info.height;
-      const snow = h > 108;
+      const snow = h > 108 || info.biome === Biome.SNOWY;
 
       for (let y = 0; y <= h; y++) {
         let id: number;
@@ -1047,9 +1138,10 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
         else if (info.biome === Biome.DESERT) id = y >= h - 1 ? B.SAND : B.SANDSTONE;
         else if (info.biome === Biome.OCEAN) id = y === h ? (hash2D(seed, wx, wz) < 0.5 ? B.SAND : B.GRAVEL) : B.DIRT;
         else if (y === h) {
-          if (h <= SEA_LEVEL + 1) id = B.SAND; // beaches
+          if (h <= SEA_LEVEL + 1 && info.biome !== Biome.SWAMP) id = B.SAND; // beaches
           else if (snow) id = B.SNOW_GRASS;
           else if (info.biome === Biome.MOUNTAINS && h > 84) id = B.STONE;
+          else if (info.biome === Biome.SWAMP) id = B.SWAMP_GRASS;
           else id = B.GRASS;
         } else id = B.DIRT;
         data[blockIndex(x, y, z)] = packVoxel(id, 0, 0);
@@ -1057,6 +1149,10 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
       // Ocean / lake water fill.
       for (let y = h + 1; y <= SEA_LEVEL; y++) {
         data[blockIndex(x, y, z)] = packVoxel(B.WATER_SRC, 0, 0);
+      }
+      // Snowy biomes freeze the top water cell into an ice sheet.
+      if (info.biome === Biome.SNOWY && h < SEA_LEVEL) {
+        data[blockIndex(x, SEA_LEVEL, z)] = packVoxel(B.ICE, 0, 0);
       }
     }
   }
@@ -1143,17 +1239,31 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
       const groundIdx = blockIndex(x, h, z);
       const aboveIdx = blockIndex(x, h + 1, z);
       const ground = voxelId(data[groundIdx]);
-      if (voxelId(data[aboveIdx]) !== B.AIR) continue;
       const r = hash2D(deriveSeed(seed, 'deco'), wx, wz);
+      // Lily pads float on swamp water (in the air cell above the surface).
+      if (biome === Biome.SWAMP) {
+        const surfIdx = blockIndex(x, SEA_LEVEL, z);
+        const overIdx = blockIndex(x, SEA_LEVEL + 1, z);
+        if (voxelId(data[surfIdx]) === B.WATER_SRC && voxelId(data[overIdx]) === B.AIR && r < 0.12) {
+          data[overIdx] = packVoxel(B.LILY_PAD, 0, 0);
+        }
+      }
+      if (voxelId(data[aboveIdx]) !== B.AIR) continue;
       if (biome === Biome.DESERT && ground === B.SAND && r < 0.012) {
         const ch = 1 + Math.floor(r * 250) % 3;
         for (let i = 0; i < ch && h + 1 + i < CHUNK_HEIGHT; i++) {
           data[blockIndex(x, h + 1 + i, z)] = packVoxel(B.CACTUS, 0, 0);
         }
+      } else if (ground === B.SWAMP_GRASS) {
+        // Dense reeds, occasional marsh flower.
+        if (r < 0.32) data[aboveIdx] = packVoxel(B.TALL_GRASS, 0, 0);
+        else if (r < 0.34) data[aboveIdx] = packVoxel(B.FLOWER_YELLOW, 0, 0);
       } else if (ground === B.GRASS) {
-        if (r < 0.18) data[aboveIdx] = packVoxel(B.TALL_GRASS, 0, 0);
-        else if (r < 0.197) {
-          data[aboveIdx] = packVoxel(r < 0.189 ? B.FLOWER_YELLOW : B.FLOWER_RED, 0, 0);
+        // Jungle floor is thick with ferns; other grass biomes stay sparse.
+        const grassMax = biome === Biome.JUNGLE ? 0.4 : 0.18;
+        if (r < grassMax) data[aboveIdx] = packVoxel(B.TALL_GRASS, 0, 0);
+        else if (r < grassMax + 0.017) {
+          data[aboveIdx] = packVoxel(r < grassMax + 0.009 ? B.FLOWER_YELLOW : B.FLOWER_RED, 0, 0);
         }
       }
     }
