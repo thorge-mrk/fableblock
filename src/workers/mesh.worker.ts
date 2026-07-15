@@ -409,7 +409,8 @@ function emitFluid(out: GeoBuilder, x: number, y: number, z: number, id: number,
 
   const above = voxelId(vox(x, y + 1, z));
   const height = sameFluid(above) ? 1 : fluidHeight(id);
-  // Wave flag rides in the shade byte (water shader): 255 = surface vertex.
+  // Shade byte is a normalized brightness multiplier in the terrain shader
+  // (no geometric wave); FLUID_FACE_SHADE just darkens by face direction.
   const surfShade = (s: number) => Math.round(255 * s);
 
   // Top face
@@ -431,15 +432,29 @@ function emitFluid(out: GeoBuilder, x: number, y: number, z: number, id: number,
       false, false,
     );
   }
-  // Side faces (full height up to surface level)
+  // Side faces. Against air / a different fluid the face runs full height
+  // (cell bottom -> surface). Against the SAME fluid at a LOWER surface we
+  // bridge only the step between the two surfaces, so a flowing staircase
+  // shows no gap; equal or taller neighbours emit nothing (no z-fight).
   const sides = [
     [1, 0, 0, 0], [-1, 0, 1, 1], [0, 1, 4, 4], [0, -1, 5, 5],
   ];
   for (const [sx, sz, dirIdx] of sides) {
     const nid = voxelId(vox(x + sx, y, z + sz));
-    if (sameFluid(nid) || blockDef(nid).opaque) continue;
+    if (blockDef(nid).opaque) continue;
+
+    let bottom = 0; // cell-local Y where this side face starts
+    if (sameFluid(nid)) {
+      const nAbove = voxelId(vox(x + sx, y + 1, z + sz));
+      const nHeight = sameFluid(nAbove) ? 1 : fluidHeight(nid);
+      if (nHeight >= height) continue; // neighbour as tall/taller -> no gap
+      bottom = nHeight;
+    }
+    const faceH = height - bottom;
+    if (faceH <= 0) continue;
+
     const s = surfShade(FLUID_FACE_SHADE[dirIdx]);
-    // Quad: u along the horizontal tangent, v along +Y up to `height`.
+    // Quad: u along the horizontal tangent, v along +Y across `faceH`.
     let bx: number;
     let bz: number;
     let dux: number;
@@ -455,7 +470,7 @@ function emitFluid(out: GeoBuilder, x: number, y: number, z: number, id: number,
       bx = x; bz = z; dux = 1; duz = 0; reverse = true;
     }
     out.quad(
-      bx, y, bz, dux, 0, duz, 0, 1, 0, 1, height,
+      bx, y + bottom, bz, dux, 0, duz, 0, 1, 0, 1, faceH,
       blockDef(id).tiles[dirIdx], sun, bl,
       [Math.round(s * 0.85), Math.round(s * 0.85), s, s],
       reverse, false,
