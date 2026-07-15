@@ -7,7 +7,7 @@
  * and continue with the remainder. Because impact time is computed
  * analytically, fast entities can never tunnel through thin walls.
  */
-import { blockDef } from './blocks';
+import { blockDef, FULL_BOX, BlockBox } from './blocks';
 
 export interface AABB {
   x: number; // min corner
@@ -36,49 +36,61 @@ export interface MoveResult {
 const EPS = 1e-7;
 const SKIN = 0.0005;
 
-function isSolidAt(world: VoxelSampler, x: number, y: number, z: number): boolean {
-  if (y < 0) return true;
-  if (y >= 256) return false;
-  return blockDef(world.getBlockId(x, y, z)).solid;
+const FULL_ONLY: readonly BlockBox[] = [FULL_BOX];
+
+/**
+ * Collision boxes for a cell in block-local 0..1 coords, or null when the cell
+ * is not solid. Ordinary solids collide as the unit cube; RenderType.BOX solids
+ * (closed doors, closed trapdoors, piston bodies) collide as their partial
+ * cuboids so you can stand in a doorway / under a trapdoor. Reduces exactly to
+ * the old unit-cube behavior for every normal block.
+ */
+function cellBoxes(world: VoxelSampler, x: number, y: number, z: number): readonly BlockBox[] | null {
+  if (y < 0) return FULL_ONLY;
+  if (y >= 256) return null;
+  const def = blockDef(world.getBlockId(x, y, z));
+  if (!def.solid) return null;
+  return def.boxes && def.boxes.length > 0 ? def.boxes : FULL_ONLY;
 }
 
 /**
- * Sweep a moving AABB against a single static unit cube at (bx,by,bz).
- * Returns entry time in [0,1] and the hit axis, or null when no hit.
+ * Sweep a moving AABB against one static box spanning [bx0,by0,bz0]..[bx1,by1,bz1]
+ * (world coords). Returns entry time in [0,1] and the hit axis, or null.
  */
 function sweepBox(
   px: number, py: number, pz: number,
   w: number, h: number, d: number,
   vx: number, vy: number, vz: number,
-  bx: number, by: number, bz: number,
+  bx0: number, by0: number, bz0: number,
+  bx1: number, by1: number, bz1: number,
 ): { t: number; axis: 0 | 1 | 2; sign: number } | null {
   // Entry / exit distances per axis.
   let xEntry: number;
   let xExit: number;
   if (vx > 0) {
-    xEntry = bx - (px + w);
-    xExit = bx + 1 - px;
+    xEntry = bx0 - (px + w);
+    xExit = bx1 - px;
   } else {
-    xEntry = bx + 1 - px;
-    xExit = bx - (px + w);
+    xEntry = bx1 - px;
+    xExit = bx0 - (px + w);
   }
   let yEntry: number;
   let yExit: number;
   if (vy > 0) {
-    yEntry = by - (py + h);
-    yExit = by + 1 - py;
+    yEntry = by0 - (py + h);
+    yExit = by1 - py;
   } else {
-    yEntry = by + 1 - py;
-    yExit = by - (py + h);
+    yEntry = by1 - py;
+    yExit = by0 - (py + h);
   }
   let zEntry: number;
   let zExit: number;
   if (vz > 0) {
-    zEntry = bz - (pz + d);
-    zExit = bz + 1 - pz;
+    zEntry = bz0 - (pz + d);
+    zExit = bz1 - pz;
   } else {
-    zEntry = bz + 1 - pz;
-    zExit = bz - (pz + d);
+    zEntry = bz1 - pz;
+    zExit = bz0 - (pz + d);
   }
 
   const txEntry = vx === 0 ? -Infinity : xEntry / vx;
@@ -89,9 +101,9 @@ function sweepBox(
   const tzExit = vz === 0 ? Infinity : zExit / vz;
 
   // Overlap check on axes with no velocity (otherwise -Infinity entry wins incorrectly).
-  if (vx === 0 && (px + w <= bx + EPS || px >= bx + 1 - EPS)) return null;
-  if (vy === 0 && (py + h <= by + EPS || py >= by + 1 - EPS)) return null;
-  if (vz === 0 && (pz + d <= bz + EPS || pz >= bz + 1 - EPS)) return null;
+  if (vx === 0 && (px + w <= bx0 + EPS || px >= bx1 - EPS)) return null;
+  if (vy === 0 && (py + h <= by0 + EPS || py >= by1 - EPS)) return null;
+  if (vz === 0 && (pz + d <= bz0 + EPS || pz >= bz1 - EPS)) return null;
 
   const entry = Math.max(txEntry, tyEntry, tzEntry);
   const exit = Math.min(txExit, tyExit, tzExit);
@@ -148,9 +160,15 @@ export function collideAndSlide(
     for (let by = minY; by <= maxY; by++) {
       for (let bz = minZ; bz <= maxZ; bz++) {
         for (let bx = minX; bx <= maxX; bx++) {
-          if (!isSolidAt(world, bx, by, bz)) continue;
-          const hit = sweepBox(x, y, z, w, h, d, vx, vy, vz, bx, by, bz);
-          if (hit && (!best || hit.t < best.t)) best = hit;
+          const boxes = cellBoxes(world, bx, by, bz);
+          if (!boxes) continue;
+          for (const b of boxes) {
+            const hit = sweepBox(
+              x, y, z, w, h, d, vx, vy, vz,
+              bx + b[0], by + b[1], bz + b[2], bx + b[3], by + b[4], bz + b[5],
+            );
+            if (hit && (!best || hit.t < best.t)) best = hit;
+          }
         }
       }
     }
@@ -203,7 +221,17 @@ export function boxIntersectsSolid(
   for (let by = minY; by <= maxY; by++) {
     for (let bz = minZ; bz <= maxZ; bz++) {
       for (let bx = minX; bx <= maxX; bx++) {
-        if (isSolidAt(world, bx, by, bz)) return true;
+        const boxes = cellBoxes(world, bx, by, bz);
+        if (!boxes) continue;
+        for (const b of boxes) {
+          if (
+            x < bx + b[3] - EPS && x + w > bx + b[0] + EPS &&
+            y < by + b[4] - EPS && y + h > by + b[1] + EPS &&
+            z < bz + b[5] - EPS && z + d > bz + b[2] + EPS
+          ) {
+            return true;
+          }
+        }
       }
     }
   }

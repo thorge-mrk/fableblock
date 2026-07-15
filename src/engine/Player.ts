@@ -296,25 +296,41 @@ export class PlayerController {
       for (let bz = minZ; bz <= maxZ; bz++) {
         for (let bx = minX; bx <= maxX; bx++) {
           const id = world.getBlockId(bx, by, bz);
+          if (!isWater(id) && !isLava(id)) continue;
+          // Count the cell only if the body reaches into the fluid volume. A
+          // surface cell's top sits at fluidHeight (~0.875), so feet resting in
+          // the 0.875..1.0 slop must NOT read as submerged — that flip-flop
+          // caused surface jitter and cancelled fall damage above the water.
+          const above = world.getBlockId(bx, by + 1, bz);
+          const top = by + (isFluid(above) ? 1 : fluidHeight(id));
+          if (this.y >= top) continue;
           if (isWater(id)) this.inWater = true;
-          else if (isLava(id)) this.inLava = true;
+          else this.inLava = true;
         }
       }
     }
-    const eyeId = world.getBlockId(
-      Math.floor(this.x),
-      Math.floor(this.y + this.eyeSmooth),
-      Math.floor(this.z),
-    );
-    this.headInFluid = isFluid(eyeId);
+    // Head-in-fluid gates on the actual surface height too, so the underwater
+    // overlay / breath doesn't switch on while the eyes just breach the surface.
+    const eyeY = this.y + this.eyeSmooth;
+    const ay = Math.floor(eyeY);
+    const eyeId = world.getBlockId(Math.floor(this.x), ay, Math.floor(this.z));
+    const eyeAbove = world.getBlockId(Math.floor(this.x), ay + 1, Math.floor(this.z));
+    this.headInFluid = isFluid(eyeId) && (isFluid(eyeAbove) || eyeY - ay < fluidHeight(eyeId));
   }
 
   /** Flowing fluids accelerate entities toward their downhill gradient. */
   private applyFluidPush(world: World, dt: number): void {
     const bx = Math.floor(this.x);
-    const by = Math.floor(this.y + 0.3);
     const bz = Math.floor(this.z);
-    const id = world.getBlockId(bx, by, bz);
+    // Sample the cell the body actually sits in. A boat/surface swimmer floats
+    // near the top of its cell, so the old fixed feet+0.3 offset overshot into
+    // the AIR cell above the surface and no river current was ever felt.
+    let by = Math.floor(this.y);
+    let id = world.getBlockId(bx, by, bz);
+    if (!isFluid(id)) {
+      by = Math.floor(this.y + 0.3);
+      id = world.getBlockId(bx, by, bz);
+    }
     if (!isFluid(id)) return;
     const lv = fluidLevel(id);
     let px = 0;
@@ -345,8 +361,9 @@ export class PlayerController {
       this.vx += px * f;
       this.vz += pz * f;
     }
-    // Falling fluid drags downward.
-    if (lv >= 8 && isFluid(world.getBlockId(bx, by - 1, bz))) {
+    // Inside a descending column (fluid directly above) drags you downward —
+    // detect it by looking UP, since falling water is level 1-7, never a source.
+    if (isFluid(world.getBlockId(bx, by + 1, bz))) {
       this.vy -= FLUID_PUSH * 0.4 * dt;
     }
   }

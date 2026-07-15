@@ -65,6 +65,21 @@ describe('swept AABB engine (Module 4)', () => {
     expect(res.y).toBeCloseTo(11, 1);
   });
 
+  it('a closed door only blocks its thin panel, not the whole cell', () => {
+    // Closed door panel at cell (5, 10, 0) occupies z in [0, 0.19].
+    const blocks = new Map<string, number>();
+    blocks.set('5,10,0', B.DOOR_BOTTOM);
+    blocks.set('5,11,0', B.DOOR_TOP);
+    const w = makeSampler(blocks);
+    // Standing in the open part of the doorway cell (z past the panel): free.
+    expect(boxIntersectsSolid(w, 5.2, 10, 0.35, 0.6, 1.8, 0.6)).toBe(false);
+    // Overlapping the panel plane: blocked.
+    expect(boxIntersectsSolid(w, 5.2, 10, 0.0, 0.6, 1.8, 0.6)).toBe(true);
+    // A full stone block still blocks the whole cell (regression guard).
+    blocks.set('5,10,0', B.STONE);
+    expect(boxIntersectsSolid(w, 5.2, 10, 0.35, 0.6, 1.8, 0.6)).toBe(true);
+  });
+
   it('sneak guard clamps movement at a ledge edge', () => {
     // Platform only under x < 5.
     const sampler: VoxelSampler = {
