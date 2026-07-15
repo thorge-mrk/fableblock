@@ -183,6 +183,26 @@ P3-6 Rüstung, P3-7 Wetter, P3-8 XP+Verzauberung).
 - **Texturen/Titel**: Cobblestone mit 3D-bevelten Steinen + Mörtelfugen;
   Titel-Panorama in nativer Auflösung, stufenlos gescrollt (kein 4px-Ruckeln).
 
+**V3-Pass (Biome, Wasser, Wolken, Hand — geplant per /agent-Design-Workflow):**
+- **Wasser MC-artig**: nahtlos kachelndes Wellen-Tile + Shader mit zwei
+  Fließrichtungen und Glanzwinkel-Aufhellung (Fresnel aus dem Screen-Space-
+  Normal, keine neue Geometrie); glaubhafte, kappte Transparenz.
+- **3D-Blockwolken**: statt flacher Ebene ein Feld extrudierter Wolken-Zellen
+  (geteilte Flächen gecullt → Wolken haben Höhe/Volumen, man sieht die Seiten),
+  periodisches Muster → nahtloses Driften, Fern-Fog schluckt den Rand (keine Kante).
+- **4 neue Biome**: Sumpf (oliv-graue Flats, Schilf, Seerosen), Kirschblüte
+  (pinkes Blätterdach), Dschungel (hohe dichte Bäume, Farn-Boden), Schneetaiga
+  (Schneeoberfläche, Eis auf gefrorenem Wasser, konische Fichten) — über
+  Spiegel-Temperatur/Feuchte-Gates, alte Biome bleiben erreichbar.
+- **13 neue Blöcke**: Cherry/Jungle/Spruce Log+Leaves+Planks, Eis, Schneeblock,
+  Sumpfgras, Seerose — 16 handgemalte 16x16-Tiles, Rezepte, Creative-Palette.
+- **Bessere Generierung**: Bäume verzweigen die Kronenform je Typ (Fichte
+  konisch, Dschungel hohe Krone, Kirsche runder Ball) und klumpen über ein
+  Dichte-Rauschfeld zu Hainen (mit Mindestabstand); Detail-Oktave lockert die
+  bisher bretteben Ebenen auf.
+- **Erste-Person-Arm**: der Spieler-Arm (Teal-Ärmel + Skin-Hand) hält Items
+  von unten rechts; Werkzeug-Sprite zentrierter/angewinkelt wie beim Original.
+
 ## Phase 1 — Mobile-UX
 
 ### P1-1 · Cursor-Stack folgt dem Finger (S)
