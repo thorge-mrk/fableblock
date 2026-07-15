@@ -40,6 +40,7 @@ varying float vTile;
 varying float vShade;
 varying vec2 vLight;
 varying float vDist;
+varying vec3 vViewPos;
 
 void main() {
   vUv = aUv;
@@ -48,6 +49,7 @@ void main() {
   vLight = aLight;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = -mv.z;
+  vViewPos = mv.xyz;
   gl_Position = projectionMatrix * mv;
 }
 `;
@@ -68,6 +70,7 @@ varying float vTile;
 varying float vShade;
 varying vec2 vLight;
 varying float vDist;
+varying vec3 vViewPos;
 
 const float GRID = ${ATLAS_TILES.toFixed(1)};
 const float TILEPX = ${TILE_PX.toFixed(1)};
@@ -75,22 +78,37 @@ const float CELLPX = ${CELL_PX.toFixed(1)};
 const float GUT = ${TILE_GUTTER.toFixed(1)};
 const float ATLASPX = ${ATLAS_SIZE.toFixed(1)};
 const float HALF_TEXEL = 0.5; // px, clamps inside the tile interior
+${water
+    ? `
+// Sample the water tile at a scrolled UV. Flow scale is 1.0 (integer) so
+// fract() stays continuous across cell boundaries given a seamless tile.
+vec3 sampleWater(vec2 cell, vec2 uv, vec2 flow) {
+  vec2 inTile = fract(uv + flow);
+  inTile.y = 1.0 - inTile.y;
+  inTile = clamp(inTile, vec2(HALF_TEXEL / TILEPX), vec2(1.0 - HALF_TEXEL / TILEPX));
+  vec2 px = cell * CELLPX + vec2(GUT) + inTile * TILEPX;
+  vec2 auv = px / ATLASPX;
+  auv.y = 1.0 - auv.y;
+  return texture2D(uAtlas, auv).rgb;
+}`
+    : ''}
 
 void main() {
   float tile = floor(vTile + 0.5);
   vec2 cell = vec2(mod(tile, GRID), floor(tile / GRID));
-  ${water
-    ? 'vec2 inTile = fract(vUv + vec2(uTime * 0.02, uTime * 0.045));'
-    : 'vec2 inTile = fract(vUv);'}
+${water
+    ? `  // Two crossing directional-flow layers → gentle roiling motion.
+  vec3 w1 = sampleWater(cell, vUv, vec2( uTime * 0.026,  uTime * 0.017));
+  vec3 w2 = sampleWater(cell, vUv, vec2(-uTime * 0.021,  uTime * 0.012));
+  vec3 base = mix(w1, w2, 0.5);`
+    : `  vec2 inTile = fract(vUv);
   inTile.y = 1.0 - inTile.y;
   inTile = clamp(inTile, vec2(HALF_TEXEL / TILEPX), vec2(1.0 - HALF_TEXEL / TILEPX));
-  // Resolve to absolute atlas pixels inside the gutter-padded cell.
   vec2 px = cell * CELLPX + vec2(GUT) + inTile * TILEPX;
   vec2 atlasUv = px / ATLASPX;
-  // Atlas rows grow downward.
   atlasUv.y = 1.0 - atlasUv.y;
   vec4 tex = texture2D(uAtlas, atlasUv);
-  ${water ? '' : 'if (tex.a < 0.5) discard;'}
+  if (tex.a < 0.5) discard;`}
 
   float sun = (vLight.x / 15.0) * uSunLevel;
   float block = vLight.y / 15.0;
@@ -99,21 +117,29 @@ void main() {
   // Blocklight carries a warm tint; sunlight follows the sky tint.
   vec3 lightColor = mix(uSkyTint, vec3(1.0, 0.85, 0.6), clamp(block - sun, 0.0, 1.0) * 0.55);
 
-  vec3 col = tex.rgb * vShade * brightness * lightColor;
+  vec3 col = ${water ? 'base' : 'tex.rgb'} * vShade * brightness * lightColor;
   float fogF = smoothstep(uFogNear, uFogFar, vDist);
+${water
+    ? `  // Glancing-angle brightening (fresnel) from the screen-space face normal —
+  // reconstructed with derivatives so no normal attribute is needed.
+  vec3 V = normalize(-vViewPos);
+  vec3 g = cross(dFdx(vViewPos), dFdy(vViewPos));
+  vec3 Nf = dot(g, g) > 1e-10 ? normalize(g) : V;
+  if (dot(Nf, V) < 0.0) Nf = -Nf; // DoubleSide: always face the eye
+  float fres = pow(1.0 - clamp(dot(Nf, V), 0.0, 1.0), 5.0);
+  float day = clamp(uSunLevel, 0.1, 1.0);
+  vec3 sky = uFogColor * 1.08; // cheap reflected-horizon tone
+  col = mix(col, sky, fres * 0.45 * day);
+  float crest = smoothstep(0.60, 0.80, dot(base, vec3(0.299, 0.587, 0.114)));
+  col += sky * crest * 0.10 * day;
   col = mix(col, uFogColor, fogF);
+  col = pow(col, vec3(1.0 / uGamma));
+  float a = clamp(0.60 + fres * 0.34 + smoothstep(8.0, 60.0, vDist) * 0.10, 0.0, 0.93);
+  gl_FragColor = vec4(col, a);`
+    : `  col = mix(col, uFogColor, fogF);
   // User brightness (gamma) — applied after fog so night lift is uniform.
   col = pow(col, vec3(1.0 / uGamma));
-  ${water
-    ? `// Two crossing wave bands + a sparkle ripple (P5-8 water pass).
-  float shimmer = 0.9
-    + 0.07 * sin(uTime * 2.2 + vUv.x * 6.2831 + vUv.y * 4.0)
-    + 0.05 * sin(uTime * 3.6 - vUv.y * 9.42 + vUv.x * 2.6);
-  float sparkle = smoothstep(0.96, 1.0, sin(uTime * 5.0 + vUv.x * 21.0 + vUv.y * 13.0)) * 0.35;
-  // Glancing far water reads denser/more mirror-like than water at your feet.
-  float depthF = smoothstep(6.0, 55.0, vDist);
-  gl_FragColor = vec4(col * shimmer + vec3(sparkle), mix(0.58, 0.85, depthF));`
-    : 'gl_FragColor = vec4(col, 1.0);'}
+  gl_FragColor = vec4(col, 1.0);`}
 }
 `;
 }
