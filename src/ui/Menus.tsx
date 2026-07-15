@@ -15,21 +15,31 @@ const BTN =
   'active:translate-y-px transition-colors select-none';
 
 /**
- * Animated voxel panorama behind the title (P5-10): low-res 2D canvas with
- * a dusk gradient, sun, drifting pixel clouds and three parallax layers of
- * blocky hills — scaled up with pixelated rendering for the retro look.
+ * Animated voxel panorama behind the title (P5-10, smoothed for V2): rendered
+ * at native device resolution and scrolled with continuous float offsets so the
+ * parallax hills glide instead of jumping in block steps. Chunky voxel columns
+ * are kept as deliberately sized rectangles rather than an upscaled tiny canvas.
  */
 function TitlePanorama(): React.ReactElement {
   const ref = React.useRef<HTMLCanvasElement | null>(null);
   React.useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
-    const W = 320;
-    const H = 180;
-    canvas.width = W;
-    canvas.height = H;
     const g = canvas.getContext('2d')!;
-    // Deterministic blocky hill heightfields per layer.
+    let W = 0;
+    let H = 0;
+    let dpr = 1;
+    const resize = () => {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      W = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+      H = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+      canvas.width = W;
+      canvas.height = H;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Deterministic hill heightfields in [0..1] fractions of screen height.
     const layer = (seed: number, amp: number, base: number): number[] => {
       let s = seed;
       const rnd = () => {
@@ -38,24 +48,26 @@ function TitlePanorama(): React.ReactElement {
       };
       const hs: number[] = [];
       let h = base;
-      for (let i = 0; i < 96; i++) {
+      for (let i = 0; i < 128; i++) {
         h += (rnd() - 0.5) * amp;
         h = Math.max(base - amp * 1.6, Math.min(base + amp * 1.6, h));
-        hs.push(Math.round(h / 4) * 4); // quantized voxel steps
+        hs.push(h);
       }
       return hs;
     };
+    // base/amp as fractions of height; speed in fractions of width per second.
     const hills = [
-      { hs: layer(11, 8, 46), color: '#14343c', speed: 3 },
-      { hs: layer(23, 10, 60), color: '#1b4a44', speed: 7 },
-      { hs: layer(47, 12, 76), color: '#215a4a', speed: 14 },
+      { hs: layer(11, 0.05, 0.26), color: '#14343c', speed: 0.006, vox: 22 },
+      { hs: layer(23, 0.06, 0.34), color: '#1b4a44', speed: 0.014, vox: 26 },
+      { hs: layer(47, 0.07, 0.44), color: '#215a4a', speed: 0.03, vox: 30 },
     ];
     const clouds = Array.from({ length: 6 }, (_, i) => ({
-      x: (i * 61) % W,
-      y: 14 + ((i * 29) % 46),
-      w: 26 + ((i * 13) % 22),
-      speed: 2.5 + (i % 3),
+      x: (i * 0.19) % 1,
+      y: 0.08 + ((i * 0.11) % 0.34),
+      w: 0.08 + ((i * 0.017) % 0.06),
+      speed: 0.008 + (i % 3) * 0.004,
     }));
+
     let raf = 0;
     const draw = (nowMs: number) => {
       const t = nowMs / 1000;
@@ -66,45 +78,51 @@ function TitlePanorama(): React.ReactElement {
       sky.addColorStop(1, '#c26a3a');
       g.fillStyle = sky;
       g.fillRect(0, 0, W, H);
-      // Low sun with a soft glow.
+      // Low sun with a soft glow; bobs gently.
       const sunX = W * 0.84;
-      const sunY = H * 0.2 + Math.sin(t * 0.1) * 3;
-      const glow = g.createRadialGradient(sunX, sunY, 2, sunX, sunY, 34);
+      const sunY = H * 0.2 + Math.sin(t * 0.1) * 3 * dpr;
+      const sr = 40 * dpr;
+      const glow = g.createRadialGradient(sunX, sunY, 2, sunX, sunY, sr);
       glow.addColorStop(0, 'rgba(255,214,140,0.9)');
       glow.addColorStop(1, 'rgba(255,150,60,0)');
       g.fillStyle = glow;
-      g.fillRect(sunX - 36, sunY - 36, 72, 72);
+      g.fillRect(sunX - sr, sunY - sr, sr * 2, sr * 2);
       g.fillStyle = '#ffe9b0';
-      g.fillRect(sunX - 7, sunY - 7, 14, 14);
-      // Pixel clouds.
+      const sd = 9 * dpr;
+      g.fillRect(sunX - sd, sunY - sd, sd * 2, sd * 2);
+      // Drifting soft clouds (continuous wrap → no stepping).
       g.fillStyle = 'rgba(226,238,246,0.8)';
       for (const c of clouds) {
-        const cx = (c.x - t * c.speed) % (W + c.w);
-        const x = cx < -c.w ? cx + W + c.w : cx;
-        g.fillRect(Math.round(x), c.y, c.w, 5);
-        g.fillRect(Math.round(x) + 4, c.y - 4, c.w - 10, 4);
+        const cw = c.w * W;
+        let x = ((c.x - t * c.speed) % 1) * (W + cw);
+        if (x < -cw) x += W + cw;
+        const y = c.y * H;
+        g.fillRect(x, y, cw, 6 * dpr);
+        g.fillRect(x + 5 * dpr, y - 5 * dpr, cw - 12 * dpr, 5 * dpr);
       }
-      // Parallax voxel hills, back to front.
-      for (const { hs, color, speed } of hills) {
+      // Parallax voxel hills, back to front — continuous scroll, sampled per
+      // voxel column so motion is smooth but the silhouette stays blocky.
+      for (const { hs, color, speed, vox } of hills) {
         g.fillStyle = color;
-        const off = Math.floor(t * speed);
-        for (let x = 0; x < W; x += 4) {
-          const h = hs[(((x + off) >> 2) + 960) % hs.length];
-          g.fillRect(x, H - h, 4, h);
+        const v = vox * dpr;
+        const scroll = t * speed * W;
+        const frac = scroll % v;
+        const startCol = Math.floor(scroll / v);
+        for (let x = -v; x < W + v; x += v) {
+          const col = ((Math.floor(x / v) + startCol) % hs.length + hs.length) % hs.length;
+          const h = hs[col] * H;
+          g.fillRect(x - frac, H - h, v + 1, h);
         }
       }
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+    };
   }, []);
-  return (
-    <canvas
-      ref={ref}
-      className="absolute inset-0 w-full h-full"
-      style={{ imageRendering: 'pixelated' }}
-    />
-  );
+  return <canvas ref={ref} className="absolute inset-0 w-full h-full" />;
 }
 
 export function TitleScreen(): React.ReactElement {

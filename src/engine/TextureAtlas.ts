@@ -231,25 +231,76 @@ function plankPainter(p: TilePainter): void {
 
 function cobblePainter(mossy: boolean): Painter {
   return (p) => {
-    p.cellNoise(STONE_GRAY, 0.35, 4);
-    // Cobble lumps with dark mortar outlines (3x2 layout).
-    const mortar: RGB = [70, 70, 70];
-    for (let i = 0; i < 6; i++) {
-      const cx = (i % 3) * 5 + 2 + Math.floor(p.rand() * 2);
-      const cy = Math.floor(i / 3) * 7 + 3 + Math.floor(p.rand() * 2);
-      const r = 2 + p.rand();
-      for (let y = 0; y < N; y++) {
-        for (let x = 0; x < N; x++) {
-          const d = Math.hypot(x - cx, y - cy);
-          if (d > r - 0.6 && d < r + 0.4) p.px(x, y, mortar[0], mortar[1], mortar[2]);
+    // Deep mortar base so the gaps between stones read as recessed shadow.
+    const mortar: RGB = mossy ? [50, 54, 44] : [54, 55, 60];
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const f = 1 + (p.rand() - 0.5) * 0.3;
+        p.px(x, y, mortar[0] * f, mortar[1] * f, mortar[2] * f);
+      }
+    }
+    // Irregular rounded cobbles on a jittered, row-staggered grid. Each stone
+    // is an ellipse with its own gray tone; pixels claim the nearest stone
+    // (elliptical Voronoi) so the untouched space between them stays mortar.
+    type Lump = { cx: number; cy: number; rx: number; ry: number; tone: number };
+    const lumps: Lump[] = [];
+    const cols = 3;
+    const rows = 3;
+    for (let gy = 0; gy < rows; gy++) {
+      for (let gx = 0; gx < cols; gx++) {
+        const cw = N / cols;
+        const ch = N / rows;
+        const cx = (gx + (gy % 2 ? 0.5 : 0)) * cw + cw / 2 + (p.rand() - 0.5) * 2.2;
+        const cy = gy * ch + ch / 2 + (p.rand() - 0.5) * 1.8;
+        lumps.push({
+          cx,
+          cy,
+          rx: cw / 2 + 0.3 + p.rand() * 1.1,
+          ry: ch / 2 + 0.1 + p.rand() * 0.9,
+          tone: 0.78 + p.rand() * 0.5,
+        });
+      }
+    }
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        let best = -1;
+        let bd = 1e9;
+        for (let i = 0; i < lumps.length; i++) {
+          const L = lumps[i];
+          const nx = (x + 0.5 - L.cx) / L.rx;
+          const ny = (y + 0.5 - L.cy) / L.ry;
+          const d = nx * nx + ny * ny;
+          if (d < bd) {
+            bd = d;
+            best = i;
+          }
         }
+        if (bd > 1.0 || best < 0) continue; // outside every stone → mortar gap
+        const L = lumps[best];
+        const nx = (x + 0.5 - L.cx) / L.rx;
+        const ny = (y + 0.5 - L.cy) / L.ry;
+        const rim = Math.sqrt(bd);
+        // Light from the top-left: brighter that way, dark shaded rim.
+        const lit = 1 - (nx + ny) * 0.16;
+        const edge = rim > 0.8 ? 0.66 : rim > 0.6 ? 0.86 : 1;
+        const grain = 1 + (p.rand() - 0.5) * 0.14;
+        const g = STONE_GRAY[1] * L.tone * lit * edge * grain;
+        p.px(x, y, g * 0.98, g, g * 1.03); // faint cool cast
       }
     }
     if (mossy) {
-      for (let i = 0; i < 22; i++) {
-        const x = Math.floor(p.rand() * N);
-        const y = Math.floor(p.rand() * N);
-        p.px(x, y, 80, 120, 50);
+      // Moss pools in the crevices and creeps up the lower stones.
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          const bias = (y / N) * 0.5; // greener toward the bottom
+          if (p.rand() < 0.12 + bias) {
+            const f = 0.65 + p.rand() * 0.55;
+            p.px(x, y, 44 * f, 92 * f, 40 * f);
+          }
+        }
+      }
+      for (let i = 0; i < 8; i++) {
+        p.px(Math.floor(p.rand() * N), Math.floor(p.rand() * N), 108, 150, 66);
       }
     }
   };
