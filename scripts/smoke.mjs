@@ -119,6 +119,25 @@ try {
   } else {
     await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
     await page.mouse.down();
+    // The dragged ghost must sit directly under the pointer. Regression guard:
+    // a backdrop-filter ancestor used to make the position:fixed ghost anchor to
+    // the panel, offsetting the icon by the panel's origin (~hundreds of px).
+    const probeX = fromBox.x + 60;
+    const probeY = fromBox.y + 50;
+    await page.mouse.move(probeX, probeY, { steps: 3 });
+    const ghost = await page.evaluate(() => {
+      const img = document.querySelector('.z-\\[100\\] img');
+      if (!img) return null;
+      const r = img.getBoundingClientRect();
+      return { cx: r.x + r.width / 2, cy: r.y + r.height / 2 };
+    });
+    if (!ghost) {
+      fail('drag ghost not found while dragging');
+    } else if (Math.hypot(ghost.cx - probeX, ghost.cy - probeY) > 8) {
+      fail(`drag ghost offset from pointer: dx=${(ghost.cx - probeX).toFixed(0)} dy=${(ghost.cy - probeY).toFixed(0)}`);
+    } else {
+      console.log('✓ drag ghost tracks the pointer (centered)');
+    }
     await page.mouse.move(toBox.x + toBox.width / 2, toBox.y + toBox.height / 2, { steps: 6 });
     await page.mouse.up();
     await page.waitForTimeout(250);

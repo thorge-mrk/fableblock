@@ -11,6 +11,7 @@
  * holding a stack collects all matching items onto the cursor.
  */
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { ItemStack, itemDef } from '../core/items';
 import { bridge } from '../state/bridge';
 import { gameStore } from '../state/store';
@@ -216,7 +217,11 @@ export function CursorStack({ stack }: { stack: ItemStack | null }): React.React
   }, [dragging]);
 
   if (!stack) return null;
-  return (
+  // Portal to <body>: the inventory panel uses backdrop-filter, which makes a
+  // position:fixed child anchor to the PANEL instead of the viewport — that was
+  // the ~constant offset that pushed the dragged icon off the pointer. Rendered
+  // on body, `fixed` resolves to the viewport so the icon sits under the finger.
+  return createPortal(
     <div
       ref={boxRef}
       className="fixed left-0 top-0 pointer-events-none z-[100]"
@@ -236,6 +241,7 @@ export function CursorStack({ stack }: { stack: ItemStack | null }): React.React
           {stack.count}
         </span>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -14,18 +14,24 @@ import { itemDef, CREATIVE_ITEMS } from '../core/items';
 function Panel({ title, children }: { title: string; children: React.ReactNode }): React.ReactElement {
   return (
     <div
-      className="absolute inset-0 flex items-center justify-center bg-black/55 pointer-events-auto"
+      className="absolute inset-0 flex items-start sm:items-center justify-center overflow-y-auto bg-black/55 pointer-events-auto py-5"
       style={{
-        touchAction: 'none',
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
+        // pan-y lets a finger scroll the dialog on short phone screens; the
+        // slots inside opt out (touch-action: none) so drags on them still work.
+        touchAction: 'pan-y',
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehavior: 'contain',
+        paddingTop: 'max(1.25rem, env(safe-area-inset-top))',
+        paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))',
       }}
-      onPointerDown={(e) => {
+      // Close on a genuine tap of the backdrop — onClick never fires from a
+      // scroll drag, so scrolling the dialog no longer dismisses it.
+      onClick={(e) => {
         if (e.target === e.currentTarget) bridge().closeScreen();
       }}
     >
       <div
-        className="bg-vc-panel/90 border border-vc-accent/40 p-4 rounded-xl shadow-2xl max-h-[92vh] overflow-y-auto"
+        className="bg-vc-panel/90 border border-vc-accent/40 p-4 rounded-xl shadow-2xl my-auto"
         style={{ backdropFilter: 'blur(6px)', boxShadow: '0 0 0 1px #00000066, 0 18px 50px #000000aa' }}
       >
         <div className="flex items-center justify-between mb-2">
@@ -108,7 +114,85 @@ function CraftArea({ size }: { size: 2 | 3 }): React.ReactElement {
   );
 }
 
-const ARMOR_LABELS = ['⛑', '🛡', '👖', '🥾'];
+/**
+ * Empty-armor-slot ghosts: hand-pixelled helmet / chestplate / leggings / boots
+ * silhouettes (own designs, no emoji) drawn as faint steel SVG pixel maps so the
+ * slot reads at a glance without relying on the OS emoji font.
+ */
+const ARMOR_ICON_MAPS: string[][] = [
+  // Helmet
+  [
+    '..OOOOO..',
+    '.OFFFFFO.',
+    'OFFFFFFFO',
+    'OFFFFFFFO',
+    'OFO...OFO',
+    'OFFFFFFFO',
+    '.OFFFFFO.',
+    '..OOOOO..',
+  ],
+  // Chestplate
+  [
+    'OO.....OO',
+    'OFOOOOOFO',
+    'OFFFFFFFO',
+    'OFFFFFFFO',
+    'OFFFFFFFO',
+    '.OFFFFFO.',
+    '.OFFFFFO.',
+    '..OOOOO..',
+  ],
+  // Leggings
+  [
+    'OFFFFFFFO',
+    'OFFFFFFFO',
+    'OFFFFFFFO',
+    'OFFO.OFFO',
+    'OFO...OFO',
+    'OFO...OFO',
+    'OFO...OFO',
+    'OOO...OOO',
+  ],
+  // Boots
+  [
+    '.........',
+    'OOO..OOO.',
+    'OFFO.OFFO',
+    'OFFO.OFFO',
+    'OFFO.OFFO',
+    'OFFOOOFFO',
+    'OFFFFFFFO',
+    'OOOOOOOOO',
+  ],
+];
+
+function ArmorGhost({ index }: { index: number }): React.ReactElement {
+  const map = ARMOR_ICON_MAPS[index];
+  const w = map[0].length;
+  const h = map.length;
+  const rects: React.ReactElement[] = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < map[y].length; x++) {
+      const ch = map[y][x];
+      if (ch === '.') continue;
+      rects.push(
+        <rect key={`${x},${y}`} x={x} y={y} width="1" height="1" fill={ch === 'O' ? '#39465a' : '#586b84'} />,
+      );
+    }
+  }
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      className="absolute inset-0 m-auto pointer-events-none"
+      width="62%"
+      height="62%"
+      shapeRendering="crispEdges"
+      style={{ opacity: 0.55 }}
+    >
+      {rects}
+    </svg>
+  );
+}
 
 function ArmorColumn(): React.ReactElement {
   const armor = useGameStore((s) => s.armor);
@@ -117,11 +201,7 @@ function ArmorColumn(): React.ReactElement {
       {armor.map((piece, i) => (
         <div key={i} className="relative">
           <Slot stack={piece} onClickSlot={() => bridge().armorClick(i)} route={`armor:${i}`} />
-          {!piece && (
-            <span className="absolute inset-0 flex items-center justify-center text-vc-text-dim/50 text-lg pointer-events-none">
-              {ARMOR_LABELS[i]}
-            </span>
-          )}
+          {!piece && <ArmorGhost index={i} />}
         </div>
       ))}
     </div>
@@ -131,7 +211,10 @@ function ArmorColumn(): React.ReactElement {
 /** Creative catalogue: click any entry to put a full stack on the cursor. */
 function CreativePalette(): React.ReactElement {
   return (
-    <div className="max-h-44 overflow-y-auto mb-2 p-1 rounded-lg border border-vc-slot-edge bg-vc-bg/60">
+    <div
+      className="max-h-44 overflow-y-auto mb-2 p-1 rounded-lg border border-vc-slot-edge bg-vc-bg/60"
+      style={{ touchAction: 'pan-y', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}
+    >
       <div className="grid grid-cols-9 gap-0.5">
         {CREATIVE_ITEMS.map((id) => (
           <div
