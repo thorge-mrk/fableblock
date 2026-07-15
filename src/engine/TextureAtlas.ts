@@ -494,6 +494,65 @@ function muttonPainter(p: TilePainter, meat: RGB, edge: RGB): void {
   for (let i = 0; i < 4; i++) p.px(10 + i, 11 + Math.floor(i / 2), edge[0], edge[1], edge[2]);
 }
 
+/** Parametric plank painter (same layout as oak, any color). */
+function coloredPlanks(base: RGB, seam: RGB): Painter {
+  return (p) => {
+    p.noiseFill(base, 0.1);
+    for (const y of [3, 7, 11, 15]) for (let x = 0; x < N; x++) p.px(x, y, seam[0], seam[1], seam[2]);
+    for (const [x, y0] of [[7, 0], [3, 4], [11, 8], [5, 12]] as const) {
+      for (let y = y0; y < y0 + 4; y++) p.px(x, y, seam[0], seam[1], seam[2]);
+    }
+  };
+}
+
+/** Parametric leaf painter (oak recipe: shadow bed + bright clumps + holes). */
+function coloredLeaves(base: RGB, bright: RGB, dark: RGB, density: number): Painter {
+  return (p) => {
+    p.clear();
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        if (p.rand() < density) {
+          const f = 0.6 + p.rand() * 0.45;
+          p.px(x, y, base[0] * f, base[1] * f, base[2] * f);
+        }
+      }
+    }
+    for (let i = 0; i < 32; i++) {
+      const x = Math.floor(p.rand() * N);
+      const y = Math.floor(p.rand() * N);
+      const c: RGB = p.rand() < 0.5 ? bright : dark;
+      p.px(x, y, c[0], c[1], c[2]);
+      p.px(x + 1, y, c[0] * 0.9, c[1] * 0.9, c[2] * 0.9);
+      p.px(x, y + 1, c[0] * 0.82, c[1] * 0.82, c[2] * 0.82);
+    }
+  };
+}
+
+/** Parametric log-side painter (vertical grain + dark grooves). */
+function coloredLogSide(bark: RGB, groove: RGB, cols: number[], streaks: number): Painter {
+  return (p) => {
+    p.grainV(bark, groove, streaks);
+    for (const x of cols) {
+      for (let y = 0; y < N; y++) if (p.rand() < 0.85) p.px(x, y, groove[0], groove[1], groove[2]);
+      p.shade(x + 1, 0, 1, N, 1.15);
+    }
+  };
+}
+
+/** Parametric log-end painter (bark rim + concentric rings + heart). */
+function coloredLogTop(fill: RGB, rim: RGB, ring: RGB, heart: RGB): Painter {
+  return (p) => {
+    p.noiseFill(fill, 0.08);
+    p.border(rim, 2);
+    for (let r = 1.5; r < 6; r += 1.7) {
+      for (let a = 0; a < 360; a += 6) {
+        p.px(8 + Math.cos((a * Math.PI) / 180) * r, 8 + Math.sin((a * Math.PI) / 180) * r * 0.9, ring[0], ring[1], ring[2]);
+      }
+    }
+    p.px(8, 8, heart[0], heart[1], heart[2]);
+  };
+}
+
 const PAINTERS: Record<number, Painter> = {
   [TILE.GRASS_TOP]: (p) => {
     // Two-tone turf with blade tufts and tiny flowers — not flat noise.
@@ -873,10 +932,39 @@ const PAINTERS: Record<number, Painter> = {
     p.speckle([140, 96, 40], 6, 1);
   },
   [TILE.WATER]: (p) => {
+    // Seamlessly tileable wave field (periodic over N, NO per-pixel rand):
+    // the water shader scrolls fract(uv) across cells, so the tile MUST wrap
+    // exactly or a moving seam appears at every block edge.
+    const TAU = Math.PI * 2;
+    const DEEP: RGB = [38, 88, 168];
+    const LITE: RGB = [104, 162, 224];
+    const wave = (x: number, y: number): number => {
+      const u = (TAU * x) / N;
+      const v = (TAU * y) / N;
+      const w =
+        Math.sin(u + 0.7 * Math.sin(v)) +
+        Math.sin(v + 0.7 * Math.sin(u)) +
+        0.6 * Math.sin(u * 2 - v) +
+        0.5 * Math.sin(u + v * 2);
+      return w / 2.8; // ~[-1, 1]
+    };
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
-        const f = 1 + (p.rand() - 0.5) * 0.18;
-        p.px(x, y, 50 * f, 95 * f, 195 * f, 235);
+        const t = wave(x, y) * 0.5 + 0.5;
+        const s = t * t * (3 - 2 * t); // smoothstep
+        p.px(
+          x, y,
+          DEEP[0] + (LITE[0] - DEEP[0]) * s,
+          DEEP[1] + (LITE[1] - DEEP[1]) * s,
+          DEEP[2] + (LITE[2] - DEEP[2]) * s,
+          255,
+        );
+      }
+    }
+    // Deterministic crest glints (same field → still seamless).
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        if (wave(x, y) > 0.82) p.px(x, y, 176, 208, 238, 255);
       }
     }
   },
@@ -1375,6 +1463,74 @@ const PAINTERS: Record<number, Painter> = {
     p.px(3, 9, 92, 96, 104);
     p.px(7, 6, 255, 200, 80);
     p.px(8, 5, 255, 240, 160);
+  },
+  // --- Biome blocks (V3) ----------------------------------------------------
+  [TILE.SWAMP_GRASS_TOP]: (p) => {
+    // Olive-gray murky turf (no green) — mirrors GRASS_TOP tone-shifted.
+    p.noiseFill([96, 108, 70], 0.14);
+    p.speckle([78, 88, 56], 12, 1); // murky pools
+    p.speckle([120, 130, 86], 8, 1); // blade tufts
+    for (let i = 0; i < 4; i++) p.px(Math.floor(p.rand() * N), Math.floor(p.rand() * N), 110, 96, 60);
+    p.bevel(0.06);
+  },
+  [TILE.SWAMP_GRASS_SIDE]: (p) => {
+    p.noiseFill(DIRT_BROWN, 0.18);
+    p.speckle([106, 74, 50], 6, 1);
+    for (let x = 0; x < N; x++) {
+      const lip = 2 + Math.floor(p.rand() * 3);
+      for (let y = 0; y < lip; y++) {
+        const f = 1 - y * 0.12;
+        p.px(x, y, 96 * f, 108 * f, 70 * f);
+      }
+      p.px(x, 0, 120, 130, 86);
+    }
+  },
+  [TILE.CHERRY_LOG_SIDE]: (p) => {
+    p.grainV([92, 72, 76], [66, 50, 54], 3);
+    for (const x of [3, 8, 12]) {
+      for (let y = 0; y < N; y++) if (p.rand() < 0.85) p.px(x, y, 66, 50, 54);
+      p.shade(x + 1, 0, 1, N, 1.15);
+    }
+    // Grayish-mauve lenticel dashes.
+    for (let i = 0; i < 4; i++) {
+      p.rect(1 + Math.floor(p.rand() * 12), 2 + Math.floor(p.rand() * 12), 2, 1, [150, 110, 120]);
+    }
+  },
+  [TILE.CHERRY_LOG_TOP]: coloredLogTop([150, 120, 120], [96, 74, 78], [128, 98, 102], [150, 110, 120]),
+  [TILE.CHERRY_LEAVES]: coloredLeaves([230, 150, 185], [246, 190, 214], [252, 224, 238], 0.62),
+  [TILE.CHERRY_PLANKS]: coloredPlanks([206, 158, 158], [158, 116, 118]),
+  [TILE.JUNGLE_LOG_SIDE]: coloredLogSide([98, 74, 44], [70, 50, 28], [2, 6, 11, 14], 4),
+  [TILE.JUNGLE_LOG_TOP]: coloredLogTop([150, 128, 86], [78, 60, 36], [120, 100, 64], [96, 78, 46]),
+  [TILE.JUNGLE_LEAVES]: coloredLeaves([44, 104, 36], [78, 140, 50], [30, 78, 26], 0.78),
+  [TILE.JUNGLE_PLANKS]: coloredPlanks([168, 116, 82], [128, 84, 56]),
+  [TILE.SPRUCE_LOG_SIDE]: coloredLogSide([74, 54, 36], [50, 34, 20], [3, 8, 13], 4),
+  [TILE.SPRUCE_LOG_TOP]: coloredLogTop([104, 80, 52], [54, 38, 24], [80, 58, 36], [58, 40, 26]),
+  [TILE.SPRUCE_LEAVES]: coloredLeaves([34, 74, 48], [58, 100, 66], [22, 50, 32], 0.72),
+  [TILE.SPRUCE_PLANKS]: coloredPlanks([120, 88, 56], [86, 62, 38]),
+  [TILE.ICE]: (p) => {
+    p.noiseFill([168, 208, 240], 0.06);
+    // Wandering hairline cracks.
+    for (let c = 0; c < 3; c++) {
+      let x = 2 + Math.floor(p.rand() * 12);
+      for (let y = 0; y < N; y++) {
+        p.px(x, y, 122, 170, 214);
+        if (p.rand() < 0.4) x += p.rand() < 0.5 ? -1 : 1;
+      }
+    }
+    p.line(2, 12, 12, 2, [222, 240, 252]); // sheen streak
+    p.border([140, 186, 224]);
+    p.bevel(0.08);
+  },
+  [TILE.LILY_PAD]: (p) => {
+    p.clear();
+    p.disc(8, 8, 6, [54, 110, 54], 0.1);
+    for (let a = 0; a < 360; a += 20) {
+      p.px(8 + Math.cos((a * Math.PI) / 180) * 6, 8 + Math.sin((a * Math.PI) / 180) * 6, 40, 86, 42);
+    }
+    // Wedge notch cut from center to one edge.
+    for (let x = 8; x < 15; x++) p.px(x, 8, 0, 0, 0, 0);
+    for (let a = 0; a < 5; a++) p.line(8, 8, 8 + Math.cos(a) * 6, 8 + Math.sin(a) * 6, [72, 132, 66]);
+    p.px(8, 8, 240, 232, 200); // flower bud
   },
 };
 

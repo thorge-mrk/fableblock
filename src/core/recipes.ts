@@ -38,6 +38,12 @@ export const RECIPES: Recipe[] = [
   // --- 2x2-compatible recipes ---
   shapeless([B.OAK_LOG], B.OAK_PLANKS, 4),
   shapeless([B.BIRCH_LOG], B.BIRCH_PLANKS, 4),
+  shapeless([B.CHERRY_LOG], B.CHERRY_PLANKS, 4),
+  shapeless([B.JUNGLE_LOG], B.JUNGLE_PLANKS, 4),
+  shapeless([B.SPRUCE_LOG], B.SPRUCE_PLANKS, 4),
+  shaped(['C', 'C'], { C: B.CHERRY_PLANKS }, ITEM.STICK, 4),
+  shaped(['J', 'J'], { J: B.JUNGLE_PLANKS }, ITEM.STICK, 4),
+  shaped(['S', 'S'], { S: B.SPRUCE_PLANKS }, ITEM.STICK, 4),
   shaped(['P', 'P'], { P: B.OAK_PLANKS }, ITEM.STICK, 4),
   shaped(['B', 'B'], { B: B.BIRCH_PLANKS }, ITEM.STICK, 4),
   shaped(['PP', 'PP'], { P: B.OAK_PLANKS }, B.CRAFTING_TABLE, 1),

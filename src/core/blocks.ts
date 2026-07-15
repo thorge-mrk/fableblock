@@ -152,6 +152,23 @@ export const TILE = {
   MAGMA_T: 139,
   ITEM_FLINT: 140,
   ITEM_FLINT_STEEL: 141,
+  // Biome blocks (V3): swamp / cherry / jungle / spruce / ice / lily.
+  SWAMP_GRASS_TOP: 142,
+  SWAMP_GRASS_SIDE: 143,
+  CHERRY_LOG_SIDE: 144,
+  CHERRY_LOG_TOP: 145,
+  CHERRY_LEAVES: 146,
+  CHERRY_PLANKS: 147,
+  JUNGLE_LOG_SIDE: 148,
+  JUNGLE_LOG_TOP: 149,
+  JUNGLE_LEAVES: 150,
+  JUNGLE_PLANKS: 151,
+  SPRUCE_LOG_SIDE: 152,
+  SPRUCE_LOG_TOP: 153,
+  SPRUCE_LEAVES: 154,
+  SPRUCE_PLANKS: 155,
+  ICE: 156,
+  LILY_PAD: 157,
 } as const;
 
 export const ATLAS_TILES = 32; // 32x32 grid of tiles
@@ -268,6 +285,20 @@ export const B = {
   SOUL_SAND: 98,
   NETHER_PORTAL: 99,
   MAGMA: 100,
+  // Biome blocks (V3): swamp / cherry / jungle / spruce woods, ice, snow, lily.
+  SWAMP_GRASS: 101,
+  CHERRY_LOG: 102,
+  CHERRY_LEAVES: 103,
+  CHERRY_PLANKS: 104,
+  JUNGLE_LOG: 105,
+  JUNGLE_LEAVES: 106,
+  JUNGLE_PLANKS: 107,
+  SPRUCE_LOG: 108,
+  SPRUCE_LEAVES: 109,
+  SPRUCE_PLANKS: 110,
+  ICE: 111,
+  SNOW_BLOCK: 112,
+  LILY_PAD: 113,
 } as const;
 
 export type BlockId = number;
@@ -545,6 +576,32 @@ def(B.NETHER_PORTAL, 'Nether Portal', tile6(TILE.PORTAL_T), {
 });
 def(B.MAGMA, 'Magma Block', tile6(TILE.MAGMA_T), {
   hardness: 0.5, tool: 'pickaxe', minTier: 1, lightEmit: 3,
+});
+
+// --- Biome blocks (V3) ------------------------------------------------------
+def(B.SWAMP_GRASS, 'Swamp Grass', tileTSB(TILE.SWAMP_GRASS_TOP, TILE.SWAMP_GRASS_SIDE, TILE.DIRT), {
+  hardness: 0.6, tool: 'shovel', drop: B.DIRT, randomTicks: true,
+});
+def(B.CHERRY_LOG, 'Cherry Log', tileTSB(TILE.CHERRY_LOG_TOP, TILE.CHERRY_LOG_SIDE, TILE.CHERRY_LOG_TOP), { hardness: 2, tool: 'axe' });
+def(B.CHERRY_LEAVES, 'Cherry Leaves', tile6(TILE.CHERRY_LEAVES), {
+  opaque: false, renderType: RenderType.CUTOUT, hardness: 0.2, drop: -1, lightFilter: 1, randomTicks: true,
+});
+def(B.CHERRY_PLANKS, 'Cherry Planks', tile6(TILE.CHERRY_PLANKS), { hardness: 2, tool: 'axe' });
+def(B.JUNGLE_LOG, 'Jungle Log', tileTSB(TILE.JUNGLE_LOG_TOP, TILE.JUNGLE_LOG_SIDE, TILE.JUNGLE_LOG_TOP), { hardness: 2, tool: 'axe' });
+def(B.JUNGLE_LEAVES, 'Jungle Leaves', tile6(TILE.JUNGLE_LEAVES), {
+  opaque: false, renderType: RenderType.CUTOUT, hardness: 0.2, drop: -1, lightFilter: 1, randomTicks: true,
+});
+def(B.JUNGLE_PLANKS, 'Jungle Planks', tile6(TILE.JUNGLE_PLANKS), { hardness: 2, tool: 'axe' });
+def(B.SPRUCE_LOG, 'Spruce Log', tileTSB(TILE.SPRUCE_LOG_TOP, TILE.SPRUCE_LOG_SIDE, TILE.SPRUCE_LOG_TOP), { hardness: 2, tool: 'axe' });
+def(B.SPRUCE_LEAVES, 'Spruce Leaves', tile6(TILE.SPRUCE_LEAVES), {
+  opaque: false, renderType: RenderType.CUTOUT, hardness: 0.2, drop: -1, lightFilter: 1, randomTicks: true,
+});
+def(B.SPRUCE_PLANKS, 'Spruce Planks', tile6(TILE.SPRUCE_PLANKS), { hardness: 2, tool: 'axe' });
+def(B.ICE, 'Ice', tile6(TILE.ICE), { hardness: 0.5, tool: 'pickaxe', drop: -1 });
+def(B.SNOW_BLOCK, 'Snow Block', tile6(TILE.SNOW_TOP), { hardness: 0.6, tool: 'shovel' });
+def(B.LILY_PAD, 'Lily Pad', tile6(TILE.LILY_PAD), {
+  solid: false, opaque: false, renderType: RenderType.BOX, hardness: 0.05, lightFilter: 0,
+  boxes: [[0, 0, 0, 1, 0.0625, 1]],
 });
 
 const fluidDefaults = {
