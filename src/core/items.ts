@@ -59,6 +59,7 @@ export const ITEM = {
   DOOR: 307, //     and 256+51 for door drops — keep in sync
   FLINT: 308,
   FLINT_AND_STEEL: 309,
+  EMERALD: 310, // NOTE: blocks.ts hardcodes 256+54 for emerald-ore drops
 } as const;
 
 export interface ItemDef {
@@ -98,6 +99,7 @@ defItem({ id: ITEM.RAW_IRON, name: 'Raw Iron', maxStack: 64, icon: TILE.ITEM_RAW
 defItem({ id: ITEM.IRON_INGOT, name: 'Iron Ingot', maxStack: 64, icon: TILE.ITEM_IRON_INGOT });
 defItem({ id: ITEM.GOLD_INGOT, name: 'Gold Ingot', maxStack: 64, icon: TILE.ITEM_GOLD_INGOT });
 defItem({ id: ITEM.DIAMOND, name: 'Diamond', maxStack: 64, icon: TILE.ITEM_DIAMOND });
+defItem({ id: ITEM.EMERALD, name: 'Emerald', maxStack: 64, icon: TILE.ITEM_EMERALD });
 defItem({
   id: ITEM.WOOD_PICKAXE, name: 'Wooden Pickaxe', maxStack: 1, icon: TILE.ITEM_PICK_WOOD,
   tool: { type: 'pickaxe', tier: 1, speed: 2, damage: 2, durability: 60 }, fuelTicks: 200,
