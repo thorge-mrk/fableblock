@@ -36,6 +36,11 @@ let eroNoise!: FBM2D;
 let pvNoise!: FBM2D;
 let tempNoise!: FBM2D;
 let moistNoise!: FBM2D;
+let weirdNoise!: FBM2D; // splits climate bands into biome variants
+let ridgeNoise!: FBM2D; // sharp alpine crest lines
+let riverNoise!: FBM2D; // winding river channels
+let mushNoise!: FBM2D; // rare mushroom-island cells in deep ocean
+let strataNoise!: FBM2D; // badlands terracotta band waviness
 let warpXNoise!: FBM2D;
 let warpZNoise!: FBM2D;
 let detailNoise!: FBM2D; // high-freq roll so plains aren't dead flat
@@ -43,8 +48,11 @@ let forestDensity!: FBM2D; // clumps trees into groves + clearings
 let caveA!: FBM3D;
 let caveB!: FBM3D;
 let cheese!: FBM3D;
+let caveEntrance!: FBM2D; // widens shallow tunnels into walk-in cave mouths
 let ravineNoise!: SimplexNoise;
 let ravineDepthNoise!: SimplexNoise;
+let ditherSeed = 0; // per-block climate jitter -> interlocking biome borders
+let surfSeed = 0; // per-block surface-material variation (podzol patches...)
 
 function initNoise(): void {
   contNoise = new FBM2D(deriveSeed(seed, 'continental'), 4, 1 / 700, 0.5, 2.1);
@@ -52,6 +60,11 @@ function initNoise(): void {
   pvNoise = new FBM2D(deriveSeed(seed, 'peaks'), 4, 1 / 280, 0.55, 2.0);
   tempNoise = new FBM2D(deriveSeed(seed, 'temp'), 3, 1 / 1100, 0.5, 2.0);
   moistNoise = new FBM2D(deriveSeed(seed, 'moist'), 3, 1 / 800, 0.5, 2.0);
+  weirdNoise = new FBM2D(deriveSeed(seed, 'weird'), 3, 1 / 620, 0.5, 2.0);
+  ridgeNoise = new FBM2D(deriveSeed(seed, 'ridge'), 3, 1 / 210, 0.5, 2.0);
+  riverNoise = new FBM2D(deriveSeed(seed, 'river'), 2, 1 / 460, 0.5, 2.0);
+  mushNoise = new FBM2D(deriveSeed(seed, 'mushroom'), 2, 1 / 950, 0.5, 2.0);
+  strataNoise = new FBM2D(deriveSeed(seed, 'strata'), 2, 1 / 130, 0.5, 2.0);
   // Domain warp: bends every terrain lookup so coastlines, ridges and biome
   // borders meander organically instead of following the noise lattice.
   warpXNoise = new FBM2D(deriveSeed(seed, 'warpX'), 2, 1 / 350, 0.5, 2.0);
@@ -61,8 +74,18 @@ function initNoise(): void {
   caveA = new FBM3D(deriveSeed(seed, 'caveA'), 2, 1 / 90, 0.5, 2.2);
   caveB = new FBM3D(deriveSeed(seed, 'caveB'), 2, 1 / 90, 0.5, 2.2);
   cheese = new FBM3D(deriveSeed(seed, 'cheese'), 2, 1 / 140, 0.5, 2.0);
+  caveEntrance = new FBM2D(deriveSeed(seed, 'caveEnt'), 2, 1 / 210, 0.5, 2.0);
   ravineNoise = new SimplexNoise(deriveSeed(seed, 'ravine'));
   ravineDepthNoise = new SimplexNoise(deriveSeed(seed, 'ravineDepth'));
+  ditherSeed = deriveSeed(seed, 'bdither');
+  surfSeed = deriveSeed(seed, 'surface');
+}
+
+/** Clamped smoothstep of t into [0,1]. */
+function smooth01(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t * t * (3 - 2 * t);
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +101,19 @@ export const enum Biome {
   CHERRY = 6,
   JUNGLE = 7,
   SNOWY = 8,
+  // V4 biome pass — the remaining major overworld families.
+  BEACH = 9,
+  RIVER = 10,
+  TAIGA = 11,
+  SNOWY_TAIGA = 12,
+  SAVANNA = 13,
+  BADLANDS = 14,
+  BIRCH_FOREST = 15,
+  DARK_FOREST = 16,
+  FLOWER_FOREST = 17,
+  MUSHROOM = 18,
+  ICE_SPIKES = 19,
+  STONY_PEAKS = 20,
 }
 
 interface ColumnInfo {
@@ -98,10 +134,11 @@ const BASE_SPLINE: ReadonlyArray<readonly [number, number]> = [
 
 const PEAK_SPLINE: ReadonlyArray<readonly [number, number]> = [
   [-1.0, 0],
-  [0.1, 0],
-  [0.45, 18],
-  [0.75, 44],
-  [1.0, 64],
+  [0.08, 0],
+  [0.4, 22],
+  [0.65, 52],
+  [0.9, 92],
+  [1.0, 110],
 ];
 
 function columnInfo(x: number, z: number): ColumnInfo {
@@ -111,8 +148,13 @@ function columnInfo(x: number, z: number): ColumnInfo {
   const cont = contNoise.sample(wx, wz);
   const ero = eroNoise.sample(wx, wz);
   const pv = pvNoise.sample(wx, wz);
-  const temp = tempNoise.sample(wx, wz);
-  const moist = moistNoise.sample(wx, wz);
+  // Per-block climate dither (±0.02): biome borders interlock in ragged
+  // patches over a few blocks instead of following hard threshold curves.
+  const dj = (hash2D(ditherSeed, x, z) - 0.5) * 0.04;
+  const dj2 = (hash2D(ditherSeed, x + 40507, z - 92821) - 0.5) * 0.04;
+  const temp = tempNoise.sample(wx, wz) + dj;
+  const moist = moistNoise.sample(wx, wz) + dj2;
+  const weird = weirdNoise.sample(wx, wz);
 
   const base = splineLerp(BASE_SPLINE, cont);
   // Erosion flattens peaks; only above-sea land rises into mountains.
@@ -126,28 +168,98 @@ function columnInfo(x: number, z: number): ColumnInfo {
   );
   let height = base;
   if (cont > -0.05) {
-    height += splineLerp(PEAK_SPLINE, pv) * eroFactor;
+    // Ridged crest factor turns round mountain blobs into sharp ridgelines
+    // with dramatic faces; valleys between crests stay walkable.
+    const ridge = 1 - Math.abs(ridgeNoise.sample(wx, wz));
+    height += splineLerp(PEAK_SPLINE, pv) * (0.5 + 0.5 * ridge * ridge) * eroFactor;
   }
   // Gentle rolling detail so plains stop reading as a dead-flat plane; more on
   // higher ground. Only above sea so ocean floors stay smooth.
   if (cont > -0.1) height += detailNoise.sample(wx, wz) * (cont > 0.35 ? 5 : 2.5);
+
+  // Badlands mask: very hot + very dry. Fades in smoothly so mesa plateaus
+  // blend into the surrounding desert instead of snapping.
+  const bad = smooth01((temp - 0.36) / 0.08) * smooth01((0.0 - moist) / 0.12);
+  if (bad > 0 && height > SEA_LEVEL) {
+    // Stepped mesas: quantize to 10-block plateau tiers, blended by mask.
+    const tier = SEA_LEVEL + 2 + Math.round((height - SEA_LEVEL) / 10) * 10;
+    height = height * (1 - bad) + Math.max(SEA_LEVEL + 2, tier) * bad;
+  }
+
+  // Mushroom islands: rare cells far out in deep ocean rise above the waves.
+  let mushMask = 0;
+  if (cont < -0.18) {
+    mushMask = smooth01((mushNoise.sample(wx, wz) - 0.52) / 0.14);
+    if (mushMask > 0) {
+      const isl = SEA_LEVEL + 3 + mushMask * 9 + detailNoise.sample(wx, wz) * 3;
+      height = height * (1 - mushMask) + isl * mushMask;
+    }
+  }
+
+  // Rivers: a winding channel wherever the river field crosses zero. The
+  // inner band carves to a bed below sea level; the outer band eases the
+  // banks back up to the terrain so valleys get natural slopes.
+  let river = false;
+  if (cont > -0.16 && mushMask <= 0) {
+    const r = Math.abs(riverNoise.sample(wx, wz));
+    const RW = 0.05;
+    if (r < RW && height > SEA_LEVEL - 6) {
+      const t = r / RW; // 0 = channel centre .. 1 = outer bank
+      const bed = SEA_LEVEL - 2.5 - 1.5 * (1 - t);
+      const bank = smooth01((t - 0.55) / 0.45);
+      const carved = bed * (1 - bank) + height * bank;
+      if (carved < height) height = carved;
+      river = height < SEA_LEVEL;
+    }
+  }
   height = Math.max(8, Math.min(CHUNK_HEIGHT - 24, Math.floor(height)));
 
-  // Biome classification (first match wins). Cold/hot gates are mirror images
-  // (temp<-0.32 vs >0.32) so SNOWY and DESERT can never collide; JUNGLE takes
-  // hot+wet after DESERT took hot+dry; SWAMP the wet lowland flats; CHERRY a
-  // narrow mild band on hills; FOREST/PLAINS keep the remainder.
+  // --- Biome classification (first match wins) ------------------------------
+  // Continuous climate (temp/moist/weird) + the derived masks pick the biome;
+  // height only gates shores, peaks and lowland swamps. Because height never
+  // depends on the *chosen* biome, terrain is seamless across every border.
+  const cold = temp < -0.34;
   let biome: Biome;
-  if (height < SEA_LEVEL - 1) biome = Biome.OCEAN;
+  if (mushMask > 0.45) biome = Biome.MUSHROOM;
+  else if (height < SEA_LEVEL - 1) biome = river ? Biome.RIVER : Biome.OCEAN;
+  else if (height > 112) biome = Biome.STONY_PEAKS;
   else if (height > 92) biome = Biome.MOUNTAINS;
-  else if (temp < -0.32) biome = Biome.SNOWY;
-  else if (temp > 0.32 && moist < 0.1) biome = Biome.DESERT;
-  else if (temp > 0.28 && moist > 0.3) biome = Biome.JUNGLE;
-  else if (moist > 0.26 && height <= SEA_LEVEL + 3) biome = Biome.SWAMP;
-  else if (temp > 0.02 && temp < 0.24 && moist > 0.06 && moist < 0.28 && height > SEA_LEVEL + 3) biome = Biome.CHERRY;
-  else if (moist > 0.08) biome = Biome.FOREST;
-  else biome = Biome.PLAINS;
+  else if (height <= SEA_LEVEL + 1) {
+    biome = moist > 0.26 && !cold && temp <= 0.26 ? Biome.SWAMP : Biome.BEACH;
+  } else if (bad > 0.5) biome = Biome.BADLANDS;
+  else if (cold) {
+    if (moist > 0.14) biome = Biome.SNOWY_TAIGA;
+    else if (weird > 0.5 && moist < -0.08) biome = Biome.ICE_SPIKES;
+    else biome = Biome.SNOWY;
+  } else if (temp < -0.1) biome = moist > 0.05 ? Biome.TAIGA : Biome.PLAINS;
+  else if (temp > 0.32 && moist < 0.08) biome = Biome.DESERT;
+  else if (temp > 0.26 && moist > 0.28) biome = Biome.JUNGLE;
+  else if (temp > 0.24 && moist < 0.24) biome = Biome.SAVANNA;
+  else if (moist > 0.28 && height <= SEA_LEVEL + 4) biome = Biome.SWAMP;
+  else if (temp > 0.02 && temp < 0.24 && moist > 0.06 && moist < 0.28 && height > SEA_LEVEL + 6 && weird > 0.22) {
+    biome = Biome.CHERRY;
+  } else if (moist > 0.06) {
+    // Forest family, split by the weirdness field.
+    if (weird < -0.42) biome = Biome.BIRCH_FOREST;
+    else if (weird > 0.42 && moist > 0.2) biome = Biome.DARK_FOREST;
+    else if (weird > 0.32) biome = Biome.FLOWER_FOREST;
+    else biome = Biome.FOREST;
+  } else biome = Biome.PLAINS;
   return { height, biome };
+}
+
+// Repeating badlands strata palette; the band index is offset by a wavy
+// low-frequency noise so layers undulate like real sedimentary rock.
+const MESA_STRATA: number[] = [
+  B.TERRACOTTA_ORANGE, B.TERRACOTTA, B.TERRACOTTA_ORANGE, B.TERRACOTTA_RED,
+  B.TERRACOTTA_ORANGE, B.TERRACOTTA, B.TERRACOTTA_WHITE, B.TERRACOTTA_ORANGE,
+  B.TERRACOTTA_YELLOW, B.TERRACOTTA, B.TERRACOTTA_ORANGE, B.TERRACOTTA_RED,
+  B.TERRACOTTA_ORANGE, B.TERRACOTTA_WHITE, B.TERRACOTTA, B.TERRACOTTA_ORANGE,
+];
+
+function mesaStrata(y: number, wx: number, wz: number): number {
+  const off = Math.round(strataNoise.sample(wx, wz) * 5);
+  return MESA_STRATA[(((y + off) % 16) + 16) % 16];
 }
 
 // ---------------------------------------------------------------------------
@@ -164,19 +276,26 @@ function isCave(x: number, y: number, z: number, surface: number): boolean {
   const a = caveA.sample(x, y * yScale, z);
   const b = caveB.sample(x, y * yScale, z);
   const tube = a * a + b * b;
-  // Wider deep down, pinch toward the surface so entrances stay small.
+  // Wider deep down, pinch toward the surface so most entrances stay small.
   // The sum field (free — no extra samples) modulates width along the
   // tunnel, so passages breathe between crawls and halls.
   const depth = surface - y;
-  let width = depth < 8 ? 0.011 : depth < 16 ? 0.018 : 0.026;
+  let width = depth < 8 ? 0.011 : depth < 16 ? 0.018 : y < 24 ? 0.032 : 0.026;
+  // Cave mouths: where the entrance field runs hot, the shallow band widens
+  // instead of pinching — walk-in openings on hillsides and valley floors.
+  if (depth < 14) {
+    const ent = caveEntrance.sample(x, z);
+    if (ent > 0.38) width *= 1 + (ent - 0.38) * 9;
+  }
   width *= 0.7 + Math.abs(a + b) * 0.9;
   if (tube < width) return true;
 
-  // Cheese caverns: occasional larger rooms in the deep slice. A high
-  // threshold keeps them bounded (avoids hollowing out whole regions).
+  // Cheese caverns grow with depth: crawl rooms mid-level, grand vaulted
+  // halls near the lava table. High thresholds keep them bounded.
   if (y < surface - 16 && y > 6) {
     const c = cheese.sample(x, y * 0.85, z);
-    if (c > 0.52) return true;
+    const thr = y < 20 ? 0.48 : y < 34 ? 0.52 : 0.55;
+    if (c > thr) return true;
   }
   return false;
 }
@@ -199,7 +318,7 @@ function ravineAt(x: number, z: number): RavineInfo | null {
 // ---------------------------------------------------------------------------
 // Trees (with cross-chunk canopy support)
 // ---------------------------------------------------------------------------
-type TreeType = 'oak' | 'birch' | 'cherry' | 'jungle' | 'spruce';
+type TreeType = 'oak' | 'birch' | 'cherry' | 'jungle' | 'spruce' | 'acacia' | 'dark_oak';
 
 interface TreePlan {
   x: number;
@@ -211,10 +330,17 @@ interface TreePlan {
 
 const TREE_LOG: Record<TreeType, number> = {
   oak: B.OAK_LOG, birch: B.BIRCH_LOG, cherry: B.CHERRY_LOG, jungle: B.JUNGLE_LOG, spruce: B.SPRUCE_LOG,
+  acacia: B.ACACIA_LOG, dark_oak: B.DARK_OAK_LOG,
 };
 const TREE_LEAF: Record<TreeType, number> = {
   oak: B.OAK_LEAVES, birch: B.BIRCH_LEAVES, cherry: B.CHERRY_LEAVES, jungle: B.JUNGLE_LEAVES, spruce: B.SPRUCE_LEAVES,
+  acacia: B.ACACIA_LEAVES, dark_oak: B.DARK_OAK_LEAVES,
 };
+
+const NO_TREE_BIOMES = new Set<Biome>([
+  Biome.OCEAN, Biome.RIVER, Biome.BEACH, Biome.DESERT, Biome.BADLANDS,
+  Biome.MUSHROOM, Biome.ICE_SPIKES, Biome.STONY_PEAKS,
+]);
 
 function treesForChunk(cx: number, cz: number): TreePlan[] {
   const rand = new Random(deriveSeed(seed, 'trees:' + cx + ',' + cz));
@@ -226,9 +352,15 @@ function treesForChunk(cx: number, cz: number): TreePlan[] {
   let type: TreeType = 'oak';
   switch (centerInfo.biome) {
     case Biome.FOREST: count = rand.range(6, 10); break;
+    case Biome.BIRCH_FOREST: count = rand.range(6, 10); type = 'birch'; break;
+    case Biome.DARK_FOREST: count = rand.range(8, 12); type = 'dark_oak'; break;
+    case Biome.FLOWER_FOREST: count = rand.range(2, 4); break;
     case Biome.JUNGLE: count = rand.range(6, 11); type = 'jungle'; break;
     case Biome.CHERRY: count = rand.range(2, 4); type = 'cherry'; break;
-    case Biome.SNOWY: count = rand.range(2, 5); type = 'spruce'; break;
+    case Biome.SNOWY: count = rand.range(1, 3); type = 'spruce'; break;
+    case Biome.TAIGA: count = rand.range(5, 9); type = 'spruce'; break;
+    case Biome.SNOWY_TAIGA: count = rand.range(4, 7); type = 'spruce'; break;
+    case Biome.SAVANNA: count = rand.chance(0.75) ? rand.range(1, 2) : 0; type = 'acacia'; break;
     case Biome.SWAMP: count = rand.range(0, 2); break;
     case Biome.PLAINS: count = rand.chance(0.4) ? 1 : 0; break;
     case Biome.MOUNTAINS: count = rand.chance(0.5) ? rand.range(1, 2) : 0; break;
@@ -246,7 +378,7 @@ function treesForChunk(cx: number, cz: number): TreePlan[] {
     }
     if (tooClose) continue;
     const info = columnInfo(x, z);
-    if (info.biome === Biome.OCEAN || info.biome === Biome.DESERT) continue;
+    if (NO_TREE_BIOMES.has(info.biome)) continue;
     if (info.height < SEA_LEVEL || info.height > 140) continue;
     // Skip trees inside villages so houses stay clear.
     const vil = villageForRegion(regionOf(x >> 4), regionOf(z >> 4));
@@ -255,6 +387,8 @@ function treesForChunk(cx: number, cz: number): TreePlan[] {
     let th: number;
     if (type === 'jungle') th = rand.range(8, 14);
     else if (type === 'spruce') th = rand.range(6, 10);
+    else if (type === 'acacia') th = rand.range(5, 7);
+    else if (type === 'dark_oak') th = rand.range(5, 8);
     else th = rand.range(4, 6);
     // Forests keep their birch mix; every other biome uses its signature tree.
     const treeType: TreeType = centerInfo.biome === Biome.FOREST && rand.chance(0.3) ? 'birch' : type;
@@ -268,9 +402,50 @@ function stampTree(data: Uint16Array, cx: number, cz: number, tree: TreePlan): v
   const leafId = TREE_LEAF[tree.type];
   const topY = tree.y + tree.height - 1;
 
+  if (tree.type === 'acacia') {
+    // Savanna umbrella: the trunk kinks diagonally partway up, then a wide
+    // flat leaf disc caps it — the iconic silhouette against the horizon.
+    const lean = hash2D(seed, tree.x * 7, tree.z * 13) < 0.5 ? 1 : -1;
+    const leanZ = hash2D(seed, tree.x * 3, tree.z * 11) < 0.5 ? 1 : -1;
+    let tx = tree.x;
+    let tz = tree.z;
+    for (let i = 0; i < tree.height; i++) {
+      if (i >= tree.height - 3) {
+        if (i % 2 === 1) tx += lean;
+        else tz += leanZ;
+      }
+      setIfInside(data, cx, cz, tx, tree.y + i, tz, logId, false);
+    }
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dz = -3; dz <= 3; dz++) {
+        const d = Math.abs(dx) + Math.abs(dz);
+        if (d > 4) continue;
+        setIfInside(data, cx, cz, tx + dx, topY + 1, tz + dz, leafId, true);
+        if (d <= 1) setIfInside(data, cx, cz, tx + dx, topY + 2, tz + dz, leafId, true);
+      }
+    }
+    return;
+  }
+
   // Trunk.
   for (let i = 0; i < tree.height; i++) {
     setIfInside(data, cx, cz, tree.x, tree.y + i, tree.z, logId, false);
+  }
+
+  if (tree.type === 'dark_oak') {
+    // Broad, dense roofed-forest canopy: two thick 7x7-ish layers that fuse
+    // with neighbouring crowns into a nearly closed leaf roof.
+    for (let ly = topY - 1; ly <= topY + 1; ly++) {
+      const r = ly === topY + 1 ? 2 : 3;
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (dx === 0 && dz === 0 && ly <= topY) continue;
+          if (Math.abs(dx) === r && Math.abs(dz) === r && hash2D(seed, tree.x * 31 + dx + ly * 7, tree.z * 17 + dz) < 0.6) continue;
+          setIfInside(data, cx, cz, tree.x + dx, ly, tree.z + dz, leafId, true);
+        }
+      }
+    }
+    return;
   }
 
   if (tree.type === 'spruce') {
@@ -333,6 +508,54 @@ function stampTree(data: Uint16Array, cx: number, cz: number, tree: TreePlan): v
   }
 }
 
+/**
+ * Giant mushroom: pale stem topped by a red dome or a flat brown platter.
+ * Only stamped when it fits fully inside the owning chunk (decoration is
+ * per-chunk, so a border mushroom would otherwise be sliced in half).
+ */
+function stampGiantMushroom(
+  data: Uint16Array,
+  cx: number,
+  cz: number,
+  x: number,
+  y: number,
+  z: number,
+  red: boolean,
+): void {
+  const lx = x - cx * 16;
+  const lz = z - cz * 16;
+  if (lx < 3 || lx > 12 || lz < 3 || lz > 12) return;
+  const sh = 4 + Math.floor(hash2D(seed, x * 5, z * 3) * 3);
+  if (y + sh + 1 >= CHUNK_HEIGHT) return;
+  for (let i = 0; i < sh; i++) {
+    setIfInside(data, cx, cz, x, y + i, z, B.MUSHROOM_STEM, false);
+  }
+  const capId = red ? B.MUSHROOM_CAP_RED : B.MUSHROOM_CAP_BROWN;
+  if (red) {
+    // Dome: skirt ring around the stem, solid 3x3 lid on top.
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+        if (Math.abs(dx) < 2 && Math.abs(dz) < 2) continue;
+        setIfInside(data, cx, cz, x + dx, y + sh - 1, z + dz, capId, true);
+      }
+    }
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        setIfInside(data, cx, cz, x + dx, y + sh, z + dz, capId, true);
+      }
+    }
+  } else {
+    // Flat platter: broad disc resting on the stem tip.
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dz = -3; dz <= 3; dz++) {
+        if (Math.abs(dx) + Math.abs(dz) > 5) continue;
+        setIfInside(data, cx, cz, x + dx, y + sh, z + dz, capId, true);
+      }
+    }
+  }
+}
+
 /** Write a world-coord block into this chunk's array if it falls inside. */
 function setIfInside(
   data: Uint16Array,
@@ -359,20 +582,45 @@ function setIfInside(
 const VILLAGE_REGION = 12; // chunks per village region cell
 const villageCache = new Map<string, VillagePlan | null>();
 
+/** Village material theme, chosen by the biome the village grows in. */
+const enum VTheme {
+  PLAINS = 0,
+  DESERT = 1,
+  SAVANNA = 2,
+  TAIGA = 3,
+  SNOWY = 4,
+}
+
+interface VPalette {
+  wall: number;
+  frame: number;
+  base: number;
+  roof: number;
+  path: number;
+}
+
+const VPALETTES: Record<VTheme, VPalette> = {
+  [VTheme.PLAINS]: { wall: B.OAK_PLANKS, frame: B.OAK_LOG, base: B.COBBLESTONE, roof: B.OAK_PLANKS, path: B.GRAVEL },
+  [VTheme.DESERT]: { wall: B.SANDSTONE, frame: B.SANDSTONE, base: B.SANDSTONE, roof: B.SANDSTONE, path: B.SANDSTONE },
+  [VTheme.SAVANNA]: { wall: B.ACACIA_PLANKS, frame: B.ACACIA_LOG, base: B.COBBLESTONE, roof: B.ACACIA_PLANKS, path: B.COARSE_DIRT },
+  [VTheme.TAIGA]: { wall: B.SPRUCE_PLANKS, frame: B.SPRUCE_LOG, base: B.COBBLESTONE, roof: B.SPRUCE_PLANKS, path: B.GRAVEL },
+  [VTheme.SNOWY]: { wall: B.SPRUCE_PLANKS, frame: B.SPRUCE_LOG, base: B.COBBLESTONE, roof: B.SPRUCE_PLANKS, path: B.GRAVEL },
+};
+
 interface Building {
   x: number; // origin (min corner)
   y: number;
   z: number;
   blueprint: string[][];
   rot: 0 | 1 | 2 | 3;
-  desert: boolean;
+  theme: VTheme;
 }
 
 interface VillagePlan {
   x: number;
   z: number;
   radius: number;
-  desert: boolean;
+  theme: VTheme;
   buildings: Building[];
   paths: Array<{ x: number; z: number }>;
   lamps: Array<{ x: number; z: number }>;
@@ -458,7 +706,15 @@ function villageForRegion(rx: number, rz: number): VillagePlan | null {
     const wx = ccx * 16 + 8;
     const wz = ccz * 16 + 8;
     const center = columnInfo(wx, wz);
-    if (center.biome === Biome.PLAINS || center.biome === Biome.DESERT) {
+    const VILLAGE_THEMES: Partial<Record<Biome, VTheme>> = {
+      [Biome.PLAINS]: VTheme.PLAINS,
+      [Biome.DESERT]: VTheme.DESERT,
+      [Biome.SAVANNA]: VTheme.SAVANNA,
+      [Biome.TAIGA]: VTheme.TAIGA,
+      [Biome.SNOWY]: VTheme.SNOWY,
+    };
+    const theme = VILLAGE_THEMES[center.biome];
+    if (theme !== undefined) {
       // Require reasonably flat, above-sea terrain.
       let minH = center.height;
       let maxH = center.height;
@@ -468,13 +724,13 @@ function villageForRegion(rx: number, rz: number): VillagePlan | null {
         if (h > maxH) maxH = h;
       }
       if (minH > SEA_LEVEL && maxH - minH <= 7) {
-        const desert = center.biome === Biome.DESERT;
+        const desert = theme === VTheme.DESERT;
         const buildings: Building[] = [];
         const paths: Array<{ x: number; z: number }> = [];
         const lamps: Array<{ x: number; z: number }> = [];
         const count = rand.range(5, 8);
         const wellY = center.height;
-        buildings.push({ x: wx - 2, y: wellY, z: wz - 2, blueprint: WELL, rot: 0, desert });
+        buildings.push({ x: wx - 2, y: wellY, z: wz - 2, blueprint: WELL, rot: 0, theme });
         let churchPlaced = false;
         for (let i = 0; i < count; i++) {
           const angle = (i / count) * Math.PI * 2 + rand.float() * 0.7;
@@ -499,7 +755,7 @@ function villageForRegion(rx: number, rz: number): VillagePlan | null {
             z: bzC - (bd >> 1),
             blueprint: bp,
             rot: rand.int(4) as 0 | 1 | 2 | 3,
-            desert,
+            theme,
           });
           // L-shaped path from house to well.
           let px = bxC;
@@ -515,7 +771,7 @@ function villageForRegion(rx: number, rz: number): VillagePlan | null {
           // A lamp post partway along the path lights the street at night.
           lamps.push({ x: Math.round(bxC + (wx - bxC) * 0.4), z: Math.round(bzC + (wz - bzC) * 0.4) });
         }
-        plan = { x: wx, z: wz, radius: 36, desert, buildings, paths, lamps };
+        plan = { x: wx, z: wz, radius: 36, theme, buildings, paths, lamps };
       }
     }
   }
@@ -539,15 +795,15 @@ function rotCoord(lx: number, lz: number, bw: number, bd: number, rot: number): 
 
 function blueprintChar(
   ch: string,
-  desert: boolean,
+  pal: VPalette,
 ): number {
   switch (ch) {
-    case '#': return desert ? B.SANDSTONE : B.OAK_PLANKS;
-    case 'C': return desert ? B.SANDSTONE : B.COBBLESTONE;
-    case 'L': return desert ? B.SANDSTONE : B.OAK_LOG;
+    case '#': return pal.wall;
+    case 'C': return pal.base;
+    case 'L': return pal.frame;
     case 'G': return B.GLASS;
     case 'P':
-    case 'R': return desert ? B.SANDSTONE : B.OAK_PLANKS;
+    case 'R': return pal.roof;
     case 'T': return B.CRAFTING_TABLE;
     case 'F': return B.FURNACE_S;
     case 'H': return B.CHEST_S;
@@ -574,6 +830,7 @@ function stampVillage(
 ): void {
   const minX = cx * 16;
   const minZ = cz * 16;
+  const pal = VPALETTES[plan.theme];
 
   // Paths: 2 blocks wide, stamped at the terrain surface.
   for (const p of plan.paths) {
@@ -584,8 +841,9 @@ function stampVillage(
       const h = columnInfo(px, pz).height;
       const idx = blockIndex(px - minX, h, pz - minZ);
       const cur = voxelId(data[idx]);
-      if (cur === B.GRASS || cur === B.SAND || cur === B.DIRT || cur === B.SNOW_GRASS) {
-        data[idx] = packVoxel(plan.desert ? B.SANDSTONE : B.GRAVEL, 0, 0);
+      if (cur === B.GRASS || cur === B.SAND || cur === B.DIRT || cur === B.SNOW_GRASS ||
+          cur === B.COARSE_DIRT || cur === B.PODZOL || cur === B.RED_SAND) {
+        data[idx] = packVoxel(pal.path, 0, 0);
         // Clear plants above paths.
         const above = blockIndex(px - minX, h + 1, pz - minZ);
         if (blockDef(voxelId(data[above])).replaceable) data[above] = packVoxel(B.AIR, 0, 0);
@@ -600,7 +858,7 @@ function stampVillage(
     if (gh <= SEA_LEVEL) continue;
     const baseId = voxelId(data[blockIndex(lamp.x - minX, gh, lamp.z - minZ)]);
     if (baseId === B.AIR || baseId === B.WATER_SRC) continue;
-    const post = plan.desert ? B.SANDSTONE : B.OAK_LOG;
+    const post = pal.frame;
     for (let i = 1; i <= 3 && gh + i < CHUNK_HEIGHT; i++) {
       data[blockIndex(lamp.x - minX, gh + i, lamp.z - minZ)] = packVoxel(post, 0, 0);
     }
@@ -627,7 +885,7 @@ function stampVillage(
           const [sx, sz] = rotCoord(lx, lz, bw0, bd0, (4 - b.rot) & 3);
           const ch = layer[sz]?.[sx] ?? ' ';
           if (ch === ' ') continue;
-          const id = blueprintChar(ch, b.desert);
+          const id = blueprintChar(ch, VPALETTES[b.theme]);
           if (id < 0) continue;
           const x = b.x + lx;
           const y = b.y + ly;
@@ -652,7 +910,7 @@ function stampVillage(
               const fi = blockIndex(x - minX, fy, z - minZ);
               const fid = voxelId(data[fi]);
               if (fid !== B.AIR && fid !== B.WATER_SRC && !blockDef(fid).replaceable && fid !== B.TALL_GRASS) break;
-              data[fi] = packVoxel(b.desert ? B.SANDSTONE : B.COBBLESTONE, 0, 0);
+              data[fi] = packVoxel(VPALETTES[b.theme].base, 0, 0);
             }
           }
         }
@@ -766,12 +1024,14 @@ function pyramidForRegion(rx: number, rz: number): PyramidPlan | null {
   const rand = new Random(deriveSeed(seed, 'pyramid:' + key));
   let plan: PyramidPlan | null = null;
   if (rand.chance(0.5)) {
-    const ccx = rx * PYRAMID_REGION + 3 + rand.int(PYRAMID_REGION - 6);
-    const ccz = rz * PYRAMID_REGION + 3 + rand.int(PYRAMID_REGION - 6);
-    const wx = ccx * 16 + 8;
-    const wz = ccz * 16 + 8;
-    const c = columnInfo(wx, wz);
-    if (c.biome === Biome.DESERT) {
+    // Deserts are patchy: probe several spots per region for a flat site.
+    for (let attempt = 0; attempt < 8 && !plan; attempt++) {
+      const ccx = rx * PYRAMID_REGION + 3 + rand.int(PYRAMID_REGION - 6);
+      const ccz = rz * PYRAMID_REGION + 3 + rand.int(PYRAMID_REGION - 6);
+      const wx = ccx * 16 + 8;
+      const wz = ccz * 16 + 8;
+      const c = columnInfo(wx, wz);
+      if (c.biome !== Biome.DESERT) continue;
       let minH = c.height;
       let maxH = c.height;
       for (const [ox, oz] of [[-9, 0], [9, 0], [0, -9], [0, 9]]) {
@@ -851,6 +1111,213 @@ function stampPyramid(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Small biome landmarks: igloos (snowy), jungle temples, swamp witch huts.
+// Region-deterministic like pyramids so every intersecting chunk stamps its
+// slice of the structure.
+// ---------------------------------------------------------------------------
+interface LandmarkPlan {
+  x: number;
+  z: number;
+  y: number;
+}
+
+const landmarkCaches = new Map<string, Map<string, LandmarkPlan | null>>();
+
+/** One landmark candidate per (kind, region); accepted if the biome fits. */
+function landmarkForRegion(
+  kind: string,
+  regionSize: number,
+  chance: number,
+  biomes: ReadonlyArray<Biome>,
+  rx: number,
+  rz: number,
+): LandmarkPlan | null {
+  let cache = landmarkCaches.get(kind);
+  if (!cache) {
+    cache = new Map();
+    landmarkCaches.set(kind, cache);
+  }
+  const key = rx + ',' + rz;
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+  const rand = new Random(deriveSeed(seed, kind + ':' + key));
+  let plan: LandmarkPlan | null = null;
+  if (rand.chance(chance)) {
+    // The target biomes are rare, so probe several candidate spots in the
+    // region and take the first whose biome + flatness fit.
+    for (let attempt = 0; attempt < 8 && !plan; attempt++) {
+      const ccx = rx * regionSize + 1 + rand.int(regionSize - 2);
+      const ccz = rz * regionSize + 1 + rand.int(regionSize - 2);
+      const wx = ccx * 16 + 8;
+      const wz = ccz * 16 + 8;
+      const c = columnInfo(wx, wz);
+      if (!biomes.includes(c.biome) || c.height <= SEA_LEVEL) continue;
+      let minH = c.height;
+      let maxH = c.height;
+      for (const [ox, oz] of [[-5, 0], [5, 0], [0, -5], [0, 5]]) {
+        const h = columnInfo(wx + ox, wz + oz).height;
+        minH = Math.min(minH, h);
+        maxH = Math.max(maxH, h);
+      }
+      if (maxH - minH <= 5) plan = { x: wx, z: wz, y: c.height };
+    }
+  }
+  cache.set(key, plan);
+  if (cache.size > 96) cache.delete(cache.keys().next().value as string);
+  return plan;
+}
+
+/** Snow-brick dome with a torch, bed and buried supply chest. */
+function stampIgloo(data: Uint16Array, cx: number, cz: number, p: LandmarkPlan, blockEntities: BlockEntitySpawn[]): void {
+  const minX = cx * 16;
+  const minZ = cz * 16;
+  if (p.x + 4 < minX || p.x - 4 > minX + 15 || p.z + 4 < minZ || p.z - 4 > minZ + 15) return;
+  const put = (x: number, y: number, z: number, id: number): boolean => {
+    if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15 || y < 1 || y >= CHUNK_HEIGHT) return false;
+    data[blockIndex(x - minX, y, z - minZ)] = packVoxel(id, 0, 0);
+    return true;
+  };
+  // Dome: hemispherical snow shell, hollow interior, floor slab.
+  for (let dy = 0; dy <= 3; dy++) {
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dz = -3; dz <= 3; dz++) {
+        const d2 = dx * dx + dz * dz + dy * dy * 2.2;
+        if (d2 > 11.5) continue;
+        const shell = d2 > 5.5;
+        put(p.x + dx, p.y + 1 + dy, p.z + dz, shell ? B.SNOW_BLOCK : B.AIR);
+      }
+    }
+  }
+  put(p.x, p.y + 1, p.z - 3, B.AIR); // door gap
+  put(p.x, p.y + 2, p.z - 3, B.AIR);
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) put(p.x + dx, p.y, p.z + dz, B.SNOW_BLOCK);
+  }
+  put(p.x - 1, p.y + 1, p.z + 1, B.BED);
+  put(p.x + 1, p.y + 2, p.z + 2, B.TORCH);
+  if (put(p.x + 1, p.y + 1, p.z + 1, B.CHEST_N)) {
+    const rand = new Random(deriveSeed(seed, 'igloot:' + p.x + ',' + p.z));
+    blockEntities.push({
+      x: p.x + 1, y: p.y + 1, z: p.z + 1, blockId: B.CHEST_N,
+      loot: [
+        makeStack(ITEM.COAL, rand.range(2, 6)),
+        makeStack(ITEM.COOKED_MUTTON, rand.range(1, 3)),
+        makeStack(B.TORCH, rand.range(2, 5)),
+      ],
+    });
+  }
+}
+
+/** Vine-less mossy jungle temple: two tiers, dark cella with treasure. */
+function stampTemple(data: Uint16Array, cx: number, cz: number, p: LandmarkPlan, blockEntities: BlockEntitySpawn[]): void {
+  const minX = cx * 16;
+  const minZ = cz * 16;
+  const S = 5; // half-width of the base
+  if (p.x + S < minX || p.x - S > minX + 15 || p.z + S < minZ || p.z - S > minZ + 15) return;
+  const rand = new Random(deriveSeed(seed, 'temploot:' + p.x + ',' + p.z));
+  const mossyStone = (r: number): number => (hash2D(seed, p.x + r * 31, p.z - r * 17) < 0.45 ? B.MOSSY_COBBLESTONE : B.COBBLESTONE);
+  for (let dx = -S; dx <= S; dx++) {
+    for (let dz = -S; dz <= S; dz++) {
+      const x = p.x + dx;
+      const z = p.z + dz;
+      if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15) continue;
+      const ring = Math.max(Math.abs(dx), Math.abs(dz));
+      // Foundation down to solid ground.
+      for (let y = p.y; y > 1 && !blockDef(voxelId(data[blockIndex(x - minX, y, z - minZ)])).solid; y--) {
+        data[blockIndex(x - minX, y, z - minZ)] = packVoxel(B.COBBLESTONE, 0, 0);
+      }
+      // Tier 1: 11x11 walls 3 high with a hollow cella; tier 2: 7x7 cap.
+      for (let dy = 1; dy <= 6; dy++) {
+        const y = p.y + dy;
+        if (y >= CHUNK_HEIGHT) break;
+        let id: number | null = null;
+        if (dy <= 3) {
+          if (ring === S || dy === 3) id = ring <= 3 && dy === 3 ? mossyStone(dx * 7 + dz) : ring === S ? mossyStone(dx + dz * 3) : null;
+          if (ring < S && dy < 3) id = B.AIR; // cella
+        } else if (dy <= 5 && ring <= 3) {
+          id = ring === 3 || dy === 5 ? mossyStone(dx * 13 + dz + dy) : B.AIR;
+        } else if (dy === 6 && ring <= 1) {
+          id = mossyStone(dx + dz + 5);
+        }
+        if (id !== null) data[blockIndex(x - minX, y, z - minZ)] = packVoxel(id, 0, 0);
+      }
+    }
+  }
+  const put = (x: number, y: number, z: number, id: number): boolean => {
+    if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15 || y < 1 || y >= CHUNK_HEIGHT) return false;
+    data[blockIndex(x - minX, y, z - minZ)] = packVoxel(id, 0, 0);
+    return true;
+  };
+  // Entrance gap on the south face + torchlit cella with the treasure chest.
+  put(p.x, p.y + 1, p.z - S, B.AIR);
+  put(p.x, p.y + 2, p.z - S, B.AIR);
+  put(p.x - 2, p.y + 1, p.z + 2, B.TORCH);
+  if (put(p.x + 2, p.y + 1, p.z + 2, B.CHEST_W)) {
+    blockEntities.push({
+      x: p.x + 2, y: p.y + 1, z: p.z + 2, blockId: B.CHEST_W,
+      loot: [
+        makeStack(ITEM.GOLD_INGOT, rand.range(1, 4)),
+        makeStack(ITEM.EMERALD, rand.range(1, 3)),
+        makeStack(ITEM.IRON_INGOT, rand.range(1, 4)),
+        makeStack(ITEM.ARROW, rand.range(3, 9)),
+      ],
+    });
+  }
+}
+
+/** Swamp witch hut: spruce shack raised on stilts over the marsh. */
+function stampHut(data: Uint16Array, cx: number, cz: number, p: LandmarkPlan, blockEntities: BlockEntitySpawn[]): void {
+  const minX = cx * 16;
+  const minZ = cz * 16;
+  if (p.x + 3 < minX || p.x - 3 > minX + 15 || p.z + 3 < minZ || p.z - 3 > minZ + 15) return;
+  const put = (x: number, y: number, z: number, id: number): boolean => {
+    if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15 || y < 1 || y >= CHUNK_HEIGHT) return false;
+    data[blockIndex(x - minX, y, z - minZ)] = packVoxel(id, 0, 0);
+    return true;
+  };
+  const floorY = p.y + 3; // stilted above the marsh
+  // Stilts at the corners down to ground.
+  for (const [sx, sz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]] as const) {
+    for (let y = floorY - 1; y > 1; y--) {
+      const x = p.x + sx;
+      const z = p.z + sz;
+      if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15) break;
+      const idx = blockIndex(x - minX, y, z - minZ);
+      if (blockDef(voxelId(data[idx])).solid) break;
+      data[idx] = packVoxel(B.SPRUCE_LOG, 0, 0);
+    }
+  }
+  // Floor + walls + flat roof.
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      put(p.x + dx, floorY, p.z + dz, B.SPRUCE_PLANKS);
+      put(p.x + dx, floorY + 3, p.z + dz, B.SPRUCE_PLANKS);
+      const ring = Math.max(Math.abs(dx), Math.abs(dz));
+      for (let dy = 1; dy <= 2; dy++) {
+        put(p.x + dx, floorY + dy, p.z + dz, ring === 2 ? B.SPRUCE_PLANKS : B.AIR);
+      }
+    }
+  }
+  put(p.x, floorY + 1, p.z - 2, B.AIR); // doorway
+  put(p.x, floorY + 2, p.z - 2, B.AIR);
+  put(p.x - 2, floorY + 1, p.z, B.GLASS); // window
+  put(p.x + 2, floorY + 1, p.z, B.GLASS);
+  put(p.x + 1, floorY + 1, p.z + 1, B.CRAFTING_TABLE);
+  put(p.x - 1, floorY + 2, p.z + 1, B.TORCH);
+  if (put(p.x - 1, floorY + 1, p.z + 1, B.CHEST_N)) {
+    const rand = new Random(deriveSeed(seed, 'hutloot:' + p.x + ',' + p.z));
+    blockEntities.push({
+      x: p.x - 1, y: floorY + 1, z: p.z + 1, blockId: B.CHEST_N,
+      loot: [
+        makeStack(ITEM.REDSTONE, rand.range(2, 7)),
+        makeStack(B.GLOWSTONE, rand.range(1, 2)),
+        makeStack(ITEM.STICK, rand.range(2, 6)),
+      ],
+    });
+  }
+}
+
 /** Crumbled stone-brick ruins + mossy boulders scattered per chunk. */
 function genRuins(data: Uint16Array, cx: number, cz: number, rand: Random): void {
   // Boulder cluster (forest): 30% of chunks.
@@ -895,24 +1362,44 @@ function genRuins(data: Uint16Array, cx: number, cz: number, rand: Random): void
   }
 }
 
-/** Hang stalactites / raise stalagmites where caves opened up. */
+/** Hang stalactites / raise stalagmites + dress cave floors near the lava. */
 function genSpeleothems(data: Uint16Array, rand: Random): void {
-  for (let n = 0; n < 40; n++) {
+  for (let n = 0; n < 60; n++) {
     const x = rand.int(16);
     const z = rand.int(16);
-    const y = 6 + rand.int(50);
+    const y = 6 + rand.int(60);
     if (y + 1 >= CHUNK_HEIGHT) continue;
     const idx = blockIndex(x, y, z);
     if (voxelId(data[idx]) !== B.AIR) continue;
     const above = voxelId(data[blockIndex(x, y + 1, z)]);
     const below = y > 1 ? voxelId(data[blockIndex(x, y - 1, z)]) : B.BEDROCK;
     if (above === B.STONE && rand.chance(0.6)) {
-      data[idx] = packVoxel(B.COBBLESTONE, 0, 0);
-      if (y > 1 && voxelId(data[blockIndex(x, y - 1, z)]) === B.AIR && rand.chance(0.4)) {
-        data[blockIndex(x, y - 1, z)] = packVoxel(B.COBBLESTONE, 0, 0);
+      // Hanging chain, 1-3 long, tapering from stone to cobble.
+      const len = rand.range(1, 3);
+      for (let i = 0; i < len; i++) {
+        const yy = y - i;
+        if (yy <= 1) break;
+        const ci = blockIndex(x, yy, z);
+        if (voxelId(data[ci]) !== B.AIR) break;
+        data[ci] = packVoxel(i === len - 1 && len > 1 ? B.COBBLESTONE : B.STONE, 0, 0);
       }
-    } else if (below === B.STONE && rand.chance(0.4)) {
-      data[idx] = packVoxel(B.COBBLESTONE, 0, 0);
+    } else if (below === B.STONE && rand.chance(0.45)) {
+      data[idx] = packVoxel(B.STONE, 0, 0);
+      if (rand.chance(0.35) && y + 1 < CHUNK_HEIGHT && voxelId(data[blockIndex(x, y + 1, z)]) === B.AIR) {
+        data[blockIndex(x, y + 1, z)] = packVoxel(B.COBBLESTONE, 0, 0);
+      }
+    }
+  }
+  // Floor dressing near the lava table: magma seams and gravel spills.
+  for (let n = 0; n < 24; n++) {
+    const x = rand.int(16);
+    const z = rand.int(16);
+    const y = 8 + rand.int(9);
+    const idx = blockIndex(x, y, z);
+    if (voxelId(data[idx]) !== B.AIR) continue;
+    const bi = blockIndex(x, y - 1, z);
+    if (voxelId(data[bi]) === B.STONE) {
+      data[bi] = packVoxel(rand.chance(0.55) ? B.MAGMA : B.GRAVEL, 0, 0);
     }
   }
 }
@@ -920,19 +1407,29 @@ function genSpeleothems(data: Uint16Array, rand: Random): void {
 // ---------------------------------------------------------------------------
 // Ores
 // ---------------------------------------------------------------------------
-function genOres(data: Uint16Array, rand: Random): void {
+function genOres(data: Uint16Array, rand: Random, mountains: boolean): void {
   const veins: Array<[number, number, number, number, number]> = [
     // [blockId, attempts, minY, maxY, size]
-    // Stone variants as large blobs.
+    // Stone variants as large blobs + buried dirt/gravel pockets.
     [B.GRANITE, 2, 4, 70, 18],
     [B.DIORITE, 2, 4, 70, 18],
     [B.ANDESITE, 2, 4, 70, 18],
-    [B.COAL_ORE, 14, 6, 100, 8],
-    [B.IRON_ORE, 9, 4, 56, 6],
+    [B.DIRT, 3, 20, 80, 12],
+    [B.GRAVEL, 2, 8, 60, 12],
+    // Height-banded ores: coal rich near the surface, iron peaks mid-depth,
+    // the precious stuff only near the lava table.
+    [B.COAL_ORE, 10, 40, 110, 10],
+    [B.COAL_ORE, 5, 6, 40, 6],
+    [B.IRON_ORE, 7, 20, 60, 6],
+    [B.IRON_ORE, 4, 4, 20, 4],
     [B.GOLD_ORE, 3, 4, 30, 5],
     [B.REDSTONE_ORE, 6, 2, 18, 6],
     [B.DIAMOND_ORE, 2, 2, 14, 4],
   ];
+  if (mountains) {
+    // Emeralds are a mountain exclusive and spawn as scattered single blocks.
+    veins.push([B.EMERALD_ORE, 5, 20, 110, 1]);
+  }
   for (const [id, attempts, minY, maxY, size] of veins) {
     for (let i = 0; i < attempts; i++) {
       let x = rand.int(16);
@@ -1027,6 +1524,7 @@ export function initGenerator(s: number): void {
   seed = s;
   villageCache.clear();
   pyramidCache.clear();
+  landmarkCaches.clear();
   netherCarve = null;
   initNoise();
 }
@@ -1129,29 +1627,43 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
       heights[z * 16 + x] = info.height;
       biomes[z * 16 + x] = info.biome;
       const h = info.height;
-      const snow = h > 108 || info.biome === Biome.SNOWY;
+      const biome = info.biome;
+      const sr = hash2D(surfSeed, wx, wz); // per-column surface variation
+      const snow = h > 104 || biome === Biome.SNOWY || biome === Biome.SNOWY_TAIGA;
 
       for (let y = 0; y <= h; y++) {
         let id: number;
         if (y === 0) id = B.BEDROCK;
-        else if (y < h - 3) id = B.STONE;
-        else if (info.biome === Biome.DESERT) id = y >= h - 1 ? B.SAND : B.SANDSTONE;
-        else if (info.biome === Biome.OCEAN) id = y === h ? (hash2D(seed, wx, wz) < 0.5 ? B.SAND : B.GRAVEL) : B.DIRT;
+        else if (biome === Biome.BADLANDS && y >= h - 12 && y > SEA_LEVEL - 6) {
+          // Painted mesa walls: wavy terracotta strata; loose red sand caps
+          // the low ground between plateaus.
+          id = y === h && h <= SEA_LEVEL + 5 ? B.RED_SAND : mesaStrata(y, wx, wz);
+        } else if (y < h - 3) id = B.STONE;
+        else if (biome === Biome.DESERT) id = y >= h - 1 ? B.SAND : B.SANDSTONE;
+        else if (biome === Biome.BEACH) id = y >= h - 2 ? B.SAND : B.DIRT;
+        else if (biome === Biome.OCEAN) id = y === h ? (sr < 0.5 ? B.SAND : B.GRAVEL) : B.DIRT;
+        else if (biome === Biome.RIVER) id = y === h ? (sr < 0.55 ? B.SAND : B.GRAVEL) : B.DIRT;
         else if (y === h) {
-          if (h <= SEA_LEVEL + 1 && info.biome !== Biome.SWAMP) id = B.SAND; // beaches
+          if (biome === Biome.MUSHROOM) id = B.MYCELIUM;
+          else if (biome === Biome.ICE_SPIKES) id = B.SNOW_BLOCK;
+          else if (biome === Biome.STONY_PEAKS) id = snow && sr < 0.75 ? B.SNOW_BLOCK : sr < 0.88 ? B.STONE : B.GRAVEL;
+          else if (biome === Biome.MOUNTAINS && h > 96) id = snow ? B.SNOW_GRASS : B.STONE;
           else if (snow) id = B.SNOW_GRASS;
-          else if (info.biome === Biome.MOUNTAINS && h > 84) id = B.STONE;
-          else if (info.biome === Biome.SWAMP) id = B.SWAMP_GRASS;
+          else if (biome === Biome.TAIGA) id = sr < 0.4 ? B.PODZOL : sr < 0.48 ? B.COARSE_DIRT : B.GRASS;
+          else if (biome === Biome.SAVANNA) id = sr < 0.12 ? B.COARSE_DIRT : B.GRASS;
+          else if (biome === Biome.SWAMP) id = B.SWAMP_GRASS;
           else id = B.GRASS;
-        } else id = B.DIRT;
+        } else id = biome === Biome.STONY_PEAKS ? B.STONE : B.DIRT;
         data[blockIndex(x, y, z)] = packVoxel(id, 0, 0);
       }
-      // Ocean / lake water fill.
+      // Ocean / lake / river water fill.
       for (let y = h + 1; y <= SEA_LEVEL; y++) {
         data[blockIndex(x, y, z)] = packVoxel(B.WATER_SRC, 0, 0);
       }
-      // Snowy biomes freeze the top water cell into an ice sheet.
-      if (info.biome === Biome.SNOWY && h < SEA_LEVEL) {
+      // Cold biomes freeze the top water cell into an ice sheet.
+      const freezing =
+        biome === Biome.SNOWY || biome === Biome.SNOWY_TAIGA || biome === Biome.ICE_SPIKES;
+      if (freezing && h < SEA_LEVEL) {
         data[blockIndex(x, SEA_LEVEL, z)] = packVoxel(B.ICE, 0, 0);
       }
     }
@@ -1188,7 +1700,8 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
     }
   }
 
-  genOres(data, rand);
+  const centerBiome = biomes[8 * 16 + 8] as Biome;
+  genOres(data, rand, centerBiome === Biome.MOUNTAINS || centerBiome === Biome.STONY_PEAKS);
   genDungeon(data, cx, cz, blockEntities, rand);
   genSpeleothems(data, rand);
   genRuins(data, cx, cz, rand);
@@ -1198,6 +1711,27 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
     for (let rz = regionOf2(cz, PYRAMID_REGION) - 1; rz <= regionOf2(cz, PYRAMID_REGION) + 1; rz++) {
       const plan = pyramidForRegion(rx, rz);
       if (plan) stampPyramid(data, cx, cz, plan, blockEntities);
+    }
+  }
+
+  // Small biome landmarks: igloos, jungle temples, swamp witch huts.
+  const LANDMARKS: Array<{
+    kind: string;
+    region: number;
+    chance: number;
+    biomes: Biome[];
+    stamp: (d: Uint16Array, cx: number, cz: number, p: LandmarkPlan, be: BlockEntitySpawn[]) => void;
+  }> = [
+    { kind: 'igloo', region: 14, chance: 0.45, biomes: [Biome.SNOWY, Biome.SNOWY_TAIGA, Biome.ICE_SPIKES], stamp: stampIgloo },
+    { kind: 'temple', region: 18, chance: 0.5, biomes: [Biome.JUNGLE], stamp: stampTemple },
+    { kind: 'hut', region: 14, chance: 0.4, biomes: [Biome.SWAMP], stamp: stampHut },
+  ];
+  for (const lm of LANDMARKS) {
+    for (let rx = regionOf2(cx, lm.region) - 1; rx <= regionOf2(cx, lm.region) + 1; rx++) {
+      for (let rz = regionOf2(cz, lm.region) - 1; rz <= regionOf2(cz, lm.region) + 1; rz++) {
+        const plan = landmarkForRegion(lm.kind, lm.region, lm.chance, lm.biomes, rx, rz);
+        if (plan) lm.stamp(data, cx, cz, plan, blockEntities);
+      }
     }
   }
 
@@ -1228,7 +1762,9 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
     }
   }
 
-  // --- Decoration: tall grass, flowers, cacti ---
+  // --- Decoration: tall grass, flowers, cacti, mushrooms, ice spikes ---
+  const decoSeed = deriveSeed(seed, 'deco');
+  const decoSeed2 = deriveSeed(seed, 'deco2');
   for (let z = 0; z < 16; z++) {
     for (let x = 0; x < 16; x++) {
       const wx = cx * 16 + x;
@@ -1239,7 +1775,8 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
       const groundIdx = blockIndex(x, h, z);
       const aboveIdx = blockIndex(x, h + 1, z);
       const ground = voxelId(data[groundIdx]);
-      const r = hash2D(deriveSeed(seed, 'deco'), wx, wz);
+      const r = hash2D(decoSeed, wx, wz);
+      const r2 = hash2D(decoSeed2, wx, wz);
       // Lily pads float on swamp water (in the air cell above the surface).
       if (biome === Biome.SWAMP) {
         const surfIdx = blockIndex(x, SEA_LEVEL, z);
@@ -1249,39 +1786,127 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
         }
       }
       if (voxelId(data[aboveIdx]) !== B.AIR) continue;
-      if (biome === Biome.DESERT && ground === B.SAND && r < 0.012) {
-        const ch = 1 + Math.floor(r * 250) % 3;
-        for (let i = 0; i < ch && h + 1 + i < CHUNK_HEIGHT; i++) {
-          data[blockIndex(x, h + 1 + i, z)] = packVoxel(B.CACTUS, 0, 0);
+      if ((biome === Biome.DESERT && ground === B.SAND) || (biome === Biome.BADLANDS && ground === B.RED_SAND)) {
+        // Cacti + dry dead bushes; badlands lean heavily toward dead bushes.
+        const cactusP = biome === Biome.DESERT ? 0.012 : 0.005;
+        const bushP = biome === Biome.DESERT ? 0.01 : 0.035;
+        if (r < cactusP) {
+          const ch = 1 + Math.floor(r * 2500) % 3;
+          for (let i = 0; i < ch && h + 1 + i < CHUNK_HEIGHT; i++) {
+            data[blockIndex(x, h + 1 + i, z)] = packVoxel(B.CACTUS, 0, 0);
+          }
+        } else if (r2 < bushP) {
+          data[aboveIdx] = packVoxel(B.DEAD_BUSH, 0, 0);
         }
+      } else if (biome === Biome.ICE_SPIKES && ground === B.SNOW_BLOCK && r < 0.014) {
+        // Packed-ice spires: mostly short spikes, the odd towering one.
+        const tall = r2 < 0.18;
+        const sh = tall ? 8 + Math.floor(r2 * 40) : 3 + (Math.floor(r * 1000) % 4);
+        for (let i = 1; i <= sh && h + i < CHUNK_HEIGHT; i++) {
+          data[blockIndex(x, h + i, z)] = packVoxel(B.PACKED_ICE, 0, 0);
+        }
+        if (tall) {
+          for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+            const nx = x + ox;
+            const nz = z + oz;
+            if (nx < 0 || nx > 15 || nz < 0 || nz > 15) continue;
+            const nh = heights[nz * 16 + nx];
+            for (let i = 1; i <= 2 && nh + i < CHUNK_HEIGHT; i++) {
+              const ni = blockIndex(nx, nh + i, nz);
+              if (blockDef(voxelId(data[ni])).replaceable) data[ni] = packVoxel(B.PACKED_ICE, 0, 0);
+            }
+          }
+        }
+      } else if (biome === Biome.MUSHROOM && ground === B.MYCELIUM) {
+        if (r < 0.008) stampGiantMushroom(data, cx, cz, wx, h + 1, wz, r2 < 0.5);
+        else if (r < 0.06) data[aboveIdx] = packVoxel(r2 < 0.5 ? B.RED_MUSHROOM : B.BROWN_MUSHROOM, 0, 0);
       } else if (ground === B.SWAMP_GRASS) {
-        // Dense reeds, occasional marsh flower.
+        // Dense reeds, occasional marsh flower or mushroom.
         if (r < 0.32) data[aboveIdx] = packVoxel(B.TALL_GRASS, 0, 0);
-        else if (r < 0.34) data[aboveIdx] = packVoxel(B.FLOWER_YELLOW, 0, 0);
+        else if (r < 0.335) data[aboveIdx] = packVoxel(B.FLOWER_YELLOW, 0, 0);
+        else if (r < 0.35) data[aboveIdx] = packVoxel(B.BROWN_MUSHROOM, 0, 0);
+      } else if (ground === B.PODZOL || (ground === B.GRASS && (biome === Biome.TAIGA || biome === Biome.SNOWY_TAIGA))) {
+        // Taiga floor: ferns and forest mushrooms between the spruces.
+        if (r < 0.16) data[aboveIdx] = packVoxel(B.FERN, 0, 0);
+        else if (r < 0.2) data[aboveIdx] = packVoxel(B.TALL_GRASS, 0, 0);
+        else if (r < 0.215) data[aboveIdx] = packVoxel(r2 < 0.5 ? B.RED_MUSHROOM : B.BROWN_MUSHROOM, 0, 0);
+      } else if (ground === B.GRASS && biome === Biome.FLOWER_FOREST) {
+        // Meadow carpet: every flower species mixed through tall grass.
+        if (r < 0.22) {
+          const pick = Math.floor(r2 * 6);
+          const flower =
+            pick === 0 ? B.FLOWER_RED : pick === 1 ? B.FLOWER_YELLOW :
+            pick === 2 ? B.FLOWER_BLUE : pick === 3 ? B.FLOWER_WHITE :
+            pick === 4 ? B.FLOWER_RED : B.FLOWER_YELLOW;
+          data[aboveIdx] = packVoxel(flower, 0, 0);
+        } else if (r < 0.45) data[aboveIdx] = packVoxel(B.TALL_GRASS, 0, 0);
+      } else if (ground === B.GRASS && biome === Biome.DARK_FOREST) {
+        if (r < 0.1) data[aboveIdx] = packVoxel(B.TALL_GRASS, 0, 0);
+        else if (r < 0.13) data[aboveIdx] = packVoxel(r2 < 0.5 ? B.RED_MUSHROOM : B.BROWN_MUSHROOM, 0, 0);
       } else if (ground === B.GRASS) {
-        // Jungle floor is thick with ferns; other grass biomes stay sparse.
-        const grassMax = biome === Biome.JUNGLE ? 0.4 : 0.18;
-        if (r < grassMax) data[aboveIdx] = packVoxel(B.TALL_GRASS, 0, 0);
-        else if (r < grassMax + 0.017) {
-          data[aboveIdx] = packVoxel(r < grassMax + 0.009 ? B.FLOWER_YELLOW : B.FLOWER_RED, 0, 0);
+        // Jungle floor is thick, savanna is a sea of dry grass, the rest sparse.
+        const grassMax = biome === Biome.JUNGLE ? 0.4 : biome === Biome.SAVANNA ? 0.5 : 0.18;
+        if (r < grassMax) {
+          data[aboveIdx] = packVoxel(biome === Biome.JUNGLE && r2 < 0.4 ? B.FERN : B.TALL_GRASS, 0, 0);
+        } else if (r < grassMax + 0.017 && biome !== Biome.SAVANNA) {
+          const flower =
+            r2 < 0.35 ? B.FLOWER_YELLOW : r2 < 0.7 ? B.FLOWER_RED :
+            r2 < 0.85 ? B.FLOWER_BLUE : B.FLOWER_WHITE;
+          data[aboveIdx] = packVoxel(flower, 0, 0);
         }
       }
     }
   }
 
-  // --- Passive mob spawns (sheep clusters on grass) ---
-  if (rand.chance(0.22)) {
+  // --- Passive mob spawns: small biome-matched herds (not just sheep) ---
+  // [type, weight] tables per biome; one herd of 1-3 per ~6th chunk.
+  if (rand.chance(0.16)) {
     const sx = rand.int(13) + 1;
     const sz = rand.int(13) + 1;
     const biome = biomes[sz * 16 + sx] as Biome;
-    if (biome === Biome.PLAINS || biome === Biome.FOREST) {
-      const n = rand.range(2, 4);
+    let table: Array<[EntityType, number]> | null = null;
+    switch (biome) {
+      case Biome.PLAINS:
+        table = [[EntityType.SHEEP, 0.3], [EntityType.COW, 0.35], [EntityType.PIG, 0.15], [EntityType.CHICKEN, 0.2]];
+        break;
+      case Biome.FOREST:
+      case Biome.BIRCH_FOREST:
+      case Biome.FLOWER_FOREST:
+      case Biome.DARK_FOREST:
+        table = [[EntityType.PIG, 0.4], [EntityType.CHICKEN, 0.3], [EntityType.COW, 0.2], [EntityType.SHEEP, 0.1]];
+        break;
+      case Biome.TAIGA:
+      case Biome.SNOWY_TAIGA:
+        table = [[EntityType.PIG, 0.45], [EntityType.CHICKEN, 0.3], [EntityType.SHEEP, 0.25]];
+        break;
+      case Biome.SAVANNA:
+        table = [[EntityType.COW, 0.55], [EntityType.SHEEP, 0.3], [EntityType.CHICKEN, 0.15]];
+        break;
+      case Biome.JUNGLE:
+        table = [[EntityType.CHICKEN, 0.75], [EntityType.PIG, 0.25]];
+        break;
+      case Biome.CHERRY:
+      case Biome.MOUNTAINS:
+        table = [[EntityType.SHEEP, 0.6], [EntityType.CHICKEN, 0.4]];
+        break;
+      default:
+        break;
+    }
+    if (table) {
+      let roll = rand.float();
+      let type = table[table.length - 1][0];
+      for (const [t, w] of table) {
+        if (roll < w) { type = t; break; }
+        roll -= w;
+      }
+      const n = rand.range(1, 3);
       for (let i = 0; i < n; i++) {
         const ox = Math.min(15, Math.max(0, sx + rand.range(-2, 2)));
         const oz = Math.min(15, Math.max(0, sz + rand.range(-2, 2)));
         const h = heights[oz * 16 + ox];
-        if (voxelId(data[blockIndex(ox, h, oz)]) === B.GRASS) {
-          mobs.push({ type: EntityType.SHEEP, x: cx * 16 + ox + 0.5, y: h + 1, z: cz * 16 + oz + 0.5 });
+        const ground = voxelId(data[blockIndex(ox, h, oz)]);
+        if (ground === B.GRASS || ground === B.SNOW_GRASS || ground === B.PODZOL || ground === B.COARSE_DIRT) {
+          mobs.push({ type, x: cx * 16 + ox + 0.5, y: h + 1, z: cz * 16 + oz + 0.5 });
         }
       }
     }

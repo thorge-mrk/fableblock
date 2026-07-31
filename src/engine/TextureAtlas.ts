@@ -505,6 +505,21 @@ function coloredPlanks(base: RGB, seam: RGB): Painter {
   };
 }
 
+/** Baked-clay painter: soft banded strata with fine grit (badlands family). */
+function terracottaPainter(base: RGB): Painter {
+  return (p) => {
+    p.noiseFill(base, 0.07);
+    for (const y of [4, 9, 13]) {
+      for (let x = 0; x < N; x++) {
+        const f = 0.86 + (p.rand() - 0.5) * 0.06;
+        p.px(x, y, base[0] * f, base[1] * f, base[2] * f);
+      }
+    }
+    p.speckle([base[0] * 1.14, base[1] * 1.14, base[2] * 1.14], 6, 1);
+    p.bevel(0.05);
+  };
+}
+
 /** Parametric leaf painter (oak recipe: shadow bed + bright clumps + holes). */
 function coloredLeaves(base: RGB, bright: RGB, dark: RGB, density: number): Painter {
   return (p) => {
@@ -640,12 +655,25 @@ const PAINTERS: Record<number, Painter> = {
     }
   },
   [TILE.SANDSTONE_TOP]: (p) => {
-    p.noiseFill([216, 203, 155], 0.08);
+    // Smooth-cut slab: framed face with faint tool marks.
+    p.noiseFill([216, 203, 155], 0.06);
     p.border([196, 183, 135]);
+    p.speckle([228, 216, 170], 5, 1);
+    p.speckle([200, 186, 138], 4, 1);
+    p.bevel(0.06);
   },
   [TILE.SANDSTONE_SIDE]: (p) => {
-    p.noiseFill([216, 203, 155], 0.08);
-    for (const y of [5, 10]) for (let x = 0; x < N; x++) p.px(x, y, 190, 176, 128);
+    // Layered sediment bands with embedded grit and a darker footing.
+    p.noiseFill([216, 203, 155], 0.07);
+    for (const y of [4, 9, 13]) {
+      for (let x = 0; x < N; x++) {
+        const f = 0.9 + (p.rand() - 0.5) * 0.05;
+        p.px(x, y, 196 * f, 182 * f, 134 * f);
+      }
+    }
+    p.speckle([190, 172, 120], 6, 1);
+    p.speckle([230, 218, 174], 5, 1);
+    for (let x = 0; x < N; x++) p.px(x, 15, 188, 174, 126);
   },
   [TILE.OAK_LOG_SIDE]: (p) => {
     // Bark with deep ridge grooves and a knot.
@@ -729,7 +757,18 @@ const PAINTERS: Record<number, Painter> = {
     for (let i = 0; i < 6; i++) p.px(9 - i, 3 + i, 226, 244, 250, 170);
     for (let i = 0; i < 4; i++) p.px(12 - i, 8 + i, 214, 236, 244, 120);
   },
-  [TILE.SNOW_TOP]: (p) => p.noiseFill([240, 246, 250], 0.05),
+  [TILE.SNOW_TOP]: (p) => {
+    // Fresh powder with a few glinting crystals and soft drift shadows.
+    p.noiseFill([240, 246, 250], 0.05);
+    for (let i = 0; i < 6; i++) {
+      p.px(Math.floor(p.rand() * N), Math.floor(p.rand() * N), 255, 255, 255);
+    }
+    for (let i = 0; i < 4; i++) {
+      const x = Math.floor(p.rand() * (N - 3));
+      const y = Math.floor(p.rand() * N);
+      p.rect(x, y, 3, 1, [224, 232, 240]);
+    }
+  },
   [TILE.SNOW_SIDE]: (p) => {
     p.noiseFill(DIRT_BROWN, 0.2);
     for (let x = 0; x < N; x++) for (let y = 0; y < 4; y++) p.px(x, y, 240, 246, 250);
@@ -1531,6 +1570,181 @@ const PAINTERS: Record<number, Painter> = {
     for (let x = 8; x < 15; x++) p.px(x, 8, 0, 0, 0, 0);
     for (let a = 0; a < 5; a++) p.line(8, 8, 8 + Math.cos(a) * 6, 8 + Math.sin(a) * 6, [72, 132, 66]);
     p.px(8, 8, 240, 232, 200); // flower bud
+  },
+  // --- Biome blocks (V4) ----------------------------------------------------
+  [TILE.ACACIA_LOG_SIDE]: coloredLogSide([116, 100, 88], [82, 68, 58], [3, 9, 13], 4),
+  [TILE.ACACIA_LOG_TOP]: coloredLogTop([176, 96, 58], [96, 80, 70], [148, 78, 46], [118, 60, 36]),
+  [TILE.ACACIA_LEAVES]: coloredLeaves([96, 130, 40], [128, 160, 60], [70, 100, 30], 0.66),
+  [TILE.ACACIA_PLANKS]: coloredPlanks([168, 92, 50], [126, 66, 36]),
+  [TILE.DARK_OAK_LOG_SIDE]: coloredLogSide([56, 42, 26], [36, 26, 16], [2, 7, 12], 5),
+  [TILE.DARK_OAK_LOG_TOP]: coloredLogTop([88, 64, 40], [42, 30, 18], [66, 48, 30], [48, 34, 20]),
+  [TILE.DARK_OAK_LEAVES]: coloredLeaves([32, 64, 22], [52, 88, 34], [20, 44, 16], 0.82),
+  [TILE.DARK_OAK_PLANKS]: coloredPlanks([76, 56, 34], [52, 38, 22]),
+  [TILE.RED_SAND]: (p) => {
+    // Same wind-rippled dune recipe as sand, in badlands orange.
+    p.noiseFill([190, 106, 52], 0.08);
+    for (let y = 1; y < N; y += 4) {
+      for (let x = 0; x < N; x++) {
+        const yy = y + Math.round(Math.sin((x / N) * Math.PI * 2 + y) * 1.2);
+        p.px(x, yy, 164, 88, 42);
+        p.px(x, yy + 1, 212, 128, 66);
+      }
+    }
+  },
+  [TILE.TERRACOTTA]: terracottaPainter([152, 94, 68]),
+  [TILE.TERRACOTTA_ORANGE]: terracottaPainter([164, 84, 38]),
+  [TILE.TERRACOTTA_RED]: terracottaPainter([143, 61, 47]),
+  [TILE.TERRACOTTA_WHITE]: terracottaPainter([206, 176, 158]),
+  [TILE.TERRACOTTA_YELLOW]: terracottaPainter([184, 132, 50]),
+  [TILE.PODZOL_TOP]: (p) => {
+    // Fallen-needle litter: rusty base with darker duff patches and twigs.
+    p.noiseFill([108, 68, 32], 0.2);
+    for (let i = 0; i < 8; i++) {
+      const x = Math.floor(p.rand() * (N - 3));
+      const y = Math.floor(p.rand() * N);
+      p.rect(x, y, 2 + Math.floor(p.rand() * 2), 1, [82, 52, 24]);
+    }
+    p.speckle([140, 96, 48], 10, 1);
+    p.speckle([60, 40, 20], 6, 1);
+  },
+  [TILE.PODZOL_SIDE]: (p) => {
+    p.noiseFill(DIRT_BROWN, 0.18);
+    p.speckle([104, 72, 48], 6, 1);
+    for (let x = 0; x < N; x++) {
+      const depth = 2 + Math.floor(p.rand() * 2);
+      for (let y = 0; y < depth; y++) p.px(x, y, 108 * (1 - y * 0.08), 68 * (1 - y * 0.08), 32);
+    }
+  },
+  [TILE.MYCELIUM_TOP]: (p) => {
+    // Grey-violet fungal mat with pale spore dots.
+    p.noiseFill([120, 102, 114], 0.14);
+    p.speckle([150, 130, 146], 12, 1);
+    p.speckle([94, 78, 92], 8, 1);
+    for (let i = 0; i < 5; i++) {
+      p.px(Math.floor(p.rand() * N), Math.floor(p.rand() * N), 196, 178, 196);
+    }
+  },
+  [TILE.MYCELIUM_SIDE]: (p) => {
+    p.noiseFill(DIRT_BROWN, 0.18);
+    p.speckle([104, 72, 48], 6, 1);
+    for (let x = 0; x < N; x++) {
+      const depth = 2 + Math.floor(p.rand() * 2);
+      for (let y = 0; y < depth; y++) p.px(x, y, 120, 102, 114);
+      if (x % 4 === 1) p.px(x, 0, 150, 130, 146);
+    }
+  },
+  [TILE.PACKED_ICE]: (p) => {
+    // Denser, colder ice: compressed slab facets, no see-through cracks.
+    p.cellNoise([142, 180, 222], 0.1, 4);
+    p.line(3, 13, 13, 3, [188, 216, 244]);
+    p.line(2, 8, 8, 2, [170, 202, 236]);
+    p.border([116, 154, 200]);
+    p.bevel(0.08);
+  },
+  [TILE.MUSHROOM_STEM]: (p) => {
+    // Pale fibrous stem: vertical strands with subtle shading.
+    p.noiseFill([202, 194, 180], 0.06);
+    for (const x of [2, 5, 9, 13]) {
+      for (let y = 0; y < N; y++) if (p.rand() < 0.8) p.px(x, y, 178, 170, 156);
+    }
+    p.bevel(0.06);
+  },
+  [TILE.MUSHROOM_CAP_RED]: (p) => {
+    p.noiseFill([176, 42, 38], 0.12);
+    for (const [cx, cy, r] of [[4, 4, 1.8], [11, 8, 2.1], [6, 12, 1.5]] as const) {
+      p.disc(cx, cy, r, [238, 230, 222], 0.08);
+    }
+    p.bevel(0.08);
+  },
+  [TILE.MUSHROOM_CAP_BROWN]: (p) => {
+    p.noiseFill([142, 104, 76], 0.1);
+    p.speckle([118, 84, 58], 8, 1);
+    p.speckle([166, 128, 96], 6, 1);
+    p.bevel(0.08);
+  },
+  [TILE.RED_MUSHROOM]: (p) => {
+    p.clear();
+    for (let y = 9; y < 15; y++) p.px(7, y, 214, 202, 186);
+    for (let y = 9; y < 15; y++) p.px(8, y, 190, 178, 162);
+    // Domed red cap with white spots.
+    p.disc(7.5, 7, 3.4, [196, 44, 38], 0.08);
+    p.rect(4, 8, 8, 1, [160, 34, 30]);
+    p.px(6, 6, 238, 230, 222);
+    p.px(9, 7, 238, 230, 222);
+  },
+  [TILE.BROWN_MUSHROOM]: (p) => {
+    p.clear();
+    for (let y = 8; y < 15; y++) p.px(7, y, 208, 196, 178);
+    // Flat tan cap.
+    p.rect(3, 6, 9, 2, [150, 110, 80]);
+    p.rect(4, 5, 7, 1, [166, 126, 94]);
+    p.rect(5, 8, 5, 1, [122, 88, 62]);
+  },
+  [TILE.DEAD_BUSH]: (p) => {
+    p.clear();
+    // Dry forked twigs rising from a root point.
+    for (const [tx, ty] of [[3, 3], [7, 2], [12, 4], [5, 6], [10, 6]] as const) {
+      p.line(7, 15, tx, ty, [124, 88, 48]);
+    }
+    p.line(7, 15, 8, 9, [104, 72, 38]);
+    p.px(7, 15, 88, 60, 32);
+    p.px(8, 15, 88, 60, 32);
+  },
+  [TILE.FERN]: (p) => {
+    p.clear();
+    // Arching fronds with paired leaflets.
+    for (const [dir, len] of [[-1, 6], [1, 6], [-1, 4], [1, 4], [0, 7]] as const) {
+      let x = 7.5;
+      for (let i = 0; i <= len; i++) {
+        const y = 14 - i * 1.6;
+        x += dir * 0.9;
+        const f = 1 + (p.rand() - 0.5) * 0.25;
+        p.px(x, y, 66 * f, 128 * f, 52 * f);
+        p.px(x - dir, y + 0.5, 82 * f, 148 * f, 62 * f);
+      }
+    }
+  },
+  [TILE.FLOWER_BLUE]: (p) => {
+    p.clear();
+    for (let y = 7; y < N; y++) p.px(7, y, 58, 110, 40);
+    p.px(8, 11, 58, 110, 40);
+    p.disc(7, 5, 2.2, [72, 100, 214]);
+    p.px(6, 4, 108, 136, 236);
+    p.px(7, 5, 40, 56, 150);
+  },
+  [TILE.FLOWER_WHITE]: (p) => {
+    p.clear();
+    for (let y = 8; y < N; y++) p.px(8, y, 58, 110, 40);
+    for (const [dx, dy] of [[-2, 0], [2, 0], [0, -2], [0, 2], [-1, -1], [1, 1], [-1, 1], [1, -1]] as const) {
+      p.px(8 + dx, 5 + dy, 238, 238, 232);
+    }
+    p.disc(8, 5, 1.1, [222, 190, 82]);
+  },
+  [TILE.EMERALD_ORE]: orePainter([62, 208, 112], 'diamond'),
+  [TILE.ITEM_EMERALD]: (p) => {
+    p.clear();
+    // Upright hexagonal-cut gem: lit left facet, shaded right, white sparkle.
+    for (let d = -4; d <= 4; d++) {
+      const w = 3 - Math.floor(Math.abs(d) / 2);
+      for (let k = -w; k <= w; k++) {
+        const shade = k < 0 ? 1.2 : k === 0 ? 1 : 0.75;
+        p.px(8 + k, 8 + d, 52 * shade, 196 * shade, 100 * shade);
+      }
+    }
+    p.px(7, 5, 224, 255, 236);
+    p.px(8, 12, 20, 110, 52);
+    p.outline([12, 44, 24]);
+  },
+  [TILE.COARSE_DIRT]: (p) => {
+    // Dirt packed with grit and small stones — never grows grass.
+    p.noiseFill(DIRT_BROWN, 0.22);
+    p.speckle([104, 72, 48], 8, 1);
+    for (let i = 0; i < 6; i++) {
+      const x = Math.floor(p.rand() * (N - 2));
+      const y = Math.floor(p.rand() * (N - 2));
+      p.rect(x, y, 2, 1, [138, 132, 126]);
+      p.px(x, y + 1, 96, 92, 88);
+    }
   },
 };
 

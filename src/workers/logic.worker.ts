@@ -36,6 +36,9 @@ import { SNAP_STRIDE } from '../net/messages';
 
 const ctx = self as unknown as Worker;
 const DT = TICK_MS / 1000; // 0.05s
+// Just enough to clear a 1-block step (v²/2g = 1.01) — mobs used to launch
+// visibly higher than the player on every hop.
+const MOB_JUMP_SPEED = 7.8;
 
 // ---------------------------------------------------------------------------
 // Worker state
@@ -881,7 +884,7 @@ function stepEntity(e: Ent, walkX: number, walkZ: number, wantJump: boolean): vo
     if (e.type === EntityType.ITEM && fluid.water) e.vy += 22 * DT; // items float
   } else {
     if (wantJump && e.onGround) {
-      e.vy = 8;
+      e.vy = MOB_JUMP_SPEED;
       e.onGround = false;
     }
     e.vy += GRAVITY * DT;
@@ -899,7 +902,7 @@ function stepEntity(e: Ent, walkX: number, walkZ: number, wantJump: boolean): vo
   // Auto-jump assist when running into a wall.
   if ((res.hitX || res.hitZ) && e.onGround && !wantJump && (walkX !== 0 || walkZ !== 0) &&
       e.type !== EntityType.ITEM && e.type !== EntityType.ARROW) {
-    e.vy = 8;
+    e.vy = MOB_JUMP_SPEED;
   }
   if (res.hitY) e.vy = 0;
   e.x = res.cx;
@@ -1649,9 +1652,9 @@ function naturalSpawning(): void {
       if (world.getBlockId(Math.floor(x), h, Math.floor(z)) === B.GRASS) {
         const roll = rand.float();
         const type =
-          roll < 0.35 ? EntityType.SHEEP :
-          roll < 0.6 ? EntityType.COW :
-          roll < 0.85 ? EntityType.PIG : EntityType.CHICKEN;
+          roll < 0.25 ? EntityType.SHEEP :
+          roll < 0.5 ? EntityType.COW :
+          roll < 0.75 ? EntityType.PIG : EntityType.CHICKEN;
         trySpawnAt(type, x, h + 2, z, 4);
       }
     }

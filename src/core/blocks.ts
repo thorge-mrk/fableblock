@@ -169,6 +169,38 @@ export const TILE = {
   SPRUCE_PLANKS: 155,
   ICE: 156,
   LILY_PAD: 157,
+  // Biome blocks (V4): savanna / dark forest / badlands / taiga / mushroom.
+  ACACIA_LOG_SIDE: 158,
+  ACACIA_LOG_TOP: 159,
+  ACACIA_LEAVES: 160,
+  ACACIA_PLANKS: 161,
+  DARK_OAK_LOG_SIDE: 162,
+  DARK_OAK_LOG_TOP: 163,
+  DARK_OAK_LEAVES: 164,
+  DARK_OAK_PLANKS: 165,
+  RED_SAND: 166,
+  TERRACOTTA: 167,
+  TERRACOTTA_ORANGE: 168,
+  TERRACOTTA_RED: 169,
+  TERRACOTTA_WHITE: 170,
+  TERRACOTTA_YELLOW: 171,
+  PODZOL_TOP: 172,
+  PODZOL_SIDE: 173,
+  MYCELIUM_TOP: 174,
+  MYCELIUM_SIDE: 175,
+  PACKED_ICE: 176,
+  MUSHROOM_STEM: 177,
+  MUSHROOM_CAP_RED: 178,
+  MUSHROOM_CAP_BROWN: 179,
+  RED_MUSHROOM: 180,
+  BROWN_MUSHROOM: 181,
+  DEAD_BUSH: 182,
+  FERN: 183,
+  FLOWER_BLUE: 184,
+  FLOWER_WHITE: 185,
+  EMERALD_ORE: 186,
+  ITEM_EMERALD: 187,
+  COARSE_DIRT: 188,
 } as const;
 
 export const ATLAS_TILES = 32; // 32x32 grid of tiles
@@ -299,6 +331,33 @@ export const B = {
   ICE: 111,
   SNOW_BLOCK: 112,
   LILY_PAD: 113,
+  // Biome blocks (V4): savanna / dark forest / badlands / taiga / mushroom.
+  ACACIA_LOG: 114,
+  ACACIA_LEAVES: 115,
+  ACACIA_PLANKS: 116,
+  DARK_OAK_LOG: 117,
+  DARK_OAK_LEAVES: 118,
+  DARK_OAK_PLANKS: 119,
+  RED_SAND: 120,
+  TERRACOTTA: 121,
+  TERRACOTTA_ORANGE: 122,
+  TERRACOTTA_RED: 123,
+  TERRACOTTA_WHITE: 124,
+  TERRACOTTA_YELLOW: 125,
+  PODZOL: 126,
+  MYCELIUM: 127,
+  PACKED_ICE: 128,
+  MUSHROOM_STEM: 129,
+  MUSHROOM_CAP_RED: 130,
+  MUSHROOM_CAP_BROWN: 131,
+  RED_MUSHROOM: 132,
+  BROWN_MUSHROOM: 133,
+  DEAD_BUSH: 134,
+  FERN: 135,
+  FLOWER_BLUE: 136,
+  FLOWER_WHITE: 137,
+  EMERALD_ORE: 138,
+  COARSE_DIRT: 139,
 } as const;
 
 export type BlockId = number;
@@ -603,6 +662,50 @@ def(B.LILY_PAD, 'Lily Pad', tile6(TILE.LILY_PAD), {
   solid: false, opaque: false, renderType: RenderType.BOX, hardness: 0.05, lightFilter: 0,
   boxes: [[0, 0, 0, 1, 0.0625, 1]],
 });
+
+// --- Biome blocks (V4) ------------------------------------------------------
+def(B.ACACIA_LOG, 'Acacia Log', tileTSB(TILE.ACACIA_LOG_TOP, TILE.ACACIA_LOG_SIDE, TILE.ACACIA_LOG_TOP), { hardness: 2, tool: 'axe' });
+def(B.ACACIA_LEAVES, 'Acacia Leaves', tile6(TILE.ACACIA_LEAVES), {
+  opaque: false, renderType: RenderType.CUTOUT, hardness: 0.2, drop: -1, lightFilter: 1, randomTicks: true,
+});
+def(B.ACACIA_PLANKS, 'Acacia Planks', tile6(TILE.ACACIA_PLANKS), { hardness: 2, tool: 'axe' });
+def(B.DARK_OAK_LOG, 'Dark Oak Log', tileTSB(TILE.DARK_OAK_LOG_TOP, TILE.DARK_OAK_LOG_SIDE, TILE.DARK_OAK_LOG_TOP), { hardness: 2, tool: 'axe' });
+def(B.DARK_OAK_LEAVES, 'Dark Oak Leaves', tile6(TILE.DARK_OAK_LEAVES), {
+  opaque: false, renderType: RenderType.CUTOUT, hardness: 0.2, drop: -1, lightFilter: 1, randomTicks: true,
+});
+def(B.DARK_OAK_PLANKS, 'Dark Oak Planks', tile6(TILE.DARK_OAK_PLANKS), { hardness: 2, tool: 'axe' });
+def(B.RED_SAND, 'Red Sand', tile6(TILE.RED_SAND), { hardness: 0.5, tool: 'shovel' });
+def(B.TERRACOTTA, 'Terracotta', tile6(TILE.TERRACOTTA), { hardness: 1.25, tool: 'pickaxe', minTier: 1 });
+def(B.TERRACOTTA_ORANGE, 'Orange Terracotta', tile6(TILE.TERRACOTTA_ORANGE), { hardness: 1.25, tool: 'pickaxe', minTier: 1 });
+def(B.TERRACOTTA_RED, 'Red Terracotta', tile6(TILE.TERRACOTTA_RED), { hardness: 1.25, tool: 'pickaxe', minTier: 1 });
+def(B.TERRACOTTA_WHITE, 'White Terracotta', tile6(TILE.TERRACOTTA_WHITE), { hardness: 1.25, tool: 'pickaxe', minTier: 1 });
+def(B.TERRACOTTA_YELLOW, 'Yellow Terracotta', tile6(TILE.TERRACOTTA_YELLOW), { hardness: 1.25, tool: 'pickaxe', minTier: 1 });
+def(B.PODZOL, 'Podzol', tileTSB(TILE.PODZOL_TOP, TILE.PODZOL_SIDE, TILE.DIRT), { hardness: 0.5, tool: 'shovel', drop: B.DIRT });
+def(B.MYCELIUM, 'Mycelium', tileTSB(TILE.MYCELIUM_TOP, TILE.MYCELIUM_SIDE, TILE.DIRT), { hardness: 0.6, tool: 'shovel', drop: B.DIRT });
+def(B.PACKED_ICE, 'Packed Ice', tile6(TILE.PACKED_ICE), { hardness: 0.5, tool: 'pickaxe' });
+def(B.MUSHROOM_STEM, 'Mushroom Stem', tile6(TILE.MUSHROOM_STEM), { hardness: 0.2, tool: 'axe' });
+def(B.MUSHROOM_CAP_RED, 'Red Mushroom Block', tile6(TILE.MUSHROOM_CAP_RED), { hardness: 0.2, tool: 'axe', drop: B.RED_MUSHROOM });
+def(B.MUSHROOM_CAP_BROWN, 'Brown Mushroom Block', tile6(TILE.MUSHROOM_CAP_BROWN), { hardness: 0.2, tool: 'axe', drop: B.BROWN_MUSHROOM });
+def(B.RED_MUSHROOM, 'Red Mushroom', tile6(TILE.RED_MUSHROOM), {
+  solid: false, opaque: false, renderType: RenderType.CROSS, hardness: 0.05, lightFilter: 0,
+});
+def(B.BROWN_MUSHROOM, 'Brown Mushroom', tile6(TILE.BROWN_MUSHROOM), {
+  solid: false, opaque: false, renderType: RenderType.CROSS, hardness: 0.05, lightFilter: 0,
+});
+def(B.DEAD_BUSH, 'Dead Bush', tile6(TILE.DEAD_BUSH), {
+  solid: false, opaque: false, renderType: RenderType.CROSS, hardness: 0.05, drop: 256 /* ITEM.STICK */, lightFilter: 0, replaceable: true,
+});
+def(B.FERN, 'Fern', tile6(TILE.FERN), {
+  solid: false, opaque: false, renderType: RenderType.CROSS, hardness: 0.05, drop: -1, lightFilter: 0, replaceable: true,
+});
+def(B.FLOWER_BLUE, 'Cornflower', tile6(TILE.FLOWER_BLUE), {
+  solid: false, opaque: false, renderType: RenderType.CROSS, hardness: 0.05, lightFilter: 0,
+});
+def(B.FLOWER_WHITE, 'Oxeye Daisy', tile6(TILE.FLOWER_WHITE), {
+  solid: false, opaque: false, renderType: RenderType.CROSS, hardness: 0.05, lightFilter: 0,
+});
+def(B.EMERALD_ORE, 'Emerald Ore', tile6(TILE.EMERALD_ORE), { hardness: 3, tool: 'pickaxe', minTier: 2, drop: 256 + 54 /* ITEM.EMERALD */ });
+def(B.COARSE_DIRT, 'Coarse Dirt', tile6(TILE.COARSE_DIRT), { hardness: 0.5, tool: 'shovel' });
 
 const fluidDefaults = {
   solid: false,

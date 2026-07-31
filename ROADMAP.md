@@ -203,6 +203,34 @@ P3-6 Rüstung, P3-7 Wetter, P3-8 XP+Verzauberung).
 - **Erste-Person-Arm**: der Spieler-Arm (Teal-Ärmel + Skin-Hand) hält Items
   von unten rechts; Werkzeug-Sprite zentrierter/angewinkelt wie beim Original.
 
+**V4-Pass (Worldgen-Profi-Überarbeitung — Biome, Terrain, Höhlen, Strukturen, Mobs):**
+- **Klima-Biomsystem**: Auswahl über kontinuierliche Temperatur/Feuchte/
+  Weirdness-Felder + Per-Block-Dithering → Biomgrenzen verzahnen sich in
+  ausgefransten Flecken statt harten Linien; Höhe hängt nie vom gewählten Biom
+  ab → nahtloses Terrain über jede Grenze.
+- **12 neue Biome** (alle großen Overworld-Familien bis MC 1.21): Strand,
+  Fluss, Taiga, Schneetaiga, Savanne, Badlands/Mesa, Birken-/Dunkel-/Blumenwald,
+  Pilzinsel, Eiszapfen-Ebene, steinige Gipfel.
+- **Terrain**: Ridged-Noise-Bergkämme mit Schneekappen, gewundene Flüsse mit
+  sanften Ufern, gestufte Terracotta-Mesas mit welligen Schichten, Pilzinseln
+  im tiefen Ozean.
+- **26 neue Blöcke + Texturen**: Akazie/Dunkeleiche (Stamm/Laub/Bretter),
+  Terracotta in 5 Farben, roter Sand, Podsol, Myzel, Packeis, Pilzblöcke,
+  kleine Pilze, toter Busch, Farn, Kornblume/Margerite, Smaragderz, grobe Erde.
+- **Höhlen V2**: begehbare Höhleneingänge an Hängen (Entrance-Noise weitet die
+  oberflächennahe Röhre), tiefenskalierte Käsehöhlen (große Hallen nur unten),
+  Stein-Stalaktiten-Ketten, Magma-/Kiesböden an der Lavakante.
+- **Erze**: höhengebandete Verteilung (Kohle oben, Eisen mittig, Gold/Redstone/
+  Diamant tief), Erde/Kies-Taschen, Smaragde nur in Bergen (Einzelblöcke).
+- **Strukturen**: Dörfer auch in Savanne/Taiga/Schnee mit Material-Paletten
+  (Akazie/Fichte), Iglus mit Vorratskiste, bemooste Dschungeltempel mit Schatz,
+  Sumpf-Hexenhütten auf Stelzen; Landmark-Placement sondiert mehrere Punkte
+  pro Region, damit Strukturen in seltenen Biomen wirklich vorkommen.
+- **Tiere**: Herden-Spawns pro Biom (Kühe/Schweine/Hühner/Schafe gemischt,
+  deutlich weniger Schafe), Mob-Sprunghöhe 8→7,8 (springt genau 1 Block),
+  neue Modelle: Schaf (Wollkappe, Ohren, zweifarbige Beine, Gesicht), Schwein
+  (3D-Rüssel, Ringelschwanz), Huhn (Kamm, Schnabel, Kehllappen), Kuh (Hörner).
+
 ## Phase 1 — Mobile-UX
 
 ### P1-1 · Cursor-Stack folgt dem Finger (S)
