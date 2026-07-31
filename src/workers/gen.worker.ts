@@ -582,20 +582,45 @@ function setIfInside(
 const VILLAGE_REGION = 12; // chunks per village region cell
 const villageCache = new Map<string, VillagePlan | null>();
 
+/** Village material theme, chosen by the biome the village grows in. */
+const enum VTheme {
+  PLAINS = 0,
+  DESERT = 1,
+  SAVANNA = 2,
+  TAIGA = 3,
+  SNOWY = 4,
+}
+
+interface VPalette {
+  wall: number;
+  frame: number;
+  base: number;
+  roof: number;
+  path: number;
+}
+
+const VPALETTES: Record<VTheme, VPalette> = {
+  [VTheme.PLAINS]: { wall: B.OAK_PLANKS, frame: B.OAK_LOG, base: B.COBBLESTONE, roof: B.OAK_PLANKS, path: B.GRAVEL },
+  [VTheme.DESERT]: { wall: B.SANDSTONE, frame: B.SANDSTONE, base: B.SANDSTONE, roof: B.SANDSTONE, path: B.SANDSTONE },
+  [VTheme.SAVANNA]: { wall: B.ACACIA_PLANKS, frame: B.ACACIA_LOG, base: B.COBBLESTONE, roof: B.ACACIA_PLANKS, path: B.COARSE_DIRT },
+  [VTheme.TAIGA]: { wall: B.SPRUCE_PLANKS, frame: B.SPRUCE_LOG, base: B.COBBLESTONE, roof: B.SPRUCE_PLANKS, path: B.GRAVEL },
+  [VTheme.SNOWY]: { wall: B.SPRUCE_PLANKS, frame: B.SPRUCE_LOG, base: B.COBBLESTONE, roof: B.SPRUCE_PLANKS, path: B.GRAVEL },
+};
+
 interface Building {
   x: number; // origin (min corner)
   y: number;
   z: number;
   blueprint: string[][];
   rot: 0 | 1 | 2 | 3;
-  desert: boolean;
+  theme: VTheme;
 }
 
 interface VillagePlan {
   x: number;
   z: number;
   radius: number;
-  desert: boolean;
+  theme: VTheme;
   buildings: Building[];
   paths: Array<{ x: number; z: number }>;
   lamps: Array<{ x: number; z: number }>;
@@ -681,7 +706,15 @@ function villageForRegion(rx: number, rz: number): VillagePlan | null {
     const wx = ccx * 16 + 8;
     const wz = ccz * 16 + 8;
     const center = columnInfo(wx, wz);
-    if (center.biome === Biome.PLAINS || center.biome === Biome.DESERT) {
+    const VILLAGE_THEMES: Partial<Record<Biome, VTheme>> = {
+      [Biome.PLAINS]: VTheme.PLAINS,
+      [Biome.DESERT]: VTheme.DESERT,
+      [Biome.SAVANNA]: VTheme.SAVANNA,
+      [Biome.TAIGA]: VTheme.TAIGA,
+      [Biome.SNOWY]: VTheme.SNOWY,
+    };
+    const theme = VILLAGE_THEMES[center.biome];
+    if (theme !== undefined) {
       // Require reasonably flat, above-sea terrain.
       let minH = center.height;
       let maxH = center.height;
@@ -691,13 +724,13 @@ function villageForRegion(rx: number, rz: number): VillagePlan | null {
         if (h > maxH) maxH = h;
       }
       if (minH > SEA_LEVEL && maxH - minH <= 7) {
-        const desert = center.biome === Biome.DESERT;
+        const desert = theme === VTheme.DESERT;
         const buildings: Building[] = [];
         const paths: Array<{ x: number; z: number }> = [];
         const lamps: Array<{ x: number; z: number }> = [];
         const count = rand.range(5, 8);
         const wellY = center.height;
-        buildings.push({ x: wx - 2, y: wellY, z: wz - 2, blueprint: WELL, rot: 0, desert });
+        buildings.push({ x: wx - 2, y: wellY, z: wz - 2, blueprint: WELL, rot: 0, theme });
         let churchPlaced = false;
         for (let i = 0; i < count; i++) {
           const angle = (i / count) * Math.PI * 2 + rand.float() * 0.7;
@@ -722,7 +755,7 @@ function villageForRegion(rx: number, rz: number): VillagePlan | null {
             z: bzC - (bd >> 1),
             blueprint: bp,
             rot: rand.int(4) as 0 | 1 | 2 | 3,
-            desert,
+            theme,
           });
           // L-shaped path from house to well.
           let px = bxC;
@@ -738,7 +771,7 @@ function villageForRegion(rx: number, rz: number): VillagePlan | null {
           // A lamp post partway along the path lights the street at night.
           lamps.push({ x: Math.round(bxC + (wx - bxC) * 0.4), z: Math.round(bzC + (wz - bzC) * 0.4) });
         }
-        plan = { x: wx, z: wz, radius: 36, desert, buildings, paths, lamps };
+        plan = { x: wx, z: wz, radius: 36, theme, buildings, paths, lamps };
       }
     }
   }
@@ -762,15 +795,15 @@ function rotCoord(lx: number, lz: number, bw: number, bd: number, rot: number): 
 
 function blueprintChar(
   ch: string,
-  desert: boolean,
+  pal: VPalette,
 ): number {
   switch (ch) {
-    case '#': return desert ? B.SANDSTONE : B.OAK_PLANKS;
-    case 'C': return desert ? B.SANDSTONE : B.COBBLESTONE;
-    case 'L': return desert ? B.SANDSTONE : B.OAK_LOG;
+    case '#': return pal.wall;
+    case 'C': return pal.base;
+    case 'L': return pal.frame;
     case 'G': return B.GLASS;
     case 'P':
-    case 'R': return desert ? B.SANDSTONE : B.OAK_PLANKS;
+    case 'R': return pal.roof;
     case 'T': return B.CRAFTING_TABLE;
     case 'F': return B.FURNACE_S;
     case 'H': return B.CHEST_S;
@@ -797,6 +830,7 @@ function stampVillage(
 ): void {
   const minX = cx * 16;
   const minZ = cz * 16;
+  const pal = VPALETTES[plan.theme];
 
   // Paths: 2 blocks wide, stamped at the terrain surface.
   for (const p of plan.paths) {
@@ -807,8 +841,9 @@ function stampVillage(
       const h = columnInfo(px, pz).height;
       const idx = blockIndex(px - minX, h, pz - minZ);
       const cur = voxelId(data[idx]);
-      if (cur === B.GRASS || cur === B.SAND || cur === B.DIRT || cur === B.SNOW_GRASS) {
-        data[idx] = packVoxel(plan.desert ? B.SANDSTONE : B.GRAVEL, 0, 0);
+      if (cur === B.GRASS || cur === B.SAND || cur === B.DIRT || cur === B.SNOW_GRASS ||
+          cur === B.COARSE_DIRT || cur === B.PODZOL || cur === B.RED_SAND) {
+        data[idx] = packVoxel(pal.path, 0, 0);
         // Clear plants above paths.
         const above = blockIndex(px - minX, h + 1, pz - minZ);
         if (blockDef(voxelId(data[above])).replaceable) data[above] = packVoxel(B.AIR, 0, 0);
@@ -823,7 +858,7 @@ function stampVillage(
     if (gh <= SEA_LEVEL) continue;
     const baseId = voxelId(data[blockIndex(lamp.x - minX, gh, lamp.z - minZ)]);
     if (baseId === B.AIR || baseId === B.WATER_SRC) continue;
-    const post = plan.desert ? B.SANDSTONE : B.OAK_LOG;
+    const post = pal.frame;
     for (let i = 1; i <= 3 && gh + i < CHUNK_HEIGHT; i++) {
       data[blockIndex(lamp.x - minX, gh + i, lamp.z - minZ)] = packVoxel(post, 0, 0);
     }
@@ -850,7 +885,7 @@ function stampVillage(
           const [sx, sz] = rotCoord(lx, lz, bw0, bd0, (4 - b.rot) & 3);
           const ch = layer[sz]?.[sx] ?? ' ';
           if (ch === ' ') continue;
-          const id = blueprintChar(ch, b.desert);
+          const id = blueprintChar(ch, VPALETTES[b.theme]);
           if (id < 0) continue;
           const x = b.x + lx;
           const y = b.y + ly;
@@ -875,7 +910,7 @@ function stampVillage(
               const fi = blockIndex(x - minX, fy, z - minZ);
               const fid = voxelId(data[fi]);
               if (fid !== B.AIR && fid !== B.WATER_SRC && !blockDef(fid).replaceable && fid !== B.TALL_GRASS) break;
-              data[fi] = packVoxel(b.desert ? B.SANDSTONE : B.COBBLESTONE, 0, 0);
+              data[fi] = packVoxel(VPALETTES[b.theme].base, 0, 0);
             }
           }
         }
@@ -989,12 +1024,14 @@ function pyramidForRegion(rx: number, rz: number): PyramidPlan | null {
   const rand = new Random(deriveSeed(seed, 'pyramid:' + key));
   let plan: PyramidPlan | null = null;
   if (rand.chance(0.5)) {
-    const ccx = rx * PYRAMID_REGION + 3 + rand.int(PYRAMID_REGION - 6);
-    const ccz = rz * PYRAMID_REGION + 3 + rand.int(PYRAMID_REGION - 6);
-    const wx = ccx * 16 + 8;
-    const wz = ccz * 16 + 8;
-    const c = columnInfo(wx, wz);
-    if (c.biome === Biome.DESERT) {
+    // Deserts are patchy: probe several spots per region for a flat site.
+    for (let attempt = 0; attempt < 8 && !plan; attempt++) {
+      const ccx = rx * PYRAMID_REGION + 3 + rand.int(PYRAMID_REGION - 6);
+      const ccz = rz * PYRAMID_REGION + 3 + rand.int(PYRAMID_REGION - 6);
+      const wx = ccx * 16 + 8;
+      const wz = ccz * 16 + 8;
+      const c = columnInfo(wx, wz);
+      if (c.biome !== Biome.DESERT) continue;
       let minH = c.height;
       let maxH = c.height;
       for (const [ox, oz] of [[-9, 0], [9, 0], [0, -9], [0, 9]]) {
@@ -1071,6 +1108,213 @@ function stampPyramid(
   }
   if (put(p.x, p.y - 3, p.z, B.SPAWNER)) {
     blockEntities.push({ x: p.x, y: p.y - 3, z: p.z, blockId: B.SPAWNER });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Small biome landmarks: igloos (snowy), jungle temples, swamp witch huts.
+// Region-deterministic like pyramids so every intersecting chunk stamps its
+// slice of the structure.
+// ---------------------------------------------------------------------------
+interface LandmarkPlan {
+  x: number;
+  z: number;
+  y: number;
+}
+
+const landmarkCaches = new Map<string, Map<string, LandmarkPlan | null>>();
+
+/** One landmark candidate per (kind, region); accepted if the biome fits. */
+function landmarkForRegion(
+  kind: string,
+  regionSize: number,
+  chance: number,
+  biomes: ReadonlyArray<Biome>,
+  rx: number,
+  rz: number,
+): LandmarkPlan | null {
+  let cache = landmarkCaches.get(kind);
+  if (!cache) {
+    cache = new Map();
+    landmarkCaches.set(kind, cache);
+  }
+  const key = rx + ',' + rz;
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+  const rand = new Random(deriveSeed(seed, kind + ':' + key));
+  let plan: LandmarkPlan | null = null;
+  if (rand.chance(chance)) {
+    // The target biomes are rare, so probe several candidate spots in the
+    // region and take the first whose biome + flatness fit.
+    for (let attempt = 0; attempt < 8 && !plan; attempt++) {
+      const ccx = rx * regionSize + 1 + rand.int(regionSize - 2);
+      const ccz = rz * regionSize + 1 + rand.int(regionSize - 2);
+      const wx = ccx * 16 + 8;
+      const wz = ccz * 16 + 8;
+      const c = columnInfo(wx, wz);
+      if (!biomes.includes(c.biome) || c.height <= SEA_LEVEL) continue;
+      let minH = c.height;
+      let maxH = c.height;
+      for (const [ox, oz] of [[-5, 0], [5, 0], [0, -5], [0, 5]]) {
+        const h = columnInfo(wx + ox, wz + oz).height;
+        minH = Math.min(minH, h);
+        maxH = Math.max(maxH, h);
+      }
+      if (maxH - minH <= 5) plan = { x: wx, z: wz, y: c.height };
+    }
+  }
+  cache.set(key, plan);
+  if (cache.size > 96) cache.delete(cache.keys().next().value as string);
+  return plan;
+}
+
+/** Snow-brick dome with a torch, bed and buried supply chest. */
+function stampIgloo(data: Uint16Array, cx: number, cz: number, p: LandmarkPlan, blockEntities: BlockEntitySpawn[]): void {
+  const minX = cx * 16;
+  const minZ = cz * 16;
+  if (p.x + 4 < minX || p.x - 4 > minX + 15 || p.z + 4 < minZ || p.z - 4 > minZ + 15) return;
+  const put = (x: number, y: number, z: number, id: number): boolean => {
+    if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15 || y < 1 || y >= CHUNK_HEIGHT) return false;
+    data[blockIndex(x - minX, y, z - minZ)] = packVoxel(id, 0, 0);
+    return true;
+  };
+  // Dome: hemispherical snow shell, hollow interior, floor slab.
+  for (let dy = 0; dy <= 3; dy++) {
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dz = -3; dz <= 3; dz++) {
+        const d2 = dx * dx + dz * dz + dy * dy * 2.2;
+        if (d2 > 11.5) continue;
+        const shell = d2 > 5.5;
+        put(p.x + dx, p.y + 1 + dy, p.z + dz, shell ? B.SNOW_BLOCK : B.AIR);
+      }
+    }
+  }
+  put(p.x, p.y + 1, p.z - 3, B.AIR); // door gap
+  put(p.x, p.y + 2, p.z - 3, B.AIR);
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) put(p.x + dx, p.y, p.z + dz, B.SNOW_BLOCK);
+  }
+  put(p.x - 1, p.y + 1, p.z + 1, B.BED);
+  put(p.x + 1, p.y + 2, p.z + 2, B.TORCH);
+  if (put(p.x + 1, p.y + 1, p.z + 1, B.CHEST_N)) {
+    const rand = new Random(deriveSeed(seed, 'igloot:' + p.x + ',' + p.z));
+    blockEntities.push({
+      x: p.x + 1, y: p.y + 1, z: p.z + 1, blockId: B.CHEST_N,
+      loot: [
+        makeStack(ITEM.COAL, rand.range(2, 6)),
+        makeStack(ITEM.COOKED_MUTTON, rand.range(1, 3)),
+        makeStack(B.TORCH, rand.range(2, 5)),
+      ],
+    });
+  }
+}
+
+/** Vine-less mossy jungle temple: two tiers, dark cella with treasure. */
+function stampTemple(data: Uint16Array, cx: number, cz: number, p: LandmarkPlan, blockEntities: BlockEntitySpawn[]): void {
+  const minX = cx * 16;
+  const minZ = cz * 16;
+  const S = 5; // half-width of the base
+  if (p.x + S < minX || p.x - S > minX + 15 || p.z + S < minZ || p.z - S > minZ + 15) return;
+  const rand = new Random(deriveSeed(seed, 'temploot:' + p.x + ',' + p.z));
+  const mossyStone = (r: number): number => (hash2D(seed, p.x + r * 31, p.z - r * 17) < 0.45 ? B.MOSSY_COBBLESTONE : B.COBBLESTONE);
+  for (let dx = -S; dx <= S; dx++) {
+    for (let dz = -S; dz <= S; dz++) {
+      const x = p.x + dx;
+      const z = p.z + dz;
+      if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15) continue;
+      const ring = Math.max(Math.abs(dx), Math.abs(dz));
+      // Foundation down to solid ground.
+      for (let y = p.y; y > 1 && !blockDef(voxelId(data[blockIndex(x - minX, y, z - minZ)])).solid; y--) {
+        data[blockIndex(x - minX, y, z - minZ)] = packVoxel(B.COBBLESTONE, 0, 0);
+      }
+      // Tier 1: 11x11 walls 3 high with a hollow cella; tier 2: 7x7 cap.
+      for (let dy = 1; dy <= 6; dy++) {
+        const y = p.y + dy;
+        if (y >= CHUNK_HEIGHT) break;
+        let id: number | null = null;
+        if (dy <= 3) {
+          if (ring === S || dy === 3) id = ring <= 3 && dy === 3 ? mossyStone(dx * 7 + dz) : ring === S ? mossyStone(dx + dz * 3) : null;
+          if (ring < S && dy < 3) id = B.AIR; // cella
+        } else if (dy <= 5 && ring <= 3) {
+          id = ring === 3 || dy === 5 ? mossyStone(dx * 13 + dz + dy) : B.AIR;
+        } else if (dy === 6 && ring <= 1) {
+          id = mossyStone(dx + dz + 5);
+        }
+        if (id !== null) data[blockIndex(x - minX, y, z - minZ)] = packVoxel(id, 0, 0);
+      }
+    }
+  }
+  const put = (x: number, y: number, z: number, id: number): boolean => {
+    if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15 || y < 1 || y >= CHUNK_HEIGHT) return false;
+    data[blockIndex(x - minX, y, z - minZ)] = packVoxel(id, 0, 0);
+    return true;
+  };
+  // Entrance gap on the south face + torchlit cella with the treasure chest.
+  put(p.x, p.y + 1, p.z - S, B.AIR);
+  put(p.x, p.y + 2, p.z - S, B.AIR);
+  put(p.x - 2, p.y + 1, p.z + 2, B.TORCH);
+  if (put(p.x + 2, p.y + 1, p.z + 2, B.CHEST_W)) {
+    blockEntities.push({
+      x: p.x + 2, y: p.y + 1, z: p.z + 2, blockId: B.CHEST_W,
+      loot: [
+        makeStack(ITEM.GOLD_INGOT, rand.range(1, 4)),
+        makeStack(ITEM.EMERALD, rand.range(1, 3)),
+        makeStack(ITEM.IRON_INGOT, rand.range(1, 4)),
+        makeStack(ITEM.ARROW, rand.range(3, 9)),
+      ],
+    });
+  }
+}
+
+/** Swamp witch hut: spruce shack raised on stilts over the marsh. */
+function stampHut(data: Uint16Array, cx: number, cz: number, p: LandmarkPlan, blockEntities: BlockEntitySpawn[]): void {
+  const minX = cx * 16;
+  const minZ = cz * 16;
+  if (p.x + 3 < minX || p.x - 3 > minX + 15 || p.z + 3 < minZ || p.z - 3 > minZ + 15) return;
+  const put = (x: number, y: number, z: number, id: number): boolean => {
+    if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15 || y < 1 || y >= CHUNK_HEIGHT) return false;
+    data[blockIndex(x - minX, y, z - minZ)] = packVoxel(id, 0, 0);
+    return true;
+  };
+  const floorY = p.y + 3; // stilted above the marsh
+  // Stilts at the corners down to ground.
+  for (const [sx, sz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]] as const) {
+    for (let y = floorY - 1; y > 1; y--) {
+      const x = p.x + sx;
+      const z = p.z + sz;
+      if (x < minX || x > minX + 15 || z < minZ || z > minZ + 15) break;
+      const idx = blockIndex(x - minX, y, z - minZ);
+      if (blockDef(voxelId(data[idx])).solid) break;
+      data[idx] = packVoxel(B.SPRUCE_LOG, 0, 0);
+    }
+  }
+  // Floor + walls + flat roof.
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      put(p.x + dx, floorY, p.z + dz, B.SPRUCE_PLANKS);
+      put(p.x + dx, floorY + 3, p.z + dz, B.SPRUCE_PLANKS);
+      const ring = Math.max(Math.abs(dx), Math.abs(dz));
+      for (let dy = 1; dy <= 2; dy++) {
+        put(p.x + dx, floorY + dy, p.z + dz, ring === 2 ? B.SPRUCE_PLANKS : B.AIR);
+      }
+    }
+  }
+  put(p.x, floorY + 1, p.z - 2, B.AIR); // doorway
+  put(p.x, floorY + 2, p.z - 2, B.AIR);
+  put(p.x - 2, floorY + 1, p.z, B.GLASS); // window
+  put(p.x + 2, floorY + 1, p.z, B.GLASS);
+  put(p.x + 1, floorY + 1, p.z + 1, B.CRAFTING_TABLE);
+  put(p.x - 1, floorY + 2, p.z + 1, B.TORCH);
+  if (put(p.x - 1, floorY + 1, p.z + 1, B.CHEST_N)) {
+    const rand = new Random(deriveSeed(seed, 'hutloot:' + p.x + ',' + p.z));
+    blockEntities.push({
+      x: p.x - 1, y: floorY + 1, z: p.z + 1, blockId: B.CHEST_N,
+      loot: [
+        makeStack(ITEM.REDSTONE, rand.range(2, 7)),
+        makeStack(B.GLOWSTONE, rand.range(1, 2)),
+        makeStack(ITEM.STICK, rand.range(2, 6)),
+      ],
+    });
   }
 }
 
@@ -1280,6 +1524,7 @@ export function initGenerator(s: number): void {
   seed = s;
   villageCache.clear();
   pyramidCache.clear();
+  landmarkCaches.clear();
   netherCarve = null;
   initNoise();
 }
@@ -1469,6 +1714,27 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
     }
   }
 
+  // Small biome landmarks: igloos, jungle temples, swamp witch huts.
+  const LANDMARKS: Array<{
+    kind: string;
+    region: number;
+    chance: number;
+    biomes: Biome[];
+    stamp: (d: Uint16Array, cx: number, cz: number, p: LandmarkPlan, be: BlockEntitySpawn[]) => void;
+  }> = [
+    { kind: 'igloo', region: 14, chance: 0.45, biomes: [Biome.SNOWY, Biome.SNOWY_TAIGA, Biome.ICE_SPIKES], stamp: stampIgloo },
+    { kind: 'temple', region: 18, chance: 0.5, biomes: [Biome.JUNGLE], stamp: stampTemple },
+    { kind: 'hut', region: 14, chance: 0.4, biomes: [Biome.SWAMP], stamp: stampHut },
+  ];
+  for (const lm of LANDMARKS) {
+    for (let rx = regionOf2(cx, lm.region) - 1; rx <= regionOf2(cx, lm.region) + 1; rx++) {
+      for (let rz = regionOf2(cz, lm.region) - 1; rz <= regionOf2(cz, lm.region) + 1; rz++) {
+        const plan = landmarkForRegion(lm.kind, lm.region, lm.chance, lm.biomes, rx, rz);
+        if (plan) lm.stamp(data, cx, cz, plan, blockEntities);
+      }
+    }
+  }
+
   // --- Village (region-deterministic; any chunk stamps its intersection) ---
   let village: VillageDef | null = null;
   const planSet = new Set<VillagePlan>();
@@ -1592,19 +1858,55 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
     }
   }
 
-  // --- Passive mob spawns (sheep clusters on grass) ---
-  if (rand.chance(0.22)) {
+  // --- Passive mob spawns: small biome-matched herds (not just sheep) ---
+  // [type, weight] tables per biome; one herd of 1-3 per ~6th chunk.
+  if (rand.chance(0.16)) {
     const sx = rand.int(13) + 1;
     const sz = rand.int(13) + 1;
     const biome = biomes[sz * 16 + sx] as Biome;
-    if (biome === Biome.PLAINS || biome === Biome.FOREST) {
-      const n = rand.range(2, 4);
+    let table: Array<[EntityType, number]> | null = null;
+    switch (biome) {
+      case Biome.PLAINS:
+        table = [[EntityType.SHEEP, 0.3], [EntityType.COW, 0.35], [EntityType.PIG, 0.15], [EntityType.CHICKEN, 0.2]];
+        break;
+      case Biome.FOREST:
+      case Biome.BIRCH_FOREST:
+      case Biome.FLOWER_FOREST:
+      case Biome.DARK_FOREST:
+        table = [[EntityType.PIG, 0.4], [EntityType.CHICKEN, 0.3], [EntityType.COW, 0.2], [EntityType.SHEEP, 0.1]];
+        break;
+      case Biome.TAIGA:
+      case Biome.SNOWY_TAIGA:
+        table = [[EntityType.PIG, 0.45], [EntityType.CHICKEN, 0.3], [EntityType.SHEEP, 0.25]];
+        break;
+      case Biome.SAVANNA:
+        table = [[EntityType.COW, 0.55], [EntityType.SHEEP, 0.3], [EntityType.CHICKEN, 0.15]];
+        break;
+      case Biome.JUNGLE:
+        table = [[EntityType.CHICKEN, 0.75], [EntityType.PIG, 0.25]];
+        break;
+      case Biome.CHERRY:
+      case Biome.MOUNTAINS:
+        table = [[EntityType.SHEEP, 0.6], [EntityType.CHICKEN, 0.4]];
+        break;
+      default:
+        break;
+    }
+    if (table) {
+      let roll = rand.float();
+      let type = table[table.length - 1][0];
+      for (const [t, w] of table) {
+        if (roll < w) { type = t; break; }
+        roll -= w;
+      }
+      const n = rand.range(1, 3);
       for (let i = 0; i < n; i++) {
         const ox = Math.min(15, Math.max(0, sx + rand.range(-2, 2)));
         const oz = Math.min(15, Math.max(0, sz + rand.range(-2, 2)));
         const h = heights[oz * 16 + ox];
-        if (voxelId(data[blockIndex(ox, h, oz)]) === B.GRASS) {
-          mobs.push({ type: EntityType.SHEEP, x: cx * 16 + ox + 0.5, y: h + 1, z: cz * 16 + oz + 0.5 });
+        const ground = voxelId(data[blockIndex(ox, h, oz)]);
+        if (ground === B.GRASS || ground === B.SNOW_GRASS || ground === B.PODZOL || ground === B.COARSE_DIRT) {
+          mobs.push({ type, x: cx * 16 + ox + 0.5, y: h + 1, z: cz * 16 + oz + 0.5 });
         }
       }
     }

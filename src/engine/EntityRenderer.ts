@@ -73,10 +73,17 @@ function faceTexture(kind: string): THREE.Texture {
       px(9, 11, 2, 4, '#101810');
       break;
     case 'sheep':
-      fill('#e8d8d0');
-      px(3, 7, 3, 2, '#1c1c2c');
-      px(10, 7, 3, 2, '#1c1c2c');
-      px(6, 12, 4, 2, '#caa');
+      // Wool ring framing a soft pink face.
+      fill('#efece2');
+      px(2, 3, 12, 12, '#e8c8b8');
+      px(3, 4, 10, 10, '#eed3c4');
+      px(3, 7, 3, 2, '#ffffff'); // eye whites
+      px(10, 7, 3, 2, '#ffffff');
+      px(4, 7, 2, 2, '#1c1c2c'); // pupils
+      px(10, 7, 2, 2, '#1c1c2c');
+      px(5, 12, 2, 2, '#d8a090'); // nostrils
+      px(9, 12, 2, 2, '#d8a090');
+      px(6, 14, 4, 1, '#c89484'); // mouth
       break;
     case 'villager':
       fill('#c8a078');
@@ -102,11 +109,14 @@ function faceTexture(kind: string): THREE.Texture {
       break;
     case 'pig':
       fill('#eea4a4');
-      px(3, 6, 3, 2, '#28181c');
-      px(10, 6, 3, 2, '#28181c');
-      px(5, 9, 6, 4, '#d97f7f'); // snout
-      px(6, 10, 1, 2, '#69333c');
-      px(9, 10, 1, 2, '#69333c');
+      px(2, 5, 3, 2, '#ffffff'); // eye whites
+      px(11, 5, 3, 2, '#ffffff');
+      px(3, 5, 2, 2, '#28181c'); // pupils
+      px(11, 5, 2, 2, '#28181c');
+      px(4, 9, 8, 5, '#f0b2aa'); // broad snout plate
+      px(5, 10, 6, 3, '#d97f7f');
+      px(6, 11, 1, 2, '#69333c'); // nostrils
+      px(9, 11, 1, 2, '#69333c');
       break;
     case 'chicken':
       fill('#e8e4dc');
@@ -561,6 +571,16 @@ export class EntityRenderer {
             const patch = partBox(ee, 0.7, 0.2, 0.9, 0xe4d8cc);
             patch.position.set(0, 0.62, 0.05);
             g.add(patch);
+            // Stubby horns + drooping ears on the head.
+            const head = ee.parts.head as THREE.Group;
+            for (const s of [-1, 1] as const) {
+              const horn = partBox(ee, 0.08, 0.1, 0.08, 0xe4d8cc);
+              horn.position.set(s * 0.28, 0.28, 0.02);
+              head.add(horn);
+              const ear = partBox(ee, 0.12, 0.1, 0.05, 0x4a3830);
+              ear.position.set(s * 0.33, 0.12, 0.05);
+              head.add(ear);
+            }
           },
         });
         break;
@@ -568,6 +588,26 @@ export class EntityRenderer {
         buildQuadruped(e, {
           body: 0xeea4a4, legs: 0xd98f8f, headColor: 0xeea4a4, face: 'pig', bodyTex: bodyTexture('pigHide'),
           bodyW: 0.8, bodyH: 0.6, bodyL: 1.1, legH: 0.35, headSize: 0.45,
+          extras: (g, ee) => {
+            const head = ee.parts.head as THREE.Group;
+            // Protruding snout with nostril shading.
+            const snout = partBox(ee, 0.24, 0.16, 0.1, 0xf0b2aa);
+            snout.position.set(0, -0.04, -0.42);
+            head.add(snout);
+            for (const s of [-1, 1] as const) {
+              const ear = partBox(ee, 0.1, 0.12, 0.05, 0xd98f8f);
+              ear.position.set(s * 0.19, 0.26, 0.06);
+              ear.rotation.z = s * -0.3;
+              head.add(ear);
+            }
+            // Curly tail: two tiny offset boxes at the rear.
+            const t1 = partBox(ee, 0.07, 0.07, 0.1, 0xf0b2aa);
+            t1.position.set(0, 0.72, 0.58);
+            g.add(t1);
+            const t2 = partBox(ee, 0.06, 0.1, 0.06, 0xe6a09a);
+            t2.position.set(0.05, 0.78, 0.64);
+            g.add(t2);
+          },
         });
         break;
       case EntityType.CHICKEN:
@@ -939,26 +979,45 @@ function buildCreeper(e: RenderEntity): void {
 
 function buildSheep(e: RenderEntity): void {
   const g = e.group;
-  const body = partBox(e, 0.8, 0.7, 1.2, 0xd8b8a0);
+  // Shorn skin body under the coat.
+  const body = partBox(e, 0.72, 0.62, 1.15, 0xd8b8a0);
   body.position.y = 0.85;
   g.add(body);
   // Fluffy wool coat (hidden while sheared; visibility follows the anim flag).
-  const wool = partBox(e, 0.95, 0.85, 1.35, 0xefece2, bodyTexture('sheepWool'), true);
-  wool.position.y = 0.88;
+  const wool = partBox(e, 1.0, 0.85, 1.38, 0xefece2, bodyTexture('sheepWool'), true);
+  wool.position.y = 0.9;
   g.add(wool);
+  // Little wool tail rides on the coat so shearing removes it too.
+  const tail = partBox(e, 0.2, 0.22, 0.14, 0xe6e2d4);
+  tail.position.set(0, 0.12, 0.72);
+  wool.add(tail);
   e.parts.extra = wool;
   const head = new THREE.Group();
-  const hb = partBox(e, 0.4, 0.4, 0.45, 0xd8c8c0, faceTexture('sheep'));
-  hb.position.set(0, 0, -0.2);
+  const hb = partBox(e, 0.42, 0.42, 0.5, 0xe8d8ce, faceTexture('sheep'));
+  hb.position.set(0, 0, -0.22);
   head.add(hb);
-  head.position.set(0, 1.15, -0.62);
+  // Wool cap over the crown and back of the head.
+  const cap = partBox(e, 0.5, 0.28, 0.42, 0xefece2, bodyTexture('sheepWool'), true);
+  cap.position.set(0, 0.2, -0.08);
+  head.add(cap);
+  for (const s of [-1, 1] as const) {
+    const ear = partBox(e, 0.1, 0.14, 0.06, 0xd8b8a0);
+    ear.position.set(s * 0.28, 0.06, -0.14);
+    ear.rotation.z = s * 0.35;
+    head.add(ear);
+  }
+  head.position.set(0, 1.18, -0.66);
   g.add(head);
-  for (const [sx, sz] of [[-0.22, 0.4], [0.22, 0.4], [-0.22, -0.4], [0.22, -0.4]] as const) {
+  // Two-tone legs: wool stub at the hip, bare shank below.
+  for (const [sx, sz] of [[-0.22, 0.42], [0.22, 0.42], [-0.22, -0.42], [0.22, -0.42]] as const) {
     const pivot = new THREE.Group();
-    const leg = partBox(e, 0.18, 0.5, 0.18, 0xc8b8b0);
-    leg.position.y = -0.25;
-    pivot.add(leg);
-    pivot.position.set(sx, 0.5, sz);
+    const stub = partBox(e, 0.2, 0.24, 0.2, 0xe6e2d4);
+    stub.position.y = -0.12;
+    pivot.add(stub);
+    const shank = partBox(e, 0.15, 0.4, 0.15, 0xcdb4a6);
+    shank.position.y = -0.42;
+    pivot.add(shank);
+    pivot.position.set(sx, 0.62, sz);
     g.add(pivot);
     if (!e.parts.legL) e.parts.legL = pivot;
     else if (!e.parts.legR) e.parts.legR = pivot;
@@ -1051,11 +1110,27 @@ function buildChicken(e: RenderEntity): void {
   const g = e.group;
   const body = partBox(e, 0.4, 0.4, 0.55, 0xe8e4dc);
   body.position.y = 0.42;
+  body.rotation.x = -0.12; // slight forward lean, less "floating crate"
   g.add(body);
+  // Tail feather wedge.
+  const tailF = partBox(e, 0.24, 0.2, 0.14, 0xd8d4c8);
+  tailF.position.set(0, 0.52, 0.32);
+  tailF.rotation.x = 0.5;
+  g.add(tailF);
   const head = new THREE.Group();
   const hb = partBox(e, 0.28, 0.32, 0.26, 0xe8e4dc, faceTexture('chicken'));
   hb.position.y = 0.1;
   head.add(hb);
+  // 3D beak + wattle + red comb.
+  const beak = partBox(e, 0.16, 0.08, 0.1, 0xe8b83c);
+  beak.position.set(0, 0.08, -0.17);
+  head.add(beak);
+  const wattle = partBox(e, 0.08, 0.1, 0.06, 0xc84040);
+  wattle.position.set(0, -0.03, -0.15);
+  head.add(wattle);
+  const comb = partBox(e, 0.08, 0.1, 0.16, 0xc84040);
+  comb.position.set(0, 0.3, 0.0);
+  head.add(comb);
   head.position.set(0, 0.62, -0.26);
   g.add(head);
   // Wings.
