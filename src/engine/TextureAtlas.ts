@@ -37,6 +37,52 @@ function extrudeCell(img: ImageData, ix: number, iy: number): void {
   }
 }
 
+/**
+ * Flood the RGB of a tile's fully transparent texels with the average color
+ * of their opaque neighbours (alpha stays 0). Mipmap generation averages RGB
+ * unweighted by alpha, so without this, cutout tiles (painted on black
+ * transparency) darken toward black at distance and any relaxed alpha
+ * threshold exposes near-black fringes instead of foliage-coloured pixels.
+ */
+function dilateTransparent(img: ImageData, ix: number, iy: number): void {
+  const d = img.data;
+  const w = ATLAS_SIZE;
+  for (let pass = 0; pass < TILE_PX; pass++) {
+    let changed = false;
+    for (let y = 0; y < TILE_PX; y++) {
+      for (let x = 0; x < TILE_PX; x++) {
+        const i = ((iy + y) * w + ix + x) * 4;
+        if (d[i + 3] !== 0) continue;
+        // Skip texels already colored by a previous pass (non-black RGB).
+        if (d[i] !== 0 || d[i + 1] !== 0 || d[i + 2] !== 0) continue;
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        let n = 0;
+        for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + ox;
+          const ny = y + oy;
+          if (nx < 0 || nx >= TILE_PX || ny < 0 || ny >= TILE_PX) continue;
+          const ni = ((iy + ny) * w + ix + nx) * 4;
+          const filled = d[ni + 3] !== 0 || d[ni] !== 0 || d[ni + 1] !== 0 || d[ni + 2] !== 0;
+          if (!filled) continue;
+          r += d[ni];
+          g += d[ni + 1];
+          b += d[ni + 2];
+          n++;
+        }
+        if (n > 0) {
+          d[i] = Math.max(1, Math.round(r / n));
+          d[i + 1] = Math.max(1, Math.round(g / n));
+          d[i + 2] = Math.max(1, Math.round(b / n));
+          changed = true;
+        }
+      }
+    }
+    if (!changed) break;
+  }
+}
+
 class TilePainter {
   constructor(
     private img: ImageData,
@@ -2032,6 +2078,7 @@ export class TextureAtlas {
       const p = new TilePainter(img, ix, iy, mulberry32(seed ^ (tile * 7919 + 17)));
       painter(p);
       if (itemTiles.has(tile)) p.outline();
+      dilateTransparent(img, ix, iy);
       extrudeCell(img, ix, iy);
     }
     ctx.putImageData(img, 0, 0);

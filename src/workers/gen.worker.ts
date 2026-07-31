@@ -231,13 +231,15 @@ function columnInfo(x: number, z: number): ColumnInfo {
   else if (height < SEA_LEVEL - 1) {
     biome = river ? Biome.RIVER : cold ? Biome.FROZEN_OCEAN : Biome.OCEAN;
   } else if (height > 112) biome = Biome.STONY_PEAKS;
+  // Badlands outrank the mountain band: hot-dry highlands keep their
+  // terracotta walls all the way up instead of flipping to grassy mountains
+  // at the height gate (which put red rock straight against green).
+  else if (bad > 0.5) biome = Biome.BADLANDS;
   else if (height > 92) biome = weird < -0.36 ? Biome.GRAVELLY_HILLS : Biome.MOUNTAINS;
   else if (height <= SEA_LEVEL + 1) {
     if (moist > 0.26 && !cold) biome = temp > 0.24 ? Biome.MANGROVE_SWAMP : Biome.SWAMP;
     else biome = Biome.BEACH;
-  } else if (bad > 0.5) biome = Biome.BADLANDS;
-  else if (bad > 0.12) biome = Biome.DESERT; // sandy apron so mesas never touch green
-  else if (cold) {
+  } else if (cold) {
     if (moist > 0.14) biome = Biome.SNOWY_TAIGA;
     else if (weird > 0.5 && moist < -0.08) biome = Biome.ICE_SPIKES;
     else biome = Biome.SNOWY;
@@ -245,11 +247,13 @@ function columnInfo(x: number, z: number): ColumnInfo {
     if (moist > 0.05) biome = weird > 0.42 ? Biome.OLD_GROWTH_TAIGA : Biome.TAIGA;
     else biome = Biome.PLAINS;
   } else if (temp > 0.32 && moist < 0.08) biome = Biome.DESERT;
-  else if (temp > 0.26 && moist > 0.28) biome = Biome.JUNGLE;
-  else if (temp > 0.24 && moist < 0.24) biome = Biome.SAVANNA;
   else if (moist > 0.28 && height <= SEA_LEVEL + 4) {
+    // Wet lowlands beat jungle so hot swamps form coherent mangrove belts
+    // instead of 1-block waterline slivers with jungle rims.
     biome = temp > 0.24 ? Biome.MANGROVE_SWAMP : Biome.SWAMP;
-  } else if (height > 80 && temp < 0.24 && moist > 0.0 && weird > 0.36) {
+  } else if (temp > 0.26 && moist > 0.28) biome = Biome.JUNGLE;
+  else if (temp > 0.24 && moist < 0.24) biome = Biome.SAVANNA;
+  else if (height > 80 && temp < 0.24 && moist > 0.0 && weird > 0.36) {
     biome = Biome.MEADOW; // flowery highland shelf below the mountain line
   } else if (temp > 0.02 && temp < 0.24 && moist > 0.06 && moist < 0.28 && height > SEA_LEVEL + 6 && weird > 0.22) {
     biome = Biome.CHERRY;
@@ -404,19 +408,21 @@ function treesForChunk(cx: number, cz: number): TreePlan[] {
     const vil = villageForRegion(regionOf(x >> 4), regionOf(z >> 4));
     if (vil && (x - vil.x) * (x - vil.x) + (z - vil.z) * (z - vil.z) < vil.radius * vil.radius) continue;
     placed.push([x, z]);
-    let th: number;
-    if (type === 'jungle') th = rand.range(8, 14);
-    else if (type === 'spruce') th = rand.range(6, 10);
-    else if (type === 'mega_spruce') th = rand.range(12, 17);
-    else if (type === 'acacia') th = rand.range(5, 7);
-    else if (type === 'dark_oak') th = rand.range(5, 8);
-    else if (type === 'mangrove') th = rand.range(5, 8);
-    else th = rand.range(4, 6);
     // Forests keep their birch mix, old-growth taigas a normal-spruce mix;
-    // every other biome uses its signature tree.
+    // every other biome uses its signature tree. The species is decided
+    // FIRST so the trunk height matches it (a downgraded normal spruce must
+    // not keep a 17-block mega trunk).
     let treeType: TreeType = type;
     if (centerInfo.biome === Biome.FOREST && rand.chance(0.3)) treeType = 'birch';
     else if (type === 'mega_spruce' && rand.chance(0.35)) treeType = 'spruce';
+    let th: number;
+    if (treeType === 'jungle') th = rand.range(8, 14);
+    else if (treeType === 'spruce') th = rand.range(6, 10);
+    else if (treeType === 'mega_spruce') th = rand.range(12, 17);
+    else if (treeType === 'acacia') th = rand.range(5, 7);
+    else if (treeType === 'dark_oak') th = rand.range(5, 8);
+    else if (treeType === 'mangrove') th = rand.range(5, 8);
+    else th = rand.range(4, 6);
     trees.push({ x, z, y: info.height + 1, height: th, type: treeType });
   }
   return trees;
@@ -1867,6 +1873,15 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
           data[overIdx] = packVoxel(B.LILY_PAD, 0, 0);
         }
       }
+      // Icebergs breach the frozen sea surface, so they must be planted
+      // BEFORE the air-above guard (the cell above the seabed is water).
+      if (biome === Biome.FROZEN_OCEAN && r < 0.004) {
+        const bh = 3 + Math.floor(r * 2000) % 5;
+        for (let i = 0; i <= bh && SEA_LEVEL + i < CHUNK_HEIGHT; i++) {
+          data[blockIndex(x, SEA_LEVEL + i, z)] = packVoxel(i === bh ? B.SNOW_BLOCK : B.PACKED_ICE, 0, 0);
+        }
+        continue;
+      }
       if (voxelId(data[aboveIdx]) !== B.AIR) continue;
       if ((biome === Biome.DESERT && ground === B.SAND) || (biome === Biome.BADLANDS && ground === B.RED_SAND)) {
         // Cacti + dry dead bushes; badlands lean heavily toward dead bushes.
@@ -1898,14 +1913,6 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
               if (blockDef(voxelId(data[ni])).replaceable) data[ni] = packVoxel(B.PACKED_ICE, 0, 0);
             }
           }
-        }
-      } else if (biome === Biome.FROZEN_OCEAN && r < 0.004) {
-        // Drifting icebergs: packed-ice spires breaking the frozen surface.
-        const bh = 3 + Math.floor(r * 2000) % 5;
-        for (let i = 0; i <= bh && SEA_LEVEL + i < CHUNK_HEIGHT; i++) {
-          const bi = blockIndex(x, SEA_LEVEL + i, z);
-          if (i > 0 && !blockDef(voxelId(data[bi])).replaceable && voxelId(data[bi]) !== B.AIR) break;
-          data[bi] = packVoxel(i === bh ? B.SNOW_BLOCK : B.PACKED_ICE, 0, 0);
         }
       } else if (biome === Biome.MANGROVE_SWAMP && ground === B.MUD) {
         if (r < 0.04) data[aboveIdx] = packVoxel(B.BROWN_MUSHROOM, 0, 0);
