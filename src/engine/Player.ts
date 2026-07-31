@@ -35,6 +35,12 @@ export class PlayerController {
   flying = false;
   /** Highest y reached since leaving ground (fall damage). */
   private fallPeak = 0;
+
+  /** Tooling hook (headless capture): re-baseline the fall tracker so a
+   *  camera pinned in mid-air is not treated as a fatal fall. */
+  setFallPeakForCapture(y: number): void {
+    this.fallPeak = y;
+  }
   /** Smoothed eye height for crouch transitions. */
   private eyeSmooth = PLAYER_EYE;
 

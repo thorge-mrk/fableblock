@@ -39,7 +39,14 @@ import {
 } from '../core/config';
 import type { FromLogicMsg, ToLogicMsg, GenChunkMsg } from '../net/messages';
 
-const QUALITY_SCALE = [0.6, 1.0, 0];
+/**
+ * Render-scale multipliers applied ON TOP of the display's devicePixelRatio.
+ * They are relative, never absolute: an absolute 1.0 on a 2x HiDPI panel is
+ * half the native resolution and reads as a blurry, pixelated image.
+ */
+const QUALITY_SCALE = [0.7, 1.0, 1.0];
+/** Upper pixel-ratio bound per preset (fill rate guard on 3x phone panels). */
+const QUALITY_CAP = [1.25, 2.0, 3.0];
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -50,8 +57,10 @@ export class Game {
   private env!: EnvUniforms;
   private chunks!: ChunkManager;
   private world!: World;
-  private dayNight!: DayNightCycle;
-  private player = new PlayerController();
+  dayNight!: DayNightCycle;
+  /** Public so tooling (headless capture) can aim the view; game code uses it
+   *  exactly as before. */
+  readonly player = new PlayerController();
   private entityRenderer!: EntityRenderer;
   private character!: CharacterModel;
   private boat!: BoatModel;
@@ -104,6 +113,8 @@ export class Game {
   // backs off when the FPS EMA sags on weak GPUs and recovers when it's healthy.
   private baseScale = 1;
   private resScale = 1;
+  /** fps right before the last auto-downscale (0 = no pending judgement). */
+  private lastDownscaleFps = 0;
   private lastAppliedPR = -1;
   private resCheckAccum = 0;
 
@@ -421,6 +432,9 @@ export class Game {
     this.dayNight.update(dt, this.env, this.scene, this.camera, this.chunks.renderDistance);
     this.env.uTime.value = now / 1000;
     this.env.uGamma.value = store.settings.brightness;
+    this.env.uQuality.value = store.settings.quality;
+    // Submerged camera tints and tightens the terrain shader's fog.
+    this.env.uUnderwater.value = this.player.headInFluid && this.player.inWater ? 1 : 0;
 
     // The nether overrides the sky: sunless red gloom, tight warm fog.
     if (this.dim === 1) {
@@ -1654,7 +1668,10 @@ export class Game {
         0.15,
         Math.max((((v >> 8) & 0xf) / 15) * this.dayNight.sunLevel, ((v >> 12) & 0xf) / 15),
       );
-      this.heldView.update(dt, this.heldStack()?.id ?? 0, Math.hypot(this.player.vx, this.player.vz), bright);
+      // The arm's walk sway follows the same View Bobbing switch as the
+      // camera, so turning bobbing off really means a steady view.
+      const swaySpeed = store.settings.viewBobbing ? Math.hypot(this.player.vx, this.player.vz) : 0;
+      this.heldView.update(dt, this.heldStack()?.id ?? 0, swaySpeed, bright);
     }
   }
 
@@ -2115,8 +2132,12 @@ export class Game {
     this.chunks.renderDistance = s.renderDistance;
     this.camera.fov = s.fov;
     this.camera.updateProjectionMatrix();
-    const scale = QUALITY_SCALE[s.quality] || window.devicePixelRatio || 1;
-    this.baseScale = Math.min(scale === 0 ? window.devicePixelRatio : scale, 2.5);
+    // Presets scale the NATIVE pixel ratio so "Fancy" is genuinely native and
+    // even "Fast" stays legible instead of collapsing to half resolution.
+    const dpr = window.devicePixelRatio || 1;
+    const q = s.quality;
+    this.baseScale = Math.min(dpr * QUALITY_SCALE[q], QUALITY_CAP[q]);
+    if (!s.autoResolution) this.resScale = 1; // manual control: always full
     this.applyPixelRatio();
     this.dayNight.dayLengthSec = s.dayLengthSec;
     this.sound.setVolume(s.soundVolume);
@@ -2132,19 +2153,35 @@ export class Game {
     }
   }
 
-  /** Nudge the adaptive resolution multiplier from the smoothed frame rate,
-   *  with a wide deadband and discrete steps so it settles instead of pulsing.
-   *  Thresholds are absolute (not refresh-scaled): the uncapped rAF loop
-   *  already runs at 120+ fps when the hardware allows, and trading image
-   *  sharpness to chase a high refresh rate is a bad deal — especially when
-   *  the frame time is CPU-bound and downscaling would not help at all. */
+  /**
+   * Optional dynamic-resolution safety net (OFF by default — image quality is
+   * the player's call, made in Settings). When enabled it only engages below
+   * 30 fps, and it verifies that a downscale actually bought frames: if the
+   * frame rate did not improve, the scale is handed straight back, so a
+   * CPU-bound scene can never get stuck at a permanently soft image.
+   */
   private updateAdaptiveRes(): void {
+    if (!gameStore.get().settings.autoResolution) {
+      if (this.resScale !== 1) {
+        this.resScale = 1;
+        this.applyPixelRatio();
+      }
+      return;
+    }
     let changed = false;
-    if (this.fpsEMA < 45 && this.resScale > 0.6) {
-      this.resScale = Math.max(0.6, this.resScale - 0.15);
+    if (this.lastDownscaleFps > 0) {
+      // Judge the previous step: keep it only if it gained >8% frame rate.
+      if (this.fpsEMA < this.lastDownscaleFps * 1.08 && this.resScale < 1) {
+        this.resScale = Math.min(1, this.resScale + 0.2);
+        changed = true;
+      }
+      this.lastDownscaleFps = 0;
+    } else if (this.fpsEMA < 30 && this.resScale > 0.7) {
+      this.lastDownscaleFps = this.fpsEMA;
+      this.resScale = Math.max(0.7, this.resScale - 0.2);
       changed = true;
-    } else if (this.fpsEMA > 58 && this.resScale < 1) {
-      this.resScale = Math.min(1, this.resScale + 0.15);
+    } else if (this.fpsEMA > 55 && this.resScale < 1) {
+      this.resScale = Math.min(1, this.resScale + 0.2);
       changed = true;
     }
     if (changed) this.applyPixelRatio();
@@ -2184,5 +2221,8 @@ export class Game {
 export function createGame(canvas: HTMLCanvasElement): Game {
   const game = new Game(canvas);
   void useGameStore; // store side effects loaded with the engine
+  // Test/tooling handle: lets the headless capture script aim the camera and
+  // set the time of day so graphics changes can be reviewed as screenshots.
+  (window as unknown as { __fableGame?: Game }).__fableGame = game;
   return game;
 }

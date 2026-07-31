@@ -36,6 +36,9 @@ export interface Settings {
   dayLengthSec: number;
   sensitivity: number;
   brightness: number; // display gamma, 1 = neutral
+  /** Let the engine drop render resolution when frames tank (default off —
+   *  image sharpness stays under the player's control). */
+  autoResolution: boolean;
   soundVolume: number; // master volume 0..1
   viewBobbing: boolean; // walk bob + sprint FOV kick
   thirdPerson: boolean;
@@ -86,7 +89,10 @@ interface GameStore {
   setSettings: (partial: Partial<Settings>) => void;
 }
 
-const SETTINGS_KEY = 'voxelcraft.settings.v1';
+// v2: render-scale presets became relative to devicePixelRatio and view
+// bobbing defaults off — stored v1 values would keep the old blurry/bobbing
+// behavior, so the key is bumped to adopt the new defaults once.
+const SETTINGS_KEY = 'voxelcraft.settings.v2';
 
 function loadSettings(): Settings {
   const defaults: Settings = {
@@ -96,8 +102,9 @@ function loadSettings(): Settings {
     dayLengthSec: DEFAULT_DAY_LENGTH_SEC,
     sensitivity: 1,
     brightness: 1,
+    autoResolution: false,
     soundVolume: 0.8,
-    viewBobbing: true,
+    viewBobbing: false,
     thirdPerson: false,
     touchMode: typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true,
     showDebug: false,

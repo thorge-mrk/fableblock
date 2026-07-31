@@ -229,8 +229,9 @@ export class Sky {
     // is periodic over CLOUD_TILE cells, so wrapping the x-offset by one tile is
     // seamless (no jump); distance fog fades the rim. Dimmer at night.
     const period = CLOUD_TILE * CLOUD_CELL;
-    // High enough that even snow-capped ridgelines stay below the deck.
-    this.clouds.position.set(((t * 4) % 1) * period, 150 - camY, 0);
+    // Cloud deck well above the highest peaks, so it reads as sky rather than
+    // a ceiling hanging over the player's head.
+    this.clouds.position.set(((t * 4) % 1) * period, 196 - camY, 0);
     this.cloudMat.opacity = 0.4 + 0.5 * THREE.MathUtils.clamp(alt + 0.3, 0, 1);
   }
 

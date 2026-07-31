@@ -296,7 +296,7 @@ export function PauseScreen(): React.ReactElement {
           min={0}
           max={2}
           step={1}
-          format={(v) => ['Fast', 'Balanced', 'Fancy'][v]}
+          format={(v) => ['Fast (70%)', 'Balanced (100%)', 'Fancy (native)'][v]}
           onChange={(v) => apply({ quality: v as 0 | 1 | 2 })}
         />
         <SettingSlider
@@ -335,6 +335,17 @@ export function PauseScreen(): React.ReactElement {
           format={(v) => `${Math.round(v * 100)}%`}
           onChange={(v) => apply({ soundVolume: v })}
         />
+        <label className="flex w-72 mx-auto my-3 text-white text-sm justify-between items-center">
+          <span title="Only drops render resolution below 30 fps, and reverts it if that did not help.">
+            Auto Resolution
+          </span>
+          <input
+            type="checkbox"
+            className="w-5 h-5 accent-[#2dd4bf]"
+            checked={settings.autoResolution}
+            onChange={(e) => apply({ autoResolution: e.target.checked })}
+          />
+        </label>
         <label className="flex w-72 mx-auto my-3 text-white text-sm justify-between items-center">
           <span>View Bobbing</span>
           <input

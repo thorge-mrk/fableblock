@@ -52,7 +52,7 @@ export const HOPPER_INTERVAL = 4; // every 4 game ticks (Module 5 spec)
 export const DEFAULT_DAY_LENGTH_SEC = 600; // 10 real minutes per full cycle
 
 // --- Render defaults ---
-export const DEFAULT_RENDER_DISTANCE = 6;
+export const DEFAULT_RENDER_DISTANCE = 8;
 export const MIN_RENDER_DISTANCE = 2;
 export const MAX_RENDER_DISTANCE = 16;
 export const DEFAULT_FOV = 75;
