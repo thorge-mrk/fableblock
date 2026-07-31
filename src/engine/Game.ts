@@ -73,6 +73,7 @@ export class Game {
   private running = false;
   private lastFrame = 0;
   private fpsEMA = 60;
+  private displayHz = 60; // detected refresh rate (peak sustained rAF pace)
   private tickAccum = 0;
   private statsAccum = 0;
   private patchOut: number[] = [];
@@ -203,6 +204,10 @@ export class Game {
     this.scene.add(this.camera);
 
     this.atlas = new TextureAtlas(seed);
+    // Max anisotropic filtering: keeps distant/oblique block faces crisp
+    // instead of dissolving into shimmering mush.
+    this.atlas.texture.anisotropy = Math.min(16, this.renderer.capabilities.getMaxAnisotropy());
+    this.atlas.texture.needsUpdate = true;
     this.env = createEnvUniforms();
     const terrainMat = createTerrainMaterial(this.atlas.texture, this.env);
     const waterMat = createWaterMaterial(this.atlas.texture, this.env);
@@ -402,6 +407,13 @@ export class Game {
     const dt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
     this.fpsEMA = this.fpsEMA * 0.95 + (dt > 0 ? 1 / dt : 60) * 0.05;
+    // Estimate the display refresh rate from the fastest sustained frame pace
+    // so high-refresh screens (120/144 Hz) are treated as the target, not 60.
+    if (dt > 0.001) {
+      const hz = 1 / dt;
+      if (hz > this.displayHz) this.displayHz = Math.min(240, hz);
+      else this.displayHz = Math.max(60, this.displayHz * 0.9995); // decay stale peaks
+    }
 
     const store = gameStore.get();
     this.chunks.update(Math.floor(this.player.x), Math.floor(this.player.z));
@@ -1039,7 +1051,7 @@ export class Game {
       Math.max(0.05, cbox[4] - cbox[1]),
       Math.max(0.05, cbox[5] - cbox[2]),
     );
-    if (Math.random() < dt * 8) this.heldView.swing();
+    this.heldView.swingLoop(); // steady chop while the block breaks
     // Trickle a few fragments off the block face while mining.
     if (Math.random() < dt * 14) {
       const [pr, pg, pb] = this.atlas.sampleColor(def.tiles[4]);
@@ -2127,13 +2139,17 @@ export class Game {
   }
 
   /** Nudge the adaptive resolution multiplier from the smoothed frame rate,
-   *  with a wide deadband and discrete steps so it settles instead of pulsing. */
+   *  with a wide deadband and discrete steps so it settles instead of pulsing.
+   *  Thresholds scale with the detected refresh rate, so a 120 Hz display
+   *  targets ~120 fps instead of settling for 60. */
   private updateAdaptiveRes(): void {
+    const down = Math.max(45, this.displayHz * 0.72);
+    const up = Math.max(58, this.displayHz * 0.92);
     let changed = false;
-    if (this.fpsEMA < 45 && this.resScale > 0.6) {
+    if (this.fpsEMA < down && this.resScale > 0.6) {
       this.resScale = Math.max(0.6, this.resScale - 0.15);
       changed = true;
-    } else if (this.fpsEMA > 58 && this.resScale < 1) {
+    } else if (this.fpsEMA > up && this.resScale < 1) {
       this.resScale = Math.min(1, this.resScale + 0.15);
       changed = true;
     }

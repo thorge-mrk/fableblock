@@ -42,7 +42,9 @@ export class CharacterModel {
     heldItemId: number,
   ): void {
     this.group.position.set(x, y, z);
-    this.group.rotation.y = yaw + Math.PI;
+    // Model faces -Z at yaw 0 (same convention as mobs and the camera), so the
+    // head/face lead the walk direction — no extra half-turn.
+    this.group.rotation.y = yaw;
     this.limbPhase += speed * dt * 2.2;
     this.swingT = Math.min(1, this.swingT + dt * 2.8);
     const swing = Math.sin(this.limbPhase) * Math.min(1, speed / 3) * 0.7;
@@ -128,6 +130,11 @@ export class HeldItemView {
     this.swingT = 0;
   }
 
+  /** Chain swings back-to-back (continuous mining) without resetting mid-arc. */
+  swingLoop(): void {
+    if (this.swingT >= 1) this.swingT = 0;
+  }
+
   update(dt: number, itemId: number, moveSpeed: number, brightness: number): void {
     this.light.value = brightness;
     // Dim the arm with the brightness setting while keeping its hue.
@@ -165,13 +172,17 @@ export class HeldItemView {
         this.group.add(this.mesh);
       }
     }
-    if (!this.mesh) return;
-    this.swingT = Math.min(1, this.swingT + dt * 3);
+    // Swing + walk bob run even bare-handed (the arm still chops).
+    this.swingT = Math.min(1, this.swingT + dt * 3.6);
     this.bobPhase += dt * Math.min(10, 4 + moveSpeed * 1.4);
     const bobY = Math.abs(Math.sin(this.bobPhase)) * 0.02 * Math.min(1, moveSpeed / 3);
+    const bobX = Math.sin(this.bobPhase * 0.5) * 0.012 * Math.min(1, moveSpeed / 3);
     const sw = this.swingT < 1 ? Math.sin(this.swingT * Math.PI) : 0;
-    this.group.position.set(0.42 - sw * 0.25, -0.42 + bobY - sw * 0.28, -0.7 - sw * 0.12);
-    this.group.rotation.set(-sw * 1.1, sw * 0.6, 0);
+    // Original-style chop: the arm arcs forward-down around the shoulder with
+    // a slight inward roll — the hand stays anchored instead of flying off.
+    this.group.position.set(0.42 + bobX - sw * 0.06, -0.42 + bobY - sw * 0.1, -0.7 - sw * 0.16);
+    this.group.rotation.set(-sw * 0.85, sw * 0.22, -sw * 0.3);
+    if (!this.mesh) return;
     const m = this.mesh.material as THREE.MeshLambertMaterial;
     m.color.setScalar(Math.max(0.15, brightness));
   }

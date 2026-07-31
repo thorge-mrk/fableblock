@@ -108,7 +108,10 @@ ${water
   vec2 atlasUv = px / ATLASPX;
   atlasUv.y = 1.0 - atlasUv.y;
   vec4 tex = texture2D(uAtlas, atlasUv);
-  if (tex.a < 0.5) discard;`}
+  // Cutout threshold relaxes with distance: mipmap-averaged alpha would
+  // otherwise dissolve far leaves/plants into sparkling dots.
+  float aThr = mix(0.5, 0.16, smoothstep(24.0, 90.0, vDist));
+  if (tex.a < aThr) discard;`}
 
   float sun = (vLight.x / 15.0) * uSunLevel;
   float block = vLight.y / 15.0;

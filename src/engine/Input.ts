@@ -47,8 +47,13 @@ let stickX = 0;
 let stickZ = 0;
 let touchSneak = false;
 let touchJump = false;
+// Sprint sources: held Ctrl OR double-tapped forward (cleared on W release).
+let ctrlSprint = false;
+let tapSprint = false;
+let lastForwardTap = 0;
 
 function recomputeMove(): void {
+  input.sprint = ctrlSprint || tapSprint;
   let x = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
   let z = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
   x += stickX;
@@ -116,7 +121,14 @@ export function attachKeyboard(hooks: InputHooks): void {
       return;
     }
     switch (e.code) {
-      case 'KeyW': keys.w = true; break;
+      case 'KeyW': {
+        // Double-tap forward = sprint (like the original), held until released.
+        const now = performance.now();
+        if (!keys.w && now - lastForwardTap < 280) tapSprint = true;
+        lastForwardTap = now;
+        keys.w = true;
+        break;
+      }
       case 'KeyA': keys.a = true; break;
       case 'KeyS': keys.s = true; break;
       case 'KeyD': keys.d = true; break;
@@ -130,7 +142,7 @@ export function attachKeyboard(hooks: InputHooks): void {
         break;
       case 'ControlLeft':
       case 'ControlRight':
-        input.sprint = true;
+        ctrlSprint = true;
         break;
       case 'KeyE': hooks.onInventory(); break;
       case 'KeyQ': hooks.onDrop(e.ctrlKey); break;
@@ -160,7 +172,10 @@ export function attachKeyboard(hooks: InputHooks): void {
 
   const onKeyUp = (e: KeyboardEvent) => {
     switch (e.code) {
-      case 'KeyW': keys.w = false; break;
+      case 'KeyW':
+        keys.w = false;
+        tapSprint = false;
+        break;
       case 'KeyA': keys.a = false; break;
       case 'KeyS': keys.s = false; break;
       case 'KeyD': keys.d = false; break;
@@ -171,7 +186,7 @@ export function attachKeyboard(hooks: InputHooks): void {
         break;
       case 'ControlLeft':
       case 'ControlRight':
-        input.sprint = false;
+        ctrlSprint = false;
         break;
     }
     recomputeMove();
@@ -186,7 +201,8 @@ export function attachKeyboard(hooks: InputHooks): void {
     keys.w = keys.a = keys.s = keys.d = false;
     input.jump = false;
     input.sneak = false;
-    input.sprint = false;
+    ctrlSprint = false;
+    tapSprint = false;
     input.mineHeld = false;
     input.useHeld = false;
     recomputeMove();
