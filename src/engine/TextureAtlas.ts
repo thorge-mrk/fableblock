@@ -655,12 +655,25 @@ const PAINTERS: Record<number, Painter> = {
     }
   },
   [TILE.SANDSTONE_TOP]: (p) => {
-    p.noiseFill([216, 203, 155], 0.08);
+    // Smooth-cut slab: framed face with faint tool marks.
+    p.noiseFill([216, 203, 155], 0.06);
     p.border([196, 183, 135]);
+    p.speckle([228, 216, 170], 5, 1);
+    p.speckle([200, 186, 138], 4, 1);
+    p.bevel(0.06);
   },
   [TILE.SANDSTONE_SIDE]: (p) => {
-    p.noiseFill([216, 203, 155], 0.08);
-    for (const y of [5, 10]) for (let x = 0; x < N; x++) p.px(x, y, 190, 176, 128);
+    // Layered sediment bands with embedded grit and a darker footing.
+    p.noiseFill([216, 203, 155], 0.07);
+    for (const y of [4, 9, 13]) {
+      for (let x = 0; x < N; x++) {
+        const f = 0.9 + (p.rand() - 0.5) * 0.05;
+        p.px(x, y, 196 * f, 182 * f, 134 * f);
+      }
+    }
+    p.speckle([190, 172, 120], 6, 1);
+    p.speckle([230, 218, 174], 5, 1);
+    for (let x = 0; x < N; x++) p.px(x, 15, 188, 174, 126);
   },
   [TILE.OAK_LOG_SIDE]: (p) => {
     // Bark with deep ridge grooves and a knot.
@@ -744,7 +757,18 @@ const PAINTERS: Record<number, Painter> = {
     for (let i = 0; i < 6; i++) p.px(9 - i, 3 + i, 226, 244, 250, 170);
     for (let i = 0; i < 4; i++) p.px(12 - i, 8 + i, 214, 236, 244, 120);
   },
-  [TILE.SNOW_TOP]: (p) => p.noiseFill([240, 246, 250], 0.05),
+  [TILE.SNOW_TOP]: (p) => {
+    // Fresh powder with a few glinting crystals and soft drift shadows.
+    p.noiseFill([240, 246, 250], 0.05);
+    for (let i = 0; i < 6; i++) {
+      p.px(Math.floor(p.rand() * N), Math.floor(p.rand() * N), 255, 255, 255);
+    }
+    for (let i = 0; i < 4; i++) {
+      const x = Math.floor(p.rand() * (N - 3));
+      const y = Math.floor(p.rand() * N);
+      p.rect(x, y, 3, 1, [224, 232, 240]);
+    }
+  },
   [TILE.SNOW_SIDE]: (p) => {
     p.noiseFill(DIRT_BROWN, 0.2);
     for (let x = 0; x < N; x++) for (let y = 0; y < 4; y++) p.px(x, y, 240, 246, 250);
