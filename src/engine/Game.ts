@@ -74,6 +74,7 @@ export class Game {
   private lastFrame = 0;
   private fpsEMA = 60;
   private displayHz = 60; // detected refresh rate (peak sustained rAF pace)
+  private prevFrameHz = 60;
   private tickAccum = 0;
   private statsAccum = 0;
   private patchOut: number[] = [];
@@ -409,10 +410,14 @@ export class Game {
     this.fpsEMA = this.fpsEMA * 0.95 + (dt > 0 ? 1 / dt : 60) * 0.05;
     // Estimate the display refresh rate from the fastest sustained frame pace
     // so high-refresh screens (120/144 Hz) are treated as the target, not 60.
+    // Two consecutive fast frames are required — a single glitchy short frame
+    // must not lock in a bogus 240 Hz target.
     if (dt > 0.001) {
       const hz = 1 / dt;
-      if (hz > this.displayHz) this.displayHz = Math.min(240, hz);
+      const sustained = Math.min(hz, this.prevFrameHz);
+      if (sustained > this.displayHz) this.displayHz = Math.min(240, sustained);
       else this.displayHz = Math.max(60, this.displayHz * 0.9995); // decay stale peaks
+      this.prevFrameHz = hz;
     }
 
     const store = gameStore.get();
