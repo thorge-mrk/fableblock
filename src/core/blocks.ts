@@ -201,6 +201,13 @@ export const TILE = {
   EMERALD_ORE: 186,
   ITEM_EMERALD: 187,
   COARSE_DIRT: 188,
+  // Biome blocks (V5): sunflower plains / mangrove swamp.
+  SUNFLOWER: 189,
+  MANGROVE_LOG_SIDE: 190,
+  MANGROVE_LOG_TOP: 191,
+  MANGROVE_LEAVES: 192,
+  MANGROVE_PLANKS: 193,
+  MUD: 194,
 } as const;
 
 export const ATLAS_TILES = 32; // 32x32 grid of tiles
@@ -358,6 +365,12 @@ export const B = {
   FLOWER_WHITE: 137,
   EMERALD_ORE: 138,
   COARSE_DIRT: 139,
+  // Biome blocks (V5): sunflower plains / mangrove swamp.
+  SUNFLOWER: 140,
+  MANGROVE_LOG: 141,
+  MANGROVE_LEAVES: 142,
+  MANGROVE_PLANKS: 143,
+  MUD: 144,
 } as const;
 
 export type BlockId = number;
@@ -706,6 +719,15 @@ def(B.FLOWER_WHITE, 'Oxeye Daisy', tile6(TILE.FLOWER_WHITE), {
 });
 def(B.EMERALD_ORE, 'Emerald Ore', tile6(TILE.EMERALD_ORE), { hardness: 3, tool: 'pickaxe', minTier: 2, drop: 256 + 54 /* ITEM.EMERALD */ });
 def(B.COARSE_DIRT, 'Coarse Dirt', tile6(TILE.COARSE_DIRT), { hardness: 0.5, tool: 'shovel' });
+def(B.SUNFLOWER, 'Sunflower', tile6(TILE.SUNFLOWER), {
+  solid: false, opaque: false, renderType: RenderType.CROSS, hardness: 0.05, lightFilter: 0,
+});
+def(B.MANGROVE_LOG, 'Mangrove Log', tileTSB(TILE.MANGROVE_LOG_TOP, TILE.MANGROVE_LOG_SIDE, TILE.MANGROVE_LOG_TOP), { hardness: 2, tool: 'axe' });
+def(B.MANGROVE_LEAVES, 'Mangrove Leaves', tile6(TILE.MANGROVE_LEAVES), {
+  opaque: false, renderType: RenderType.CUTOUT, hardness: 0.2, drop: -1, lightFilter: 1, randomTicks: true,
+});
+def(B.MANGROVE_PLANKS, 'Mangrove Planks', tile6(TILE.MANGROVE_PLANKS), { hardness: 2, tool: 'axe' });
+def(B.MUD, 'Mud', tile6(TILE.MUD), { hardness: 0.5, tool: 'shovel' });
 
 const fluidDefaults = {
   solid: false,

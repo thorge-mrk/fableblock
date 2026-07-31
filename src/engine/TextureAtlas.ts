@@ -211,7 +211,7 @@ class TilePainter {
 
 type Painter = (p: TilePainter) => void;
 
-const GRASS_GREEN: RGB = [106, 170, 64];
+const GRASS_GREEN: RGB = [121, 172, 66];
 const DIRT_BROWN: RGB = [134, 96, 67];
 const STONE_GRAY: RGB = [128, 128, 128];
 const SAND_YELLOW: RGB = [219, 207, 163];
@@ -570,61 +570,69 @@ function coloredLogTop(fill: RGB, rim: RGB, ring: RGB, heart: RGB): Painter {
 
 const PAINTERS: Record<number, Painter> = {
   [TILE.GRASS_TOP]: (p) => {
-    // Two-tone turf with blade tufts and tiny flowers — not flat noise.
-    p.noiseFill(GRASS_GREEN, 0.14);
-    for (let i = 0; i < 14; i++) {
+    // Calm turf: soft low-frequency patches with restrained blade tufts.
+    // High-contrast salt-and-pepper reads as flickering dots at distance,
+    // so tone variation lives in 4px patches and the tufts stay subtle.
+    p.cellNoise(GRASS_GREEN, 0.1, 4);
+    for (let i = 0; i < 10; i++) {
       const x = Math.floor(p.rand() * N);
       const y = Math.floor(p.rand() * N);
-      p.px(x, y, 128, 188, 74);
-      p.px(x, y - 1, 142, 202, 86);
+      p.px(x, y, 134, 186, 76);
+      p.px(x, y - 1, 141, 194, 82);
     }
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       const x = Math.floor(p.rand() * N);
       const y = Math.floor(p.rand() * N);
-      p.px(x, y, 84, 138, 52);
-      p.px(x + 1, y, 78, 130, 48);
+      p.px(x, y, 104, 152, 56);
+      p.px(x + 1, y, 100, 146, 54);
     }
-    p.bevel(0.08);
+    p.bevel(0.05);
   },
   [TILE.GRASS_SIDE]: (p) => {
-    // Dirt body, jagged turf lip with hanging blades.
-    p.noiseFill(DIRT_BROWN, 0.18);
-    p.speckle([106, 74, 50], 6, 1);
+    // Dirt body under a gently uneven turf lip.
+    p.noiseFill(DIRT_BROWN, 0.12);
+    p.speckle([106, 74, 50], 5, 1);
+    p.speckle([150, 112, 80], 4, 1);
     for (let x = 0; x < N; x++) {
-      const depth = 2 + Math.floor(p.rand() * 2) + (x % 5 === 0 ? 2 : 0);
+      const depth = 3 + ((x * 7 + 3) % 5 === 0 ? 1 : 0) - (x % 6 === 2 ? 1 : 0);
       for (let y = 0; y < depth; y++) {
-        const f = 1 + (p.rand() - 0.5) * 0.16 - y * 0.05;
+        const f = 1 + (p.rand() - 0.5) * 0.1 - y * 0.04;
         p.px(x, y, GRASS_GREEN[0] * f, GRASS_GREEN[1] * f, GRASS_GREEN[2] * f);
       }
-      if (x % 5 === 0) p.px(x, depth, 92, 148, 58);
+      if (x % 6 === 0) p.px(x, depth, 104, 152, 58);
     }
-    for (let x = 0; x < N; x++) p.px(x, 0, 128, 188, 74);
+    for (let x = 0; x < N; x++) p.px(x, 0, 132, 184, 74);
   },
   [TILE.DIRT]: (p) => {
-    // Earth with embedded pebbles and root flecks.
-    p.noiseFill(DIRT_BROWN, 0.18);
+    // Earth with embedded pebbles and root flecks — calm, patchy tone.
+    p.cellNoise(DIRT_BROWN, 0.12, 4);
     for (let i = 0; i < 5; i++) {
       const x = Math.floor(p.rand() * (N - 2));
       const y = Math.floor(p.rand() * (N - 2));
       p.rect(x, y, 2, 1, [158, 120, 88]);
-      p.px(x, y + 1, 96, 68, 46);
+      p.px(x, y + 1, 100, 72, 48);
     }
-    p.speckle([104, 72, 48], 8, 1);
+    p.speckle([110, 78, 52], 7, 1);
   },
   [TILE.STONE]: (p) => {
-    // Fractured rock: cell base + two long hairline fissures.
-    p.cellNoise(STONE_GRAY, 0.16, 3);
-    for (let c = 0; c < 2; c++) {
+    // Quiet rock: broad tonal patches, a few shadowed blotches, short cracks.
+    // (Full-height fissures aliased into vertical stripes at distance.)
+    p.cellNoise(STONE_GRAY, 0.1, 4);
+    for (let i = 0; i < 3; i++) {
+      p.disc(2 + p.rand() * 12, 2 + p.rand() * 12, 1.6 + p.rand(), [112, 112, 116], 0.08);
+    }
+    for (let c = 0; c < 3; c++) {
       let x = Math.floor(p.rand() * N);
-      let y = 0;
-      while (y < N) {
-        p.px(x, y, 96, 96, 100);
+      let y = Math.floor(p.rand() * 10);
+      const len = 4 + Math.floor(p.rand() * 4);
+      for (let i = 0; i < len && y < N; i++) {
+        p.px(x, y, 100, 100, 104);
         if (p.rand() < 0.4) x += p.rand() < 0.5 ? -1 : 1;
         y++;
       }
     }
-    p.speckle([150, 150, 154], 5, 1);
-    p.bevel(0.06);
+    p.speckle([146, 146, 150], 5, 1);
+    p.bevel(0.05);
   },
   [TILE.COBBLESTONE]: cobblePainter(false),
   [TILE.MOSSY_COBBLESTONE]: cobblePainter(true),
@@ -704,25 +712,25 @@ const PAINTERS: Record<number, Painter> = {
     p.px(8, 8, 92, 70, 42);
   },
   [TILE.OAK_LEAVES]: (p) => {
-    // Clustered foliage: shadow bed first, bright leaf clumps on top,
-    // ~25% genuine see-through holes for depth.
+    // Clustered foliage: denser bed with softer clump contrast — fewer
+    // see-through pinholes so far canopies stay solid instead of sparkling.
     p.clear();
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
-        if (p.rand() < 0.62) {
-          const f = 0.6 + p.rand() * 0.45;
+        if (p.rand() < 0.74) {
+          const f = 0.7 + p.rand() * 0.35;
           p.px(x, y, LEAF_GREEN[0] * f, LEAF_GREEN[1] * f, LEAF_GREEN[2] * f);
         }
       }
     }
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 26; i++) {
       const x = Math.floor(p.rand() * N);
       const y = Math.floor(p.rand() * N);
       const bright = p.rand() < 0.4;
-      const c: RGB = bright ? [86, 152, 60] : [70, 132, 50];
+      const c: RGB = bright ? [82, 146, 58] : [70, 132, 50];
       p.px(x, y, c[0], c[1], c[2]);
-      p.px(x + 1, y, c[0] * 0.9, c[1] * 0.9, c[2] * 0.9);
-      p.px(x, y + 1, c[0] * 0.82, c[1] * 0.82, c[2] * 0.82);
+      p.px(x + 1, y, c[0] * 0.92, c[1] * 0.92, c[2] * 0.92);
+      p.px(x, y + 1, c[0] * 0.85, c[1] * 0.85, c[2] * 0.85);
     }
   },
   [TILE.BIRCH_LOG_SIDE]: (p) => {
@@ -1536,7 +1544,7 @@ const PAINTERS: Record<number, Painter> = {
     }
   },
   [TILE.CHERRY_LOG_TOP]: coloredLogTop([150, 120, 120], [96, 74, 78], [128, 98, 102], [150, 110, 120]),
-  [TILE.CHERRY_LEAVES]: coloredLeaves([230, 150, 185], [246, 190, 214], [252, 224, 238], 0.62),
+  [TILE.CHERRY_LEAVES]: coloredLeaves([230, 150, 185], [246, 190, 214], [252, 224, 238], 0.72),
   [TILE.CHERRY_PLANKS]: coloredPlanks([206, 158, 158], [158, 116, 118]),
   [TILE.JUNGLE_LOG_SIDE]: coloredLogSide([98, 74, 44], [70, 50, 28], [2, 6, 11, 14], 4),
   [TILE.JUNGLE_LOG_TOP]: coloredLogTop([150, 128, 86], [78, 60, 36], [120, 100, 64], [96, 78, 46]),
@@ -1574,7 +1582,7 @@ const PAINTERS: Record<number, Painter> = {
   // --- Biome blocks (V4) ----------------------------------------------------
   [TILE.ACACIA_LOG_SIDE]: coloredLogSide([116, 100, 88], [82, 68, 58], [3, 9, 13], 4),
   [TILE.ACACIA_LOG_TOP]: coloredLogTop([176, 96, 58], [96, 80, 70], [148, 78, 46], [118, 60, 36]),
-  [TILE.ACACIA_LEAVES]: coloredLeaves([96, 130, 40], [128, 160, 60], [70, 100, 30], 0.66),
+  [TILE.ACACIA_LEAVES]: coloredLeaves([96, 130, 40], [128, 160, 60], [70, 100, 30], 0.72),
   [TILE.ACACIA_PLANKS]: coloredPlanks([168, 92, 50], [126, 66, 36]),
   [TILE.DARK_OAK_LOG_SIDE]: coloredLogSide([56, 42, 26], [36, 26, 16], [2, 7, 12], 5),
   [TILE.DARK_OAK_LOG_TOP]: coloredLogTop([88, 64, 40], [42, 30, 18], [66, 48, 30], [48, 34, 20]),
@@ -1734,6 +1742,33 @@ const PAINTERS: Record<number, Painter> = {
     p.px(7, 5, 224, 255, 236);
     p.px(8, 12, 20, 110, 52);
     p.outline([12, 44, 24]);
+  },
+  [TILE.SUNFLOWER]: (p) => {
+    p.clear();
+    // Tall stem with paired leaves and a big seed-disc bloom.
+    for (let y = 6; y < N; y++) p.px(7, y, 62, 116, 44);
+    p.px(5, 11, 74, 132, 52);
+    p.px(6, 11, 74, 132, 52);
+    p.px(9, 12, 74, 132, 52);
+    p.px(8, 12, 74, 132, 52);
+    p.disc(7, 4, 3.2, [232, 190, 48]);
+    p.disc(7, 4, 1.6, [124, 84, 32], 0.15);
+    for (const [dx, dy] of [[-3, 0], [3, 0], [0, -3], [0, 3]] as const) {
+      p.px(7 + dx, 4 + dy, 246, 210, 74);
+    }
+  },
+  [TILE.MANGROVE_LOG_SIDE]: coloredLogSide([94, 58, 48], [64, 38, 30], [3, 8, 13], 4),
+  [TILE.MANGROVE_LOG_TOP]: coloredLogTop([150, 84, 74], [70, 42, 34], [124, 66, 56], [96, 50, 42]),
+  [TILE.MANGROVE_LEAVES]: coloredLeaves([40, 96, 34], [70, 132, 48], [26, 70, 24], 0.78),
+  [TILE.MANGROVE_PLANKS]: coloredPlanks([158, 82, 74], [118, 58, 50]),
+  [TILE.MUD]: (p) => {
+    // Wet packed sludge: dark base, glossy damp patches, tiny bubbles.
+    p.cellNoise([84, 78, 82], 0.14, 3);
+    p.speckle([104, 98, 104], 6, 2);
+    p.speckle([62, 58, 64], 8, 1);
+    for (let i = 0; i < 4; i++) {
+      p.px(Math.floor(p.rand() * N), Math.floor(p.rand() * N), 128, 122, 128);
+    }
   },
   [TILE.COARSE_DIRT]: (p) => {
     // Dirt packed with grit and small stones — never grows grass.

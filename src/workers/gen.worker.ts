@@ -114,6 +114,13 @@ export const enum Biome {
   MUSHROOM = 18,
   ICE_SPIKES = 19,
   STONY_PEAKS = 20,
+  // V5 biome pass — highland + variant biomes.
+  MEADOW = 21,
+  SUNFLOWER_PLAINS = 22,
+  OLD_GROWTH_TAIGA = 23,
+  GRAVELLY_HILLS = 24,
+  MANGROVE_SWAMP = 25,
+  FROZEN_OCEAN = 26,
 }
 
 interface ColumnInfo {
@@ -221,22 +228,30 @@ function columnInfo(x: number, z: number): ColumnInfo {
   const cold = temp < -0.34;
   let biome: Biome;
   if (mushMask > 0.45) biome = Biome.MUSHROOM;
-  else if (height < SEA_LEVEL - 1) biome = river ? Biome.RIVER : Biome.OCEAN;
-  else if (height > 112) biome = Biome.STONY_PEAKS;
-  else if (height > 92) biome = Biome.MOUNTAINS;
+  else if (height < SEA_LEVEL - 1) {
+    biome = river ? Biome.RIVER : cold ? Biome.FROZEN_OCEAN : Biome.OCEAN;
+  } else if (height > 112) biome = Biome.STONY_PEAKS;
+  else if (height > 92) biome = weird < -0.36 ? Biome.GRAVELLY_HILLS : Biome.MOUNTAINS;
   else if (height <= SEA_LEVEL + 1) {
-    biome = moist > 0.26 && !cold && temp <= 0.26 ? Biome.SWAMP : Biome.BEACH;
+    if (moist > 0.26 && !cold) biome = temp > 0.24 ? Biome.MANGROVE_SWAMP : Biome.SWAMP;
+    else biome = Biome.BEACH;
   } else if (bad > 0.5) biome = Biome.BADLANDS;
+  else if (bad > 0.12) biome = Biome.DESERT; // sandy apron so mesas never touch green
   else if (cold) {
     if (moist > 0.14) biome = Biome.SNOWY_TAIGA;
     else if (weird > 0.5 && moist < -0.08) biome = Biome.ICE_SPIKES;
     else biome = Biome.SNOWY;
-  } else if (temp < -0.1) biome = moist > 0.05 ? Biome.TAIGA : Biome.PLAINS;
-  else if (temp > 0.32 && moist < 0.08) biome = Biome.DESERT;
+  } else if (temp < -0.1) {
+    if (moist > 0.05) biome = weird > 0.42 ? Biome.OLD_GROWTH_TAIGA : Biome.TAIGA;
+    else biome = Biome.PLAINS;
+  } else if (temp > 0.32 && moist < 0.08) biome = Biome.DESERT;
   else if (temp > 0.26 && moist > 0.28) biome = Biome.JUNGLE;
   else if (temp > 0.24 && moist < 0.24) biome = Biome.SAVANNA;
-  else if (moist > 0.28 && height <= SEA_LEVEL + 4) biome = Biome.SWAMP;
-  else if (temp > 0.02 && temp < 0.24 && moist > 0.06 && moist < 0.28 && height > SEA_LEVEL + 6 && weird > 0.22) {
+  else if (moist > 0.28 && height <= SEA_LEVEL + 4) {
+    biome = temp > 0.24 ? Biome.MANGROVE_SWAMP : Biome.SWAMP;
+  } else if (height > 80 && temp < 0.24 && moist > 0.0 && weird > 0.36) {
+    biome = Biome.MEADOW; // flowery highland shelf below the mountain line
+  } else if (temp > 0.02 && temp < 0.24 && moist > 0.06 && moist < 0.28 && height > SEA_LEVEL + 6 && weird > 0.22) {
     biome = Biome.CHERRY;
   } else if (moist > 0.06) {
     // Forest family, split by the weirdness field.
@@ -244,7 +259,7 @@ function columnInfo(x: number, z: number): ColumnInfo {
     else if (weird > 0.42 && moist > 0.2) biome = Biome.DARK_FOREST;
     else if (weird > 0.32) biome = Biome.FLOWER_FOREST;
     else biome = Biome.FOREST;
-  } else biome = Biome.PLAINS;
+  } else biome = weird > 0.5 ? Biome.SUNFLOWER_PLAINS : Biome.PLAINS;
   return { height, biome };
 }
 
@@ -318,7 +333,7 @@ function ravineAt(x: number, z: number): RavineInfo | null {
 // ---------------------------------------------------------------------------
 // Trees (with cross-chunk canopy support)
 // ---------------------------------------------------------------------------
-type TreeType = 'oak' | 'birch' | 'cherry' | 'jungle' | 'spruce' | 'acacia' | 'dark_oak';
+type TreeType = 'oak' | 'birch' | 'cherry' | 'jungle' | 'spruce' | 'acacia' | 'dark_oak' | 'mega_spruce' | 'mangrove';
 
 interface TreePlan {
   x: number;
@@ -330,16 +345,17 @@ interface TreePlan {
 
 const TREE_LOG: Record<TreeType, number> = {
   oak: B.OAK_LOG, birch: B.BIRCH_LOG, cherry: B.CHERRY_LOG, jungle: B.JUNGLE_LOG, spruce: B.SPRUCE_LOG,
-  acacia: B.ACACIA_LOG, dark_oak: B.DARK_OAK_LOG,
+  acacia: B.ACACIA_LOG, dark_oak: B.DARK_OAK_LOG, mega_spruce: B.SPRUCE_LOG, mangrove: B.MANGROVE_LOG,
 };
 const TREE_LEAF: Record<TreeType, number> = {
   oak: B.OAK_LEAVES, birch: B.BIRCH_LEAVES, cherry: B.CHERRY_LEAVES, jungle: B.JUNGLE_LEAVES, spruce: B.SPRUCE_LEAVES,
-  acacia: B.ACACIA_LEAVES, dark_oak: B.DARK_OAK_LEAVES,
+  acacia: B.ACACIA_LEAVES, dark_oak: B.DARK_OAK_LEAVES, mega_spruce: B.SPRUCE_LEAVES, mangrove: B.MANGROVE_LEAVES,
 };
 
 const NO_TREE_BIOMES = new Set<Biome>([
-  Biome.OCEAN, Biome.RIVER, Biome.BEACH, Biome.DESERT, Biome.BADLANDS,
-  Biome.MUSHROOM, Biome.ICE_SPIKES, Biome.STONY_PEAKS,
+  Biome.OCEAN, Biome.FROZEN_OCEAN, Biome.RIVER, Biome.BEACH, Biome.DESERT,
+  Biome.BADLANDS, Biome.MUSHROOM, Biome.ICE_SPIKES, Biome.STONY_PEAKS,
+  Biome.GRAVELLY_HILLS,
 ]);
 
 function treesForChunk(cx: number, cz: number): TreePlan[] {
@@ -360,6 +376,10 @@ function treesForChunk(cx: number, cz: number): TreePlan[] {
     case Biome.SNOWY: count = rand.range(1, 3); type = 'spruce'; break;
     case Biome.TAIGA: count = rand.range(5, 9); type = 'spruce'; break;
     case Biome.SNOWY_TAIGA: count = rand.range(4, 7); type = 'spruce'; break;
+    case Biome.OLD_GROWTH_TAIGA: count = rand.range(3, 5); type = 'mega_spruce'; break;
+    case Biome.MANGROVE_SWAMP: count = rand.range(3, 6); type = 'mangrove'; break;
+    case Biome.MEADOW: count = rand.chance(0.25) ? 1 : 0; break;
+    case Biome.SUNFLOWER_PLAINS: count = rand.chance(0.4) ? 1 : 0; break;
     case Biome.SAVANNA: count = rand.chance(0.75) ? rand.range(1, 2) : 0; type = 'acacia'; break;
     case Biome.SWAMP: count = rand.range(0, 2); break;
     case Biome.PLAINS: count = rand.chance(0.4) ? 1 : 0; break;
@@ -387,11 +407,16 @@ function treesForChunk(cx: number, cz: number): TreePlan[] {
     let th: number;
     if (type === 'jungle') th = rand.range(8, 14);
     else if (type === 'spruce') th = rand.range(6, 10);
+    else if (type === 'mega_spruce') th = rand.range(12, 17);
     else if (type === 'acacia') th = rand.range(5, 7);
     else if (type === 'dark_oak') th = rand.range(5, 8);
+    else if (type === 'mangrove') th = rand.range(5, 8);
     else th = rand.range(4, 6);
-    // Forests keep their birch mix; every other biome uses its signature tree.
-    const treeType: TreeType = centerInfo.biome === Biome.FOREST && rand.chance(0.3) ? 'birch' : type;
+    // Forests keep their birch mix, old-growth taigas a normal-spruce mix;
+    // every other biome uses its signature tree.
+    let treeType: TreeType = type;
+    if (centerInfo.biome === Biome.FOREST && rand.chance(0.3)) treeType = 'birch';
+    else if (type === 'mega_spruce' && rand.chance(0.35)) treeType = 'spruce';
     trees.push({ x, z, y: info.height + 1, height: th, type: treeType });
   }
   return trees;
@@ -422,6 +447,59 @@ function stampTree(data: Uint16Array, cx: number, cz: number, tree: TreePlan): v
         if (d > 4) continue;
         setIfInside(data, cx, cz, tx + dx, topY + 1, tz + dz, leafId, true);
         if (d <= 1) setIfInside(data, cx, cz, tx + dx, topY + 2, tz + dz, leafId, true);
+      }
+    }
+    return;
+  }
+
+  if (tree.type === 'mega_spruce') {
+    // Old-growth giant: 2x2 trunk with a tall conical crown.
+    for (let i = 0; i < tree.height; i++) {
+      for (const [ox, oz] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+        setIfInside(data, cx, cz, tree.x + ox, tree.y + i, tree.z + oz, logId, false);
+      }
+    }
+    let r = 3;
+    const start = tree.y + Math.max(3, Math.floor(tree.height * 0.3));
+    for (let ly = start; ly <= topY + 1; ly++) {
+      for (let dx = -r; dx <= r + 1; dx++) {
+        for (let dz = -r; dz <= r + 1; dz++) {
+          // Ring distance measured from the 2x2 trunk footprint.
+          const rx = Math.max(-dx, dx - 1);
+          const rz = Math.max(-dz, dz - 1);
+          const rr = Math.max(rx, rz);
+          if (rr > r || rr < 0) continue;
+          if (rx === r && rz === r) continue; // trim corners
+          setIfInside(data, cx, cz, tree.x + dx, ly, tree.z + dz, leafId, true);
+        }
+      }
+      if (r > 1 && (ly - start) % 2 === 1) r -= 1;
+    }
+    for (const [ox, oz] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+      setIfInside(data, cx, cz, tree.x + ox, topY + 2, tree.z + oz, leafId, true);
+    }
+    return;
+  }
+
+  if (tree.type === 'mangrove') {
+    // Stilted swamp tree: prop roots angling out of the mud, broad crown.
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      setIfInside(data, cx, cz, tree.x + dx, tree.y, tree.z + dz, logId, false);
+      if (hash2D(seed, tree.x * 11 + dx, tree.z * 5 + dz) < 0.5) {
+        setIfInside(data, cx, cz, tree.x + dx, tree.y + 1, tree.z + dz, logId, false);
+      }
+    }
+    for (let i = 0; i < tree.height; i++) {
+      setIfInside(data, cx, cz, tree.x, tree.y + i, tree.z, logId, false);
+    }
+    for (let ly = topY - 1; ly <= topY + 1; ly++) {
+      const r = ly === topY + 1 ? 1 : ly === topY ? 3 : 2;
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (dx === 0 && dz === 0 && ly <= topY) continue;
+          if (Math.abs(dx) === r && Math.abs(dz) === r && hash2D(seed, tree.x * 31 + dx + ly * 7, tree.z * 17 + dz) < 0.5) continue;
+          setIfInside(data, cx, cz, tree.x + dx, ly, tree.z + dz, leafId, true);
+        }
       }
     }
     return;
@@ -1641,19 +1719,22 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
         } else if (y < h - 3) id = B.STONE;
         else if (biome === Biome.DESERT) id = y >= h - 1 ? B.SAND : B.SANDSTONE;
         else if (biome === Biome.BEACH) id = y >= h - 2 ? B.SAND : B.DIRT;
-        else if (biome === Biome.OCEAN) id = y === h ? (sr < 0.5 ? B.SAND : B.GRAVEL) : B.DIRT;
+        else if (biome === Biome.OCEAN || biome === Biome.FROZEN_OCEAN) id = y === h ? (sr < 0.5 ? B.SAND : B.GRAVEL) : B.DIRT;
         else if (biome === Biome.RIVER) id = y === h ? (sr < 0.55 ? B.SAND : B.GRAVEL) : B.DIRT;
+        else if (biome === Biome.MANGROVE_SWAMP) id = y >= h - 2 ? B.MUD : B.DIRT;
         else if (y === h) {
           if (biome === Biome.MUSHROOM) id = B.MYCELIUM;
           else if (biome === Biome.ICE_SPIKES) id = B.SNOW_BLOCK;
           else if (biome === Biome.STONY_PEAKS) id = snow && sr < 0.75 ? B.SNOW_BLOCK : sr < 0.88 ? B.STONE : B.GRAVEL;
+          else if (biome === Biome.GRAVELLY_HILLS) id = snow ? B.SNOW_BLOCK : sr < 0.62 ? B.GRAVEL : sr < 0.86 ? B.STONE : B.COARSE_DIRT;
           else if (biome === Biome.MOUNTAINS && h > 96) id = snow ? B.SNOW_GRASS : B.STONE;
           else if (snow) id = B.SNOW_GRASS;
           else if (biome === Biome.TAIGA) id = sr < 0.4 ? B.PODZOL : sr < 0.48 ? B.COARSE_DIRT : B.GRASS;
+          else if (biome === Biome.OLD_GROWTH_TAIGA) id = sr < 0.6 ? B.PODZOL : sr < 0.68 ? B.COARSE_DIRT : B.GRASS;
           else if (biome === Biome.SAVANNA) id = sr < 0.12 ? B.COARSE_DIRT : B.GRASS;
           else if (biome === Biome.SWAMP) id = B.SWAMP_GRASS;
           else id = B.GRASS;
-        } else id = biome === Biome.STONY_PEAKS ? B.STONE : B.DIRT;
+        } else id = biome === Biome.STONY_PEAKS || biome === Biome.GRAVELLY_HILLS ? B.STONE : B.DIRT;
         data[blockIndex(x, y, z)] = packVoxel(id, 0, 0);
       }
       // Ocean / lake / river water fill.
@@ -1662,7 +1743,8 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
       }
       // Cold biomes freeze the top water cell into an ice sheet.
       const freezing =
-        biome === Biome.SNOWY || biome === Biome.SNOWY_TAIGA || biome === Biome.ICE_SPIKES;
+        biome === Biome.SNOWY || biome === Biome.SNOWY_TAIGA || biome === Biome.ICE_SPIKES ||
+        biome === Biome.FROZEN_OCEAN;
       if (freezing && h < SEA_LEVEL) {
         data[blockIndex(x, SEA_LEVEL, z)] = packVoxel(B.ICE, 0, 0);
       }
@@ -1778,7 +1860,7 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
       const r = hash2D(decoSeed, wx, wz);
       const r2 = hash2D(decoSeed2, wx, wz);
       // Lily pads float on swamp water (in the air cell above the surface).
-      if (biome === Biome.SWAMP) {
+      if (biome === Biome.SWAMP || biome === Biome.MANGROVE_SWAMP) {
         const surfIdx = blockIndex(x, SEA_LEVEL, z);
         const overIdx = blockIndex(x, SEA_LEVEL + 1, z);
         if (voxelId(data[surfIdx]) === B.WATER_SRC && voxelId(data[overIdx]) === B.AIR && r < 0.12) {
@@ -1817,6 +1899,17 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
             }
           }
         }
+      } else if (biome === Biome.FROZEN_OCEAN && r < 0.004) {
+        // Drifting icebergs: packed-ice spires breaking the frozen surface.
+        const bh = 3 + Math.floor(r * 2000) % 5;
+        for (let i = 0; i <= bh && SEA_LEVEL + i < CHUNK_HEIGHT; i++) {
+          const bi = blockIndex(x, SEA_LEVEL + i, z);
+          if (i > 0 && !blockDef(voxelId(data[bi])).replaceable && voxelId(data[bi]) !== B.AIR) break;
+          data[bi] = packVoxel(i === bh ? B.SNOW_BLOCK : B.PACKED_ICE, 0, 0);
+        }
+      } else if (biome === Biome.MANGROVE_SWAMP && ground === B.MUD) {
+        if (r < 0.04) data[aboveIdx] = packVoxel(B.BROWN_MUSHROOM, 0, 0);
+        else if (r < 0.1) data[aboveIdx] = packVoxel(B.FERN, 0, 0);
       } else if (biome === Biome.MUSHROOM && ground === B.MYCELIUM) {
         if (r < 0.008) stampGiantMushroom(data, cx, cz, wx, h + 1, wz, r2 < 0.5);
         else if (r < 0.06) data[aboveIdx] = packVoxel(r2 < 0.5 ? B.RED_MUSHROOM : B.BROWN_MUSHROOM, 0, 0);
@@ -1830,6 +1923,20 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
         if (r < 0.16) data[aboveIdx] = packVoxel(B.FERN, 0, 0);
         else if (r < 0.2) data[aboveIdx] = packVoxel(B.TALL_GRASS, 0, 0);
         else if (r < 0.215) data[aboveIdx] = packVoxel(r2 < 0.5 ? B.RED_MUSHROOM : B.BROWN_MUSHROOM, 0, 0);
+      } else if (ground === B.GRASS && biome === Biome.SUNFLOWER_PLAINS) {
+        // Stands of sunflowers scattered through the grass.
+        if (r < 0.055) data[aboveIdx] = packVoxel(B.SUNFLOWER, 0, 0);
+        else if (r < 0.28) data[aboveIdx] = packVoxel(B.TALL_GRASS, 0, 0);
+        else if (r < 0.29) data[aboveIdx] = packVoxel(r2 < 0.5 ? B.FLOWER_YELLOW : B.FLOWER_WHITE, 0, 0);
+      } else if (ground === B.GRASS && biome === Biome.MEADOW) {
+        // Alpine meadow: thick mixed wildflowers in short grass.
+        if (r < 0.16) {
+          const pick = Math.floor(r2 * 4);
+          const flower =
+            pick === 0 ? B.FLOWER_BLUE : pick === 1 ? B.FLOWER_WHITE :
+            pick === 2 ? B.FLOWER_YELLOW : B.FLOWER_RED;
+          data[aboveIdx] = packVoxel(flower, 0, 0);
+        } else if (r < 0.42) data[aboveIdx] = packVoxel(B.TALL_GRASS, 0, 0);
       } else if (ground === B.GRASS && biome === Biome.FLOWER_FOREST) {
         // Meadow carpet: every flower species mixed through tall grass.
         if (r < 0.22) {
@@ -1867,6 +1974,8 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
     let table: Array<[EntityType, number]> | null = null;
     switch (biome) {
       case Biome.PLAINS:
+      case Biome.SUNFLOWER_PLAINS:
+      case Biome.MEADOW:
         table = [[EntityType.SHEEP, 0.3], [EntityType.COW, 0.35], [EntityType.PIG, 0.15], [EntityType.CHICKEN, 0.2]];
         break;
       case Biome.FOREST:
@@ -1877,6 +1986,7 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
         break;
       case Biome.TAIGA:
       case Biome.SNOWY_TAIGA:
+      case Biome.OLD_GROWTH_TAIGA:
         table = [[EntityType.PIG, 0.45], [EntityType.CHICKEN, 0.3], [EntityType.SHEEP, 0.25]];
         break;
       case Biome.SAVANNA:
