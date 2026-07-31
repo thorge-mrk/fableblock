@@ -48,6 +48,7 @@ let forestDensity!: FBM2D; // clumps trees into groves + clearings
 let caveA!: FBM3D;
 let caveB!: FBM3D;
 let cheese!: FBM3D;
+let caveEntrance!: FBM2D; // widens shallow tunnels into walk-in cave mouths
 let ravineNoise!: SimplexNoise;
 let ravineDepthNoise!: SimplexNoise;
 let ditherSeed = 0; // per-block climate jitter -> interlocking biome borders
@@ -73,6 +74,7 @@ function initNoise(): void {
   caveA = new FBM3D(deriveSeed(seed, 'caveA'), 2, 1 / 90, 0.5, 2.2);
   caveB = new FBM3D(deriveSeed(seed, 'caveB'), 2, 1 / 90, 0.5, 2.2);
   cheese = new FBM3D(deriveSeed(seed, 'cheese'), 2, 1 / 140, 0.5, 2.0);
+  caveEntrance = new FBM2D(deriveSeed(seed, 'caveEnt'), 2, 1 / 210, 0.5, 2.0);
   ravineNoise = new SimplexNoise(deriveSeed(seed, 'ravine'));
   ravineDepthNoise = new SimplexNoise(deriveSeed(seed, 'ravineDepth'));
   ditherSeed = deriveSeed(seed, 'bdither');
@@ -274,19 +276,26 @@ function isCave(x: number, y: number, z: number, surface: number): boolean {
   const a = caveA.sample(x, y * yScale, z);
   const b = caveB.sample(x, y * yScale, z);
   const tube = a * a + b * b;
-  // Wider deep down, pinch toward the surface so entrances stay small.
+  // Wider deep down, pinch toward the surface so most entrances stay small.
   // The sum field (free — no extra samples) modulates width along the
   // tunnel, so passages breathe between crawls and halls.
   const depth = surface - y;
-  let width = depth < 8 ? 0.011 : depth < 16 ? 0.018 : 0.026;
+  let width = depth < 8 ? 0.011 : depth < 16 ? 0.018 : y < 24 ? 0.032 : 0.026;
+  // Cave mouths: where the entrance field runs hot, the shallow band widens
+  // instead of pinching — walk-in openings on hillsides and valley floors.
+  if (depth < 14) {
+    const ent = caveEntrance.sample(x, z);
+    if (ent > 0.38) width *= 1 + (ent - 0.38) * 9;
+  }
   width *= 0.7 + Math.abs(a + b) * 0.9;
   if (tube < width) return true;
 
-  // Cheese caverns: occasional larger rooms in the deep slice. A high
-  // threshold keeps them bounded (avoids hollowing out whole regions).
+  // Cheese caverns grow with depth: crawl rooms mid-level, grand vaulted
+  // halls near the lava table. High thresholds keep them bounded.
   if (y < surface - 16 && y > 6) {
     const c = cheese.sample(x, y * 0.85, z);
-    if (c > 0.52) return true;
+    const thr = y < 20 ? 0.48 : y < 34 ? 0.52 : 0.55;
+    if (c > thr) return true;
   }
   return false;
 }
@@ -1109,24 +1118,44 @@ function genRuins(data: Uint16Array, cx: number, cz: number, rand: Random): void
   }
 }
 
-/** Hang stalactites / raise stalagmites where caves opened up. */
+/** Hang stalactites / raise stalagmites + dress cave floors near the lava. */
 function genSpeleothems(data: Uint16Array, rand: Random): void {
-  for (let n = 0; n < 40; n++) {
+  for (let n = 0; n < 60; n++) {
     const x = rand.int(16);
     const z = rand.int(16);
-    const y = 6 + rand.int(50);
+    const y = 6 + rand.int(60);
     if (y + 1 >= CHUNK_HEIGHT) continue;
     const idx = blockIndex(x, y, z);
     if (voxelId(data[idx]) !== B.AIR) continue;
     const above = voxelId(data[blockIndex(x, y + 1, z)]);
     const below = y > 1 ? voxelId(data[blockIndex(x, y - 1, z)]) : B.BEDROCK;
     if (above === B.STONE && rand.chance(0.6)) {
-      data[idx] = packVoxel(B.COBBLESTONE, 0, 0);
-      if (y > 1 && voxelId(data[blockIndex(x, y - 1, z)]) === B.AIR && rand.chance(0.4)) {
-        data[blockIndex(x, y - 1, z)] = packVoxel(B.COBBLESTONE, 0, 0);
+      // Hanging chain, 1-3 long, tapering from stone to cobble.
+      const len = rand.range(1, 3);
+      for (let i = 0; i < len; i++) {
+        const yy = y - i;
+        if (yy <= 1) break;
+        const ci = blockIndex(x, yy, z);
+        if (voxelId(data[ci]) !== B.AIR) break;
+        data[ci] = packVoxel(i === len - 1 && len > 1 ? B.COBBLESTONE : B.STONE, 0, 0);
       }
-    } else if (below === B.STONE && rand.chance(0.4)) {
-      data[idx] = packVoxel(B.COBBLESTONE, 0, 0);
+    } else if (below === B.STONE && rand.chance(0.45)) {
+      data[idx] = packVoxel(B.STONE, 0, 0);
+      if (rand.chance(0.35) && y + 1 < CHUNK_HEIGHT && voxelId(data[blockIndex(x, y + 1, z)]) === B.AIR) {
+        data[blockIndex(x, y + 1, z)] = packVoxel(B.COBBLESTONE, 0, 0);
+      }
+    }
+  }
+  // Floor dressing near the lava table: magma seams and gravel spills.
+  for (let n = 0; n < 24; n++) {
+    const x = rand.int(16);
+    const z = rand.int(16);
+    const y = 8 + rand.int(9);
+    const idx = blockIndex(x, y, z);
+    if (voxelId(data[idx]) !== B.AIR) continue;
+    const bi = blockIndex(x, y - 1, z);
+    if (voxelId(data[bi]) === B.STONE) {
+      data[bi] = packVoxel(rand.chance(0.55) ? B.MAGMA : B.GRAVEL, 0, 0);
     }
   }
 }
@@ -1134,19 +1163,29 @@ function genSpeleothems(data: Uint16Array, rand: Random): void {
 // ---------------------------------------------------------------------------
 // Ores
 // ---------------------------------------------------------------------------
-function genOres(data: Uint16Array, rand: Random): void {
+function genOres(data: Uint16Array, rand: Random, mountains: boolean): void {
   const veins: Array<[number, number, number, number, number]> = [
     // [blockId, attempts, minY, maxY, size]
-    // Stone variants as large blobs.
+    // Stone variants as large blobs + buried dirt/gravel pockets.
     [B.GRANITE, 2, 4, 70, 18],
     [B.DIORITE, 2, 4, 70, 18],
     [B.ANDESITE, 2, 4, 70, 18],
-    [B.COAL_ORE, 14, 6, 100, 8],
-    [B.IRON_ORE, 9, 4, 56, 6],
+    [B.DIRT, 3, 20, 80, 12],
+    [B.GRAVEL, 2, 8, 60, 12],
+    // Height-banded ores: coal rich near the surface, iron peaks mid-depth,
+    // the precious stuff only near the lava table.
+    [B.COAL_ORE, 10, 40, 110, 10],
+    [B.COAL_ORE, 5, 6, 40, 6],
+    [B.IRON_ORE, 7, 20, 60, 6],
+    [B.IRON_ORE, 4, 4, 20, 4],
     [B.GOLD_ORE, 3, 4, 30, 5],
     [B.REDSTONE_ORE, 6, 2, 18, 6],
     [B.DIAMOND_ORE, 2, 2, 14, 4],
   ];
+  if (mountains) {
+    // Emeralds are a mountain exclusive and spawn as scattered single blocks.
+    veins.push([B.EMERALD_ORE, 5, 20, 110, 1]);
+  }
   for (const [id, attempts, minY, maxY, size] of veins) {
     for (let i = 0; i < attempts; i++) {
       let x = rand.int(16);
@@ -1416,7 +1455,8 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
     }
   }
 
-  genOres(data, rand);
+  const centerBiome = biomes[8 * 16 + 8] as Biome;
+  genOres(data, rand, centerBiome === Biome.MOUNTAINS || centerBiome === Biome.STONY_PEAKS);
   genDungeon(data, cx, cz, blockEntities, rand);
   genSpeleothems(data, rand);
   genRuins(data, cx, cz, rand);
