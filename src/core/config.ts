@@ -14,7 +14,8 @@ export const PLAYER_SNEAK_EYE = 1.27;
 export const PLAYER_WALK_SPEED = 4.32; // blocks/sec
 export const PLAYER_SPRINT_SPEED = 5.6;
 export const PLAYER_SNEAK_SPEED = 1.3;
-export const PLAYER_JUMP_SPEED = 8.6;
+export const PLAYER_JUMP_SPEED = 8.7; // v²/2g = 1.26 blocks, like the original
+export const SPRINT_JUMP_BOOST = 2.6; // forward impulse on a sprinting takeoff
 export const PLAYER_SWIM_SPEED = 3.2;
 export const PLAYER_REACH = 4.8;
 export const PLAYER_MAX_HP = 20;

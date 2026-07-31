@@ -43,6 +43,7 @@ export const RECIPES: Recipe[] = [
   shapeless([B.SPRUCE_LOG], B.SPRUCE_PLANKS, 4),
   shapeless([B.ACACIA_LOG], B.ACACIA_PLANKS, 4),
   shapeless([B.DARK_OAK_LOG], B.DARK_OAK_PLANKS, 4),
+  shapeless([B.MANGROVE_LOG], B.MANGROVE_PLANKS, 4),
   shaped(['A', 'A'], { A: B.ACACIA_PLANKS }, ITEM.STICK, 4),
   shaped(['D', 'D'], { D: B.DARK_OAK_PLANKS }, ITEM.STICK, 4),
   shaped(['C', 'C'], { C: B.CHERRY_PLANKS }, ITEM.STICK, 4),

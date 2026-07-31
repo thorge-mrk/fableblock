@@ -203,6 +203,10 @@ export class Game {
     this.scene.add(this.camera);
 
     this.atlas = new TextureAtlas(seed);
+    // Max anisotropic filtering: keeps distant/oblique block faces crisp
+    // instead of dissolving into shimmering mush.
+    this.atlas.texture.anisotropy = Math.min(16, this.renderer.capabilities.getMaxAnisotropy());
+    this.atlas.texture.needsUpdate = true;
     this.env = createEnvUniforms();
     const terrainMat = createTerrainMaterial(this.atlas.texture, this.env);
     const waterMat = createWaterMaterial(this.atlas.texture, this.env);
@@ -843,7 +847,9 @@ export class Game {
     // Exertion feeds the hunger drain: sprinting, swimming, jumping.
     if (alive && !uiOpen) {
       const moving = effInput.moveX !== 0 || effInput.moveZ !== 0;
-      if (moving && effInput.sprint) this.exhaustion += dt * 0.5;
+      // player.sprinting is the real gate (forward + not sneaking) — a held
+      // sprint key while strafing or sneaking must not burn sprint hunger.
+      if (moving && this.player.sprinting) this.exhaustion += dt * 0.5;
       else if (moving && this.player.inWater) this.exhaustion += dt * 0.25;
       else if (moving) this.exhaustion += dt * 0.06;
       if (effInput.jump && !this.prevJump && this.player.onGround) this.exhaustion += 0.2;
@@ -1039,7 +1045,7 @@ export class Game {
       Math.max(0.05, cbox[4] - cbox[1]),
       Math.max(0.05, cbox[5] - cbox[2]),
     );
-    if (Math.random() < dt * 8) this.heldView.swing();
+    this.heldView.swingLoop(); // steady chop while the block breaks
     // Trickle a few fragments off the block face while mining.
     if (Math.random() < dt * 14) {
       const [pr, pg, pb] = this.atlas.sampleColor(def.tiles[4]);
@@ -1581,9 +1587,9 @@ export class Game {
     const shakeX = this.shake > 0 ? (Math.random() - 0.5) * this.shake * 0.3 : 0;
     const shakeY = this.shake > 0 ? (Math.random() - 0.5) * this.shake * 0.3 : 0;
 
-    // Sprint widens the FOV a touch (smoothly), like the original.
-    const moving = input.moveX !== 0 || input.moveZ !== 0;
-    const sprinting = input.sprint && moving && !this.player.inBoat && store.screen === 'none';
+    // Sprint widens the FOV a touch (smoothly), like the original. Reads the
+    // player's actual sprint state, not the raw key (no kick while strafing).
+    const sprinting = this.player.sprinting && !this.player.inBoat && store.screen === 'none';
     const targetFov = store.settings.fov * (sprinting ? 1.12 : 1);
     if (this.camFov === 0) this.camFov = targetFov;
     this.camFov += (targetFov - this.camFov) * Math.min(1, dt * 9);
@@ -2127,7 +2133,11 @@ export class Game {
   }
 
   /** Nudge the adaptive resolution multiplier from the smoothed frame rate,
-   *  with a wide deadband and discrete steps so it settles instead of pulsing. */
+   *  with a wide deadband and discrete steps so it settles instead of pulsing.
+   *  Thresholds are absolute (not refresh-scaled): the uncapped rAF loop
+   *  already runs at 120+ fps when the hardware allows, and trading image
+   *  sharpness to chase a high refresh rate is a bad deal — especially when
+   *  the frame time is CPU-bound and downscaling would not help at all. */
   private updateAdaptiveRes(): void {
     let changed = false;
     if (this.fpsEMA < 45 && this.resScale > 0.6) {

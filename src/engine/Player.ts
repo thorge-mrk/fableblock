@@ -8,7 +8,7 @@ import { moveEntity, boxIntersectsSolid } from '../core/aabb';
 import { blockDef, isFluid, isLava, isWater, fluidLevel, fluidHeight } from '../core/blocks';
 import {
   PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_SNEAK_HEIGHT, PLAYER_EYE, PLAYER_SNEAK_EYE,
-  PLAYER_WALK_SPEED, PLAYER_SPRINT_SPEED, PLAYER_SNEAK_SPEED, PLAYER_JUMP_SPEED,
+  PLAYER_WALK_SPEED, PLAYER_SPRINT_SPEED, PLAYER_SNEAK_SPEED, PLAYER_JUMP_SPEED, SPRINT_JUMP_BOOST,
   GRAVITY, TERMINAL_VELOCITY, STEP_HEIGHT, FLUID_PUSH, WATER_DRAG, PLAYER_SWIM_SPEED,
   FALL_DAMAGE_THRESHOLD,
 } from '../core/config';
@@ -120,6 +120,12 @@ export class PlayerController {
     } else {
       if (inp.jump && this.onGround && !this.sneaking) {
         this.vy = PLAYER_JUMP_SPEED;
+        // Sprint-jumping flings you forward like the original — bunny-hopping
+        // down a hill is meaningfully faster than flat sprinting.
+        if (this.sprinting) {
+          this.vx += -Math.sin(this.yaw) * SPRINT_JUMP_BOOST;
+          this.vz += -Math.cos(this.yaw) * SPRINT_JUMP_BOOST;
+        }
         this.onGround = false;
       }
       this.vy += GRAVITY * dt;
