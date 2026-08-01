@@ -22,7 +22,20 @@ export interface GenRequestMsg {
   dim: number;
 }
 
-export type ToGenMsg = GenInitMsg | GenRequestMsg;
+/** Chat /locate request: scan outward for a biome or structure. */
+export interface GenLocateMsg {
+  t: 'locate';
+  /** Correlates the reply with the awaiting command. */
+  id: number;
+  kind: 'biome' | 'structure';
+  /** Biome/structure key (see core/commands name tables). */
+  target: string;
+  /** Search origin in world coordinates. */
+  x: number;
+  z: number;
+}
+
+export type ToGenMsg = GenInitMsg | GenRequestMsg | GenLocateMsg;
 
 export interface BlockEntitySpawn {
   x: number;
@@ -60,7 +73,14 @@ export interface GenChunkMsg {
   village: VillageDef | null;
 }
 
-export type FromGenMsg = GenChunkMsg;
+export interface GenLocateResultMsg {
+  t: 'located';
+  id: number;
+  /** Null when the scan radius turned up nothing. */
+  found: { x: number; z: number } | null;
+}
+
+export type FromGenMsg = GenChunkMsg | GenLocateResultMsg;
 
 // ---------------------------------------------------------------------------
 // Greedy mesher worker

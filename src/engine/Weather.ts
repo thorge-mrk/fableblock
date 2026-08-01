@@ -23,6 +23,12 @@ export class Weather {
   private material: THREE.PointsMaterial;
   private timer: number;
 
+  /** Chat /weather: start or stop a shower immediately. */
+  force(rain: boolean): void {
+    this.raining = rain;
+    this.timer = rain ? 240 : 300;
+  }
+
   constructor() {
     this.positions = new Float32Array(DROPS * 3);
     this.speeds = new Float32Array(DROPS);

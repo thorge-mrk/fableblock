@@ -191,8 +191,14 @@ export class ChunkManager {
     return true;
   }
 
+  /** Non-chunk replies from the gen worker (e.g. /locate results). */
+  onGenMessage: ((msg: FromGenMsg) => void) | null = null;
+
   private handleGen(msg: FromGenMsg): void {
-    if (msg.t !== 'chunk') return;
+    if (msg.t !== 'chunk') {
+      this.onGenMessage?.(msg);
+      return;
+    }
     if (msg.dim !== this.dim) return; // stale result from before a dimension switch
     const key = chunkKeyNum(msg.cx, msg.cz);
     this.genInFlight.delete(key);

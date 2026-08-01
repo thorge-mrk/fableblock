@@ -32,6 +32,7 @@ import {
 import { ignitePortal, findPortalNear, buildReturnPortal } from '../core/portal';
 import { ITEM, itemDef, isPlaceable, makeStack, ItemStack } from '../core/items';
 import { isFarmAnimal } from '../core/entities';
+import { ChatLine, CommandContext, runChatLine } from '../core/commands';
 import { clickSlot, insertStack, cloneStack, Slots, decrementSlot } from '../core/inventory';
 import { matchRecipe } from '../core/recipes';
 import {
@@ -169,6 +170,8 @@ export class Game {
       touchLook: (dx, dy) => addTouchLook(dx, dy),
       touchButton: (btn, down) => setTouchButton(btn, down),
       iconFor: (itemId) => this.atlas.icon(itemDef(itemId).icon),
+      setChatOpen: (open, prefill) => this.setChatOpen(open, prefill),
+      submitChat: (line) => this.submitChat(line),
     });
   }
 
@@ -305,6 +308,15 @@ export class Game {
 
     this.player.teleport(8.5, 120, 8.5);
     this.player.onFallDamage = (blocks) => this.damagePlayer(Math.floor(blocks), 0, 0, 'fall');
+    // /locate replies come back through the chunk manager's gen-worker port.
+    this.chunks.onGenMessage = (msg) => {
+      if (msg.t !== 'located') return;
+      const resolve = this.locatePending.get(msg.id);
+      if (resolve) {
+        this.locatePending.delete(msg.id);
+        resolve(msg.found);
+      }
+    };
 
     this.attachDOM();
     this.applySettings();
@@ -358,7 +370,9 @@ export class Game {
         if (s.screen === 'none') this.openScreen('pause');
         else this.closeScreen();
       },
-      isUIOpen: () => gameStore.get().screen !== 'none',
+      onOpenChat: (prefill) => this.setChatOpen(true, prefill),
+      // Chat counts as UI: while it is open the game must not consume keys.
+      isUIOpen: () => gameStore.get().screen !== 'none' || gameStore.get().chatOpen,
     });
 
     this.canvas.addEventListener('mousedown', (e) => {
@@ -1797,6 +1811,90 @@ export class Game {
       screen: 'none',
     });
     document.exitPointerLock?.();
+  }
+
+  // -------------------------------------------------------------------------
+  // Chat + commands
+  // -------------------------------------------------------------------------
+  private locateSeq = 0;
+  private locatePending = new Map<number, (r: { x: number; z: number } | null) => void>();
+
+  private chatPrint(line: ChatLine): void {
+    const log = gameStore.get().chatLog.concat(line);
+    // Keep the transcript bounded; the overlay only shows the tail anyway.
+    gameStore.set({ chatLog: log.length > 120 ? log.slice(log.length - 120) : log });
+  }
+
+  setChatOpen(open: boolean, prefill = ''): void {
+    if (open) {
+      // Chat takes the keyboard: drop held movement and release the pointer
+      // so the player does not keep walking or mining while typing.
+      setJoystick(0, 0);
+      input.mineHeld = false;
+      input.useHeld = false;
+      input.jump = false;
+      input.sneak = false;
+      document.exitPointerLock?.();
+    }
+    gameStore.set({ chatOpen: open, chatPrefill: open ? prefill : '' });
+  }
+
+  submitChat(line: string): void {
+    const trimmed = line.trim();
+    if (trimmed === '') return;
+    const hist = [trimmed, ...gameStore.get().chatHistory.filter((h) => h !== trimmed)];
+    gameStore.set({ chatHistory: hist.slice(0, 50) });
+    if (trimmed.startsWith('/')) this.chatPrint({ text: trimmed, kind: 'echo' });
+    void runChatLine(this.commandContext(), trimmed);
+  }
+
+  /** Side-effect surface handed to the command implementations. */
+  private commandContext(): CommandContext {
+    return {
+      playerPos: () => ({ x: this.player.x, y: this.player.y, z: this.player.z }),
+      teleport: (x, y, z) => {
+        this.player.teleport(x, y, z);
+        this.chunks.update(Math.floor(x), Math.floor(z));
+      },
+      give: (itemId, count) => {
+        const inv = gameStore.get().inventory.map(cloneStack);
+        const rest = insertStack(inv, makeStack(itemId, count));
+        gameStore.set({ inventory: inv });
+        return rest === null;
+      },
+      setTime: (t) => {
+        this.dayNight.time = t;
+      },
+      getTime: () => this.dayNight.time,
+      setGameMode: (mode) => {
+        gameStore.set({ gameMode: mode });
+        if (mode === 'survival') this.player.flying = false;
+      },
+      getGameMode: () => gameStore.get().gameMode,
+      heal: () => gameStore.set({ health: PLAYER_MAX_HP, food: PLAYER_MAX_FOOD }),
+      kill: () => this.damagePlayer(PLAYER_MAX_HP * 2, 0, 0, 'command'),
+      clearInventory: () => gameStore.set({ inventory: gameStore.get().inventory.map(() => null) }),
+      seed: () => this.worldSeed,
+      setRenderDistance: (n) => {
+        useGameStore.getState().setSettings({ renderDistance: n });
+        this.applySettings();
+      },
+      setWeather: (rain) => this.weather.force(rain),
+      locate: (kind, target) =>
+        new Promise((resolve) => {
+          const id = ++this.locateSeq;
+          this.locatePending.set(id, resolve);
+          this.genWorker.postMessage({
+            t: 'locate', id, kind, target,
+            x: Math.round(this.player.x), z: Math.round(this.player.z),
+          });
+          // Never leave a command hanging if the worker is busy or restarts.
+          setTimeout(() => {
+            if (this.locatePending.delete(id)) resolve(null);
+          }, 15000);
+        }),
+      print: (line) => this.chatPrint(line),
+    };
   }
 
   private respawn(): void {

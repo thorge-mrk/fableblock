@@ -99,6 +99,7 @@ export function addTouchLook(dx: number, dy: number): void {
 }
 
 export interface InputHooks {
+  onOpenChat(prefill: string): void;
   onHotbar(index: number): void;
   onHotbarScroll(delta: number): void;
   onInventory(): void;
@@ -145,6 +146,19 @@ export function attachKeyboard(hooks: InputHooks): void {
         ctrlSprint = true;
         break;
       case 'KeyE': hooks.onInventory(); break;
+      case 'KeyT':
+        if (!hooks.isUIOpen()) {
+          e.preventDefault();
+          hooks.onOpenChat('');
+        }
+        break;
+      case 'Slash':
+        // "/" opens the chat pre-filled with the command prefix.
+        if (!hooks.isUIOpen()) {
+          e.preventDefault();
+          hooks.onOpenChat('/');
+        }
+        break;
       case 'KeyQ': hooks.onDrop(e.ctrlKey); break;
       case 'F5':
         e.preventDefault();
