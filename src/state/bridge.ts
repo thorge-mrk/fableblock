@@ -43,6 +43,11 @@ export interface GameBridge {
 
   /** Item icon data-URL lookup (texture atlas). */
   iconFor(itemId: number): string;
+
+  /** Open/close the chat overlay (T / Escape). */
+  setChatOpen(open: boolean, prefill?: string): void;
+  /** Submit a chat line (plain message or /command). */
+  submitChat(line: string): void;
 }
 
 let impl: GameBridge | null = null;

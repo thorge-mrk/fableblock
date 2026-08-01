@@ -113,6 +113,35 @@ class TilePainter {
     }
   }
 
+  /**
+   * Two-scale material grain: broad tonal patches (cell-sized, low contrast)
+   * PLUS fine per-pixel detail. The patches keep the surface from reading as
+   * TV static at distance; the fine layer keeps it from looking like a
+   * hand-painted 4x4 checkerboard up close. Mipmaps + anisotropy average the
+   * fine layer away naturally, so it costs nothing in the distance.
+   */
+  grain(c: RGB, patch: number, fine: number, cell = 8): void {
+    const cells = Math.ceil(N / cell) + 1;
+    const vals: number[] = [];
+    for (let i = 0; i < cells * cells; i++) vals.push((this.rand() - 0.5) * patch);
+    // Bilinear-interpolated patch field → smooth blotches, no hard cell edges.
+    const at = (cx: number, cy: number): number => vals[Math.min(cells - 1, cy) * cells + Math.min(cells - 1, cx)];
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const fx = x / cell;
+        const fy = y / cell;
+        const x0 = Math.floor(fx);
+        const y0 = Math.floor(fy);
+        const tx = fx - x0;
+        const ty = fy - y0;
+        const top = at(x0, y0) * (1 - tx) + at(x0 + 1, y0) * tx;
+        const bot = at(x0, y0 + 1) * (1 - tx) + at(x0 + 1, y0 + 1) * tx;
+        const f = 1 + (top * (1 - ty) + bot * ty) + (this.rand() - 0.5) * fine;
+        this.px(x, y, c[0] * f, c[1] * f, c[2] * f);
+      }
+    }
+  }
+
   /** Blocky low-frequency noise for stone-like materials (cell in px). */
   cellNoise(c: RGB, jitter: number, cell = 2): void {
     const cells = Math.ceil(N / cell);
@@ -263,7 +292,7 @@ const STONE_GRAY: RGB = [128, 128, 128];
 const SAND_YELLOW: RGB = [219, 207, 163];
 const WOOD: RGB = [156, 127, 78];
 const WOOD_DK: RGB = [110, 86, 50];
-const LEAF_GREEN: RGB = [60, 118, 42];
+const LEAF_GREEN: RGB = [72, 130, 50];
 const HANDLE: RGB = [120, 90, 50];
 
 function plankPainter(p: TilePainter): void {
@@ -573,7 +602,7 @@ function coloredLeaves(base: RGB, bright: RGB, dark: RGB, density: number): Pain
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         if (p.rand() < density) {
-          const f = 0.6 + p.rand() * 0.45;
+          const f = 0.88 + p.rand() * 0.28;
           p.px(x, y, base[0] * f, base[1] * f, base[2] * f);
         }
       }
@@ -616,29 +645,28 @@ function coloredLogTop(fill: RGB, rim: RGB, ring: RGB, heart: RGB): Painter {
 
 const PAINTERS: Record<number, Painter> = {
   [TILE.GRASS_TOP]: (p) => {
-    // Calm turf: soft low-frequency patches with restrained blade tufts.
-    // High-contrast salt-and-pepper reads as flickering dots at distance,
-    // so tone variation lives in 4px patches and the tufts stay subtle.
-    p.cellNoise(GRASS_GREEN, 0.1, 4);
-    for (let i = 0; i < 10; i++) {
+    // Turf reads as real grass: soft tonal patches for shape at distance,
+    // fine per-pixel grain for crispness up close, blade tufts on top.
+    p.grain(GRASS_GREEN, 0.05, 0.16, 8);
+    for (let i = 0; i < 18; i++) {
       const x = Math.floor(p.rand() * N);
       const y = Math.floor(p.rand() * N);
-      p.px(x, y, 134, 186, 76);
-      p.px(x, y - 1, 141, 194, 82);
+      p.px(x, y, 140, 192, 80);
+      p.px(x, y - 1, 150, 202, 88);
     }
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 12; i++) {
       const x = Math.floor(p.rand() * N);
       const y = Math.floor(p.rand() * N);
-      p.px(x, y, 104, 152, 56);
-      p.px(x + 1, y, 100, 146, 54);
+      p.px(x, y, 98, 146, 52);
+      p.px(x + 1, y + 1, 92, 138, 48);
     }
-    p.bevel(0.05);
+    p.bevel(0.06);
   },
   [TILE.GRASS_SIDE]: (p) => {
     // Dirt body under a gently uneven turf lip.
-    p.noiseFill(DIRT_BROWN, 0.12);
-    p.speckle([106, 74, 50], 5, 1);
-    p.speckle([150, 112, 80], 4, 1);
+    p.grain(DIRT_BROWN, 0.05, 0.2, 8);
+    p.speckle([106, 74, 50], 7, 1);
+    p.speckle([150, 112, 80], 5, 1);
     for (let x = 0; x < N; x++) {
       const depth = 3 + ((x * 7 + 3) % 5 === 0 ? 1 : 0) - (x % 6 === 2 ? 1 : 0);
       for (let y = 0; y < depth; y++) {
@@ -650,23 +678,27 @@ const PAINTERS: Record<number, Painter> = {
     for (let x = 0; x < N; x++) p.px(x, 0, 132, 184, 74);
   },
   [TILE.DIRT]: (p) => {
-    // Earth with embedded pebbles and root flecks — calm, patchy tone.
-    p.cellNoise(DIRT_BROWN, 0.12, 4);
-    for (let i = 0; i < 5; i++) {
+    // Earth with embedded pebbles and root flecks.
+    p.grain(DIRT_BROWN, 0.055, 0.22, 8);
+    for (let i = 0; i < 6; i++) {
       const x = Math.floor(p.rand() * (N - 2));
       const y = Math.floor(p.rand() * (N - 2));
       p.rect(x, y, 2, 1, [158, 120, 88]);
       p.px(x, y + 1, 100, 72, 48);
     }
-    p.speckle([110, 78, 52], 7, 1);
+    p.speckle([110, 78, 52], 9, 1);
+    p.speckle([148, 112, 80], 5, 1);
   },
   [TILE.STONE]: (p) => {
-    // Quiet rock: broad tonal patches, a few shadowed blotches, short cracks.
-    // (Full-height fissures aliased into vertical stripes at distance.)
-    p.cellNoise(STONE_GRAY, 0.1, 4);
+    // Rock: broad tonal patches for silhouette + fine mineral grain, a few
+    // shadowed blotches and short cracks. (Full-height fissures used to alias
+    // into vertical stripes at distance, so cracks stay short.)
+    p.grain(STONE_GRAY, 0.045, 0.17, 8);
     for (let i = 0; i < 3; i++) {
-      p.disc(2 + p.rand() * 12, 2 + p.rand() * 12, 1.6 + p.rand(), [112, 112, 116], 0.08);
+      p.disc(2 + p.rand() * 12, 2 + p.rand() * 12, 1.6 + p.rand(), [114, 114, 118], 0.1);
     }
+    p.speckle([152, 152, 156], 7, 1);
+    p.speckle([104, 104, 108], 6, 1);
     for (let c = 0; c < 3; c++) {
       let x = Math.floor(p.rand() * N);
       let y = Math.floor(p.rand() * 10);
@@ -763,8 +795,8 @@ const PAINTERS: Record<number, Painter> = {
     p.clear();
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
-        if (p.rand() < 0.74) {
-          const f = 0.7 + p.rand() * 0.35;
+        if (p.rand() < 0.78) {
+          const f = 0.88 + p.rand() * 0.26;
           p.px(x, y, LEAF_GREEN[0] * f, LEAF_GREEN[1] * f, LEAF_GREEN[2] * f);
         }
       }
@@ -773,7 +805,7 @@ const PAINTERS: Record<number, Painter> = {
       const x = Math.floor(p.rand() * N);
       const y = Math.floor(p.rand() * N);
       const bright = p.rand() < 0.4;
-      const c: RGB = bright ? [82, 146, 58] : [70, 132, 50];
+      const c: RGB = bright ? [104, 172, 74] : [88, 152, 62];
       p.px(x, y, c[0], c[1], c[2]);
       p.px(x + 1, y, c[0] * 0.92, c[1] * 0.92, c[2] * 0.92);
       p.px(x, y + 1, c[0] * 0.85, c[1] * 0.85, c[2] * 0.85);
@@ -1594,11 +1626,11 @@ const PAINTERS: Record<number, Painter> = {
   [TILE.CHERRY_PLANKS]: coloredPlanks([206, 158, 158], [158, 116, 118]),
   [TILE.JUNGLE_LOG_SIDE]: coloredLogSide([98, 74, 44], [70, 50, 28], [2, 6, 11, 14], 4),
   [TILE.JUNGLE_LOG_TOP]: coloredLogTop([150, 128, 86], [78, 60, 36], [120, 100, 64], [96, 78, 46]),
-  [TILE.JUNGLE_LEAVES]: coloredLeaves([44, 104, 36], [78, 140, 50], [30, 78, 26], 0.78),
+  [TILE.JUNGLE_LEAVES]: coloredLeaves([82, 152, 62], [112, 186, 82], [62, 122, 48], 0.78),
   [TILE.JUNGLE_PLANKS]: coloredPlanks([168, 116, 82], [128, 84, 56]),
   [TILE.SPRUCE_LOG_SIDE]: coloredLogSide([74, 54, 36], [50, 34, 20], [3, 8, 13], 4),
   [TILE.SPRUCE_LOG_TOP]: coloredLogTop([104, 80, 52], [54, 38, 24], [80, 58, 36], [58, 40, 26]),
-  [TILE.SPRUCE_LEAVES]: coloredLeaves([34, 74, 48], [58, 100, 66], [22, 50, 32], 0.72),
+  [TILE.SPRUCE_LEAVES]: coloredLeaves([84, 142, 96], [108, 170, 118], [64, 112, 76], 0.78),
   [TILE.SPRUCE_PLANKS]: coloredPlanks([120, 88, 56], [86, 62, 38]),
   [TILE.ICE]: (p) => {
     p.noiseFill([168, 208, 240], 0.06);
@@ -1632,7 +1664,7 @@ const PAINTERS: Record<number, Painter> = {
   [TILE.ACACIA_PLANKS]: coloredPlanks([168, 92, 50], [126, 66, 36]),
   [TILE.DARK_OAK_LOG_SIDE]: coloredLogSide([56, 42, 26], [36, 26, 16], [2, 7, 12], 5),
   [TILE.DARK_OAK_LOG_TOP]: coloredLogTop([88, 64, 40], [42, 30, 18], [66, 48, 30], [48, 34, 20]),
-  [TILE.DARK_OAK_LEAVES]: coloredLeaves([32, 64, 22], [52, 88, 34], [20, 44, 16], 0.82),
+  [TILE.DARK_OAK_LEAVES]: coloredLeaves([76, 126, 52], [102, 156, 70], [58, 100, 40], 0.82),
   [TILE.DARK_OAK_PLANKS]: coloredPlanks([76, 56, 34], [52, 38, 22]),
   [TILE.RED_SAND]: (p) => {
     // Same wind-rippled dune recipe as sand, in badlands orange.
@@ -1805,7 +1837,7 @@ const PAINTERS: Record<number, Painter> = {
   },
   [TILE.MANGROVE_LOG_SIDE]: coloredLogSide([94, 58, 48], [64, 38, 30], [3, 8, 13], 4),
   [TILE.MANGROVE_LOG_TOP]: coloredLogTop([150, 84, 74], [70, 42, 34], [124, 66, 56], [96, 50, 42]),
-  [TILE.MANGROVE_LEAVES]: coloredLeaves([40, 96, 34], [70, 132, 48], [26, 70, 24], 0.78),
+  [TILE.MANGROVE_LEAVES]: coloredLeaves([80, 146, 60], [108, 180, 80], [60, 116, 46], 0.78),
   [TILE.MANGROVE_PLANKS]: coloredPlanks([158, 82, 74], [118, 58, 50]),
   [TILE.MUD]: (p) => {
     // Wet packed sludge: dark base, glossy damp patches, tiny bubbles.

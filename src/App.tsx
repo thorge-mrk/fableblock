@@ -9,6 +9,7 @@ import { HUD, DebugOverlay } from './ui/HUD';
 import { InventoryScreen, CraftingScreen, ContainerScreen, EnchantScreen } from './ui/InventoryScreens';
 import { TitleScreen, LoadingScreen, PauseScreen, DeathScreen } from './ui/Menus';
 import { TouchControls } from './ui/TouchControls';
+import { ChatOverlay } from './ui/Chat';
 
 export default function App(): React.ReactElement {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -43,6 +44,7 @@ export default function App(): React.ReactElement {
               {phase === 'playing' && screen === 'none' && touchMode && <TouchControls />}
               <HUD />
               <DebugOverlay />
+              {phase === 'playing' && <ChatOverlay />}
               {screen === 'inventory' && <InventoryScreen />}
               {screen === 'crafting' && <CraftingScreen />}
               {screen === 'container' && <ContainerScreen />}

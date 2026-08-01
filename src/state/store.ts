@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import { ItemStack } from '../core/items';
 import { Slots } from '../core/inventory';
+import { ChatLine } from '../core/commands';
 import {
   DEFAULT_DAY_LENGTH_SEC,
   DEFAULT_FOV,
@@ -36,6 +37,9 @@ export interface Settings {
   dayLengthSec: number;
   sensitivity: number;
   brightness: number; // display gamma, 1 = neutral
+  /** Let the engine drop render resolution when frames tank (default off —
+   *  image sharpness stays under the player's control). */
+  autoResolution: boolean;
   soundVolume: number; // master volume 0..1
   viewBobbing: boolean; // walk bob + sprint FOV kick
   thirdPerson: boolean;
@@ -77,6 +81,14 @@ interface GameStore {
   debug: DebugStats;
   timeOfDay: number;
   toast: string | null;
+  /** Chat overlay open (input focused, movement keys suppressed). */
+  chatOpen: boolean;
+  /** Text the chat box opens with (e.g. "/" when opened via the slash key). */
+  chatPrefill: string;
+  /** Rolling transcript, newest last. */
+  chatLog: ChatLine[];
+  /** Recent submitted lines for up/down recall, newest first. */
+  chatHistory: string[];
   breakProgress: number; // 0..1 while mining
   sleeping: boolean; // bed fade-to-black overlay
   portalFade: number; // 0..1 purple overlay while standing in a portal
@@ -86,7 +98,10 @@ interface GameStore {
   setSettings: (partial: Partial<Settings>) => void;
 }
 
-const SETTINGS_KEY = 'voxelcraft.settings.v1';
+// v2: render-scale presets became relative to devicePixelRatio and view
+// bobbing defaults off — stored v1 values would keep the old blurry/bobbing
+// behavior, so the key is bumped to adopt the new defaults once.
+const SETTINGS_KEY = 'voxelcraft.settings.v2';
 
 function loadSettings(): Settings {
   const defaults: Settings = {
@@ -96,8 +111,9 @@ function loadSettings(): Settings {
     dayLengthSec: DEFAULT_DAY_LENGTH_SEC,
     sensitivity: 1,
     brightness: 1,
+    autoResolution: false,
     soundVolume: 0.8,
-    viewBobbing: true,
+    viewBobbing: false,
     thirdPerson: false,
     touchMode: typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true,
     showDebug: false,
@@ -134,6 +150,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   debug: { fps: 0, chunks: 0, pending: 0, entities: 0, tickMs: 0, x: 0, y: 0, z: 0 },
   timeOfDay: 0.3,
   toast: null,
+  chatOpen: false,
+  chatPrefill: '',
+  chatLog: [],
+  chatHistory: [],
   breakProgress: 0,
   sleeping: false,
   portalFade: 0,

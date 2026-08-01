@@ -29,6 +29,8 @@ export class DayNightCycle {
   sunLevel = 1;
 
   private tmp = new THREE.Color();
+  private lightWorld = new THREE.Vector3();
+  private lightView = new THREE.Vector3();
 
   constructor(dayLengthSec: number) {
     this.time = 0.05; // shortly after dawn
@@ -58,14 +60,17 @@ export class DayNightCycle {
     // Zenith color for the sky dome (horizon stays == background == fog).
     this.zenithColor.copy(NIGHT_ZENITH).lerp(DAY_ZENITH, dayF);
     this.zenithColor.lerp(DUSK_ZENITH, duskBand * 0.4);
+    env.uZenith.value.copy(this.zenithColor);
 
     // Sky tint for sunlight color in the terrain shader.
     env.uSkyTint.value.copy(NIGHT_TINT).lerp(DAY_TINT, dayF).lerp(DUSK_TINT, duskBand * 0.6);
 
-    // Fog distances track render distance; tighter at night.
+    // Fog distances track render distance. The haze starts far out so the
+    // view reads as open landscape — it exists to hide the chunk edge, not to
+    // wall the player in at arm's length.
     const far = renderDistance * 16;
-    env.uFogFar.value = far * (0.92 - 0.1 * (1 - dayF));
-    env.uFogNear.value = env.uFogFar.value * 0.55;
+    env.uFogFar.value = far * (1.0 - 0.06 * (1 - dayF));
+    env.uFogNear.value = env.uFogFar.value * 0.78;
     // Mirror into scene.fog so Lambert-lit objects (mobs, boat, character)
     // fade out with the terrain instead of staying visible past the fog wall.
     if (scene.fog instanceof THREE.Fog) {
@@ -88,5 +93,17 @@ export class DayNightCycle {
     this.sun.intensity = isDay ? 0.6 + 1.2 * dayF : 0.25;
     this.sun.color.setHex(isDay ? 0xfff4e0 : 0x8898c8);
     this.ambient.intensity = 0.35 + 0.75 * dayF;
+
+    // Light direction for the terrain shader, in VIEW space (the shader
+    // reconstructs normals in view space, so the light must live there too).
+    this.lightWorld.set(
+      Math.cos(lightAng),
+      Math.max(0.22, Math.sin(lightAng)),
+      Math.sin(this.time * Math.PI * 2 * 0.5) * 0.3,
+    ).normalize();
+    // Rotate world -> view: the view matrix's upper 3x3 (no translation, the
+    // direction is positional-invariant).
+    this.lightView.copy(this.lightWorld).transformDirection(camera.matrixWorldInverse);
+    env.uSunDir.value.copy(this.lightView).normalize();
   }
 }

@@ -2044,6 +2044,94 @@ export function generateChunk(cx: number, cz: number): GenChunkMsg {
 }
 
 // ---------------------------------------------------------------------------
+// /locate — outward spiral scan over the generator's own climate model
+// ---------------------------------------------------------------------------
+
+/** Biome key -> enum value, matching BIOME_NAMES order in core/commands. */
+const BIOME_BY_NAME: Record<string, Biome> = {
+  ocean: Biome.OCEAN, plains: Biome.PLAINS, forest: Biome.FOREST,
+  desert: Biome.DESERT, mountains: Biome.MOUNTAINS, swamp: Biome.SWAMP,
+  cherry_grove: Biome.CHERRY, jungle: Biome.JUNGLE, snowy_plains: Biome.SNOWY,
+  beach: Biome.BEACH, river: Biome.RIVER, taiga: Biome.TAIGA,
+  snowy_taiga: Biome.SNOWY_TAIGA, savanna: Biome.SAVANNA, badlands: Biome.BADLANDS,
+  birch_forest: Biome.BIRCH_FOREST, dark_forest: Biome.DARK_FOREST,
+  flower_forest: Biome.FLOWER_FOREST, mushroom_fields: Biome.MUSHROOM,
+  ice_spikes: Biome.ICE_SPIKES, stony_peaks: Biome.STONY_PEAKS,
+  meadow: Biome.MEADOW, sunflower_plains: Biome.SUNFLOWER_PLAINS,
+  old_growth_taiga: Biome.OLD_GROWTH_TAIGA, gravelly_hills: Biome.GRAVELLY_HILLS,
+  mangrove_swamp: Biome.MANGROVE_SWAMP, frozen_ocean: Biome.FROZEN_OCEAN,
+};
+
+/**
+ * Walk an outward square-ring spiral from the origin chunk, sampling the
+ * generator's column model (biomes) or the structure region tables. Sampling
+ * beats generating: no voxel work, so even a wide search stays responsive.
+ */
+function locateTarget(
+  kind: 'biome' | 'structure',
+  target: string,
+  ox: number,
+  oz: number,
+): { x: number; z: number } | null {
+  const STEP = 24; // blocks between biome probes (~1.5 chunks)
+  const MAX_RING = 170; // ~4000 blocks out
+  if (kind === 'biome') {
+    const want = BIOME_BY_NAME[target];
+    if (want === undefined) return null;
+    for (let ring = 0; ring <= MAX_RING; ring++) {
+      for (let i = -ring; i <= ring; i++) {
+        // Only the ring's perimeter: the interior was covered earlier.
+        const edge = ring === 0 ? [[0, 0]] : [
+          [i, -ring], [i, ring], [-ring, i], [ring, i],
+        ];
+        for (const [dx, dz] of edge) {
+          const x = ox + dx * STEP;
+          const z = oz + dz * STEP;
+          if (columnInfo(x, z).biome === want) return { x: Math.round(x), z: Math.round(z) };
+        }
+      }
+    }
+    return null;
+  }
+
+  // Structures live on region grids; probe each region cell outward.
+  const region =
+    target === 'village' ? VILLAGE_REGION :
+    target === 'pyramid' ? PYRAMID_REGION :
+    target === 'temple' ? 18 : 14;
+  const rx0 = Math.floor(ox / 16 / region);
+  const rz0 = Math.floor(oz / 16 / region);
+  for (let ring = 0; ring <= 24; ring++) {
+    for (let i = -ring; i <= ring; i++) {
+      const edge = ring === 0 ? [[0, 0]] : [
+        [i, -ring], [i, ring], [-ring, i], [ring, i],
+      ];
+      for (const [dx, dz] of edge) {
+        const rx = rx0 + dx;
+        const rz = rz0 + dz;
+        if (target === 'village') {
+          const p = villageForRegion(rx, rz);
+          if (p) return { x: p.x, z: p.z };
+        } else if (target === 'pyramid') {
+          const p = pyramidForRegion(rx, rz);
+          if (p) return { x: p.x, z: p.z };
+        } else {
+          const spec =
+            target === 'temple'
+              ? { kind: 'temple', chance: 0.5, biomes: [Biome.JUNGLE] }
+              : target === 'igloo'
+                ? { kind: 'igloo', chance: 0.45, biomes: [Biome.SNOWY, Biome.SNOWY_TAIGA, Biome.ICE_SPIKES] }
+                : { kind: 'hut', chance: 0.4, biomes: [Biome.SWAMP] };
+          const p = landmarkForRegion(spec.kind, region, spec.chance, spec.biomes, rx, rz);
+          if (p) return { x: p.x, z: p.z };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Worker entry
 // ---------------------------------------------------------------------------
 const ctx = self as unknown as Worker;
@@ -2052,6 +2140,11 @@ ctx.onmessage = (e: MessageEvent<ToGenMsg>) => {
   const msg = e.data;
   if (msg.t === 'init') {
     initGenerator(msg.seed);
+    return;
+  }
+  if (msg.t === 'locate') {
+    const found = locateTarget(msg.kind, msg.target, msg.x, msg.z);
+    ctx.postMessage({ t: 'located', id: msg.id, found });
     return;
   }
   if (msg.t === 'gen') {
